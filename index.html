@@ -1,0 +1,2654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#5C8A7A" />
+<meta name="description" content="Personal AI-powered job tracking and application assistant" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="Job Tracker" />
+<title>Job Tracker</title>
+
+<!-- Inline SVG icon: green rounded square with white leaf. Works as favicon,
+     app icon on home screen, and in the browser tab. SVG scales crisply at
+     every size so one icon covers all PWA use cases. -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='112' fill='%235C8A7A'/%3E%3Cpath d='M160 352c0-120 80-200 200-200 0 120-80 200-200 200zm200-200c-50 40-100 110-100 200' stroke='white' stroke-width='22' stroke-linecap='round' fill='none'/%3E%3C/svg%3E" />
+<link rel="apple-touch-icon" href="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='112' fill='%235C8A7A'/%3E%3Cpath d='M160 352c0-120 80-200 200-200 0 120-80 200-200 200zm200-200c-50 40-100 110-100 200' stroke='white' stroke-width='22' stroke-linecap='round' fill='none'/%3E%3C/svg%3E" />
+
+<!-- Inline web app manifest (data URL). Enables "Add to Home Screen" on mobile
+     browsers. Standalone display removes browser chrome when launched from
+     home screen. Running from file:// skips PWA install; hosting on HTTPS
+     (GitHub Pages, Netlify, etc.) unlocks the full install experience. -->
+<link rel="manifest" href='data:application/manifest+json;charset=utf-8,{"name":"Job Tracker","short_name":"Jobs","description":"Personal AI-powered job tracking and application assistant","start_url":".","display":"standalone","background_color":"%23F7F9F7","theme_color":"%235C8A7A","orientation":"portrait","icons":[{"src":"data:image/svg%2Bxml;utf8,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 512 512%27%3E%3Crect width=%27512%27 height=%27512%27 rx=%27112%27 fill=%27%235C8A7A%27/%3E%3Cpath d=%27M160 352c0-120 80-200 200-200 0 120-80 200-200 200zm200-200c-50 40-100 110-100 200%27 stroke=%27white%27 stroke-width=%2722%27 stroke-linecap=%27round%27 fill=%27none%27/%3E%3C/svg%3E","sizes":"any","type":"image/svg+xml","purpose":"any"}]}' />
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  // pdf.js needs the worker URL set once globally before getDocument() is called
+  if (window.pdfjsLib) {
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  }
+</script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{overscroll-behavior-y:contain} /* Prevent pull-to-refresh on PWA */
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#F7F9F7;color:#1A2E26;-webkit-tap-highlight-color:transparent;-webkit-font-smoothing:antialiased}
+  input,select,textarea,button{font-family:inherit;font-size:16px} /* 16px prevents iOS zoom on focus */
+  input:focus,select:focus,textarea:focus{outline:2px solid #5C8A7A;outline-offset:1px}
+  button{min-height:36px} /* Touch target floor */
+  ::-webkit-scrollbar{width:6px;height:6px}
+  ::-webkit-scrollbar-track{background:#F0F5F2}
+  ::-webkit-scrollbar-thumb{background:#C0D4CC;border-radius:3px}
+
+  /* Layout with left sidebar on desktop, slide-out drawer on mobile.
+     Sidebar is fixed-position on desktop so it doesn't scroll with content.
+     Main area pads itself to make room (via CSS var --sidebar-w set inline). */
+  .jt-app{min-height:100vh}
+  .jt-sidebar{position:fixed;top:0;left:0;bottom:0;width:220px;background:#FFFFFF;border-right:1px solid #D9E3DE;display:flex;flex-direction:column;z-index:200;transition:width 0.18s ease,transform 0.22s ease;overflow:hidden}
+  .jt-sidebar.collapsed{width:64px}
+  .jt-sidebar-scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:8px 0}
+  .jt-main{margin-left:220px;transition:margin-left 0.18s ease}
+  .jt-main.sidebar-collapsed{margin-left:64px}
+  .jt-container{max-width:960px;margin:0 auto;padding:28px 24px 80px}
+  .jt-topbar{display:none}              /* hidden on desktop */
+  .jt-sidebar-overlay{display:none}     /* only used on mobile */
+
+  /* Sidebar item hover state (desktop only) */
+  .jt-sb-item:hover{background:#F0F5F2}
+  .jt-sb-item.active{background:#D4E5DB;color:#5C8A7A}
+
+  /* Mobile: sidebar becomes a slide-out drawer. Top bar with hamburger appears. */
+  @media (max-width:767px){
+    .jt-sidebar{transform:translateX(-100%);width:260px;box-shadow:4px 0 24px rgba(0,0,0,0.18)}
+    .jt-sidebar.open{transform:translateX(0)}
+    .jt-sidebar.collapsed{width:260px}  /* no icon-only mode on mobile */
+    .jt-main{margin-left:0!important;padding-top:56px} /* topbar space */
+    .jt-topbar{display:flex;position:fixed;top:0;left:0;right:0;height:56px;background:#FFFFFF;border-bottom:1px solid #D9E3DE;align-items:center;padding:0 14px;gap:12px;z-index:150;box-shadow:0 1px 4px rgba(0,0,0,0.06)}
+    .jt-sidebar-overlay{display:block;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:190;opacity:0;pointer-events:none;transition:opacity 0.2s}
+    .jt-sidebar-overlay.open{opacity:1;pointer-events:auto}
+    .jt-container{padding:16px 12px 80px}
+    .jt-card{padding:16px 16px!important;border-radius:12px!important}
+    .jt-grid-2{grid-template-columns:1fr!important}
+    .jt-grid-recipient{grid-template-columns:1fr!important}
+    .jt-section-title{flex-wrap:wrap;gap:8px}
+  }
+  @media (max-width:480px){
+    .jt-card{padding:14px 14px!important}
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef, useEffect, useCallback } = React;
+
+// Error boundary — catches any rendering error in a tab and shows a friendly
+// message plus a reload suggestion. Prevents a single bug in one tab from
+// crashing the whole app. Must be a class component (React hooks can't catch).
+class TabErrorBoundary extends React.Component {
+  constructor(props){ super(props); this.state={hasError:false,error:null}; }
+  static getDerivedStateFromError(error){ return {hasError:true,error:error}; }
+  componentDidCatch(error,info){ console.error("Tab crashed:",error,info); }
+  // Reset when the tab changes so a user can recover by switching tabs
+  componentDidUpdate(prevProps){
+    if(prevProps.tabKey!==this.props.tabKey&&this.state.hasError){
+      this.setState({hasError:false,error:null});
+    }
+  }
+  render(){
+    if(this.state.hasError){
+      return React.createElement("div",{style:{padding:"24px",textAlign:"center"}},
+        React.createElement("div",{style:{fontSize:32,marginBottom:12}},"⚠️"),
+        React.createElement("div",{style:{fontSize:16,fontWeight:700,color:"#C0392B",marginBottom:8}},"Something went wrong in this tab"),
+        React.createElement("div",{style:{fontSize:13,color:"#5A7168",marginBottom:14,maxWidth:480,margin:"0 auto 14px"}},"Try switching to another tab and back, or reload the page. Your saved data is safe."),
+        this.state.error&&React.createElement("div",{style:{fontSize:12,color:"#8FA89F",fontFamily:"monospace",background:"#F0F5F2",padding:"8px 12px",borderRadius:8,display:"inline-block",maxWidth:"90%",overflow:"auto"}},String(this.state.error.message||this.state.error))
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const C = {
+  primary:"#5C8A7A", primaryLight:"#EAF2EF", primaryDark:"#3D6B5C",
+  bg:"#F7F9F7", surface:"#FFFFFF", surfaceAlt:"#F0F5F2", border:"#D8E4DF",
+  textPrimary:"#1A2E26", textSecondary:"#5A7168", textHint:"#8FA89F",
+  error:"#C0392B", errorBg:"#FDECEA", warning:"#A0692A", warningBg:"#FEF3E2",
+  success:"#2E7D5A", successBg:"#E8F5EE", info:"#1A5A8A", infoBg:"#E3EFF8",
+  shadow:"0 1px 3px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04)",
+  shadowMd:"0 2px 8px rgba(0,0,0,0.10), 0 4px 16px rgba(0,0,0,0.06)",
+};
+
+const STATUS = {
+  New:{bg:"#E3EFF8",color:"#1A5A8A"},
+  Reviewing:{bg:"#FEF3E2",color:"#A0692A"},
+  Applied:{bg:"#E8F5EE",color:"#2E7D5A"},
+  Interview:{bg:"#EAF2EF",color:"#3D6B5C"},
+  Offer:{bg:"#F3E8FF",color:"#6B3DAA"},
+  // Terminal/closed outcomes — shown separately from the active pipeline.
+  // Muted tones because these are "done, not actionable" states.
+  Rejected:{bg:"#EEE4E0",color:"#6B5B4E"},
+  "No response":{bg:"#E4E4E4",color:"#5A5A5A"},
+};
+const STATUSES = Object.keys(STATUS);
+// Active pipeline = jobs in flight. Closed = terminal outcomes. Consumers that
+// care about "active work" (Dashboard pipeline strip, applications-sent counts)
+// should use these explicit splits rather than slicing STATUSES by index.
+const ACTIVE_STATUSES = ["New","Reviewing","Applied","Interview","Offer"];
+const CLOSED_STATUSES = ["Rejected","No response"];
+// Statuses that represent "you have applied and are/were engaged with this role"
+// — used for the applications-sent total. Rejected and No response count here
+// because they represent past applications, even though they're now closed.
+const APPLIED_STATUSES = ["Applied","Interview","Offer","Rejected","No response"];
+
+const SOURCES = {
+  af:{label:"Arbetsförmedlingen",bg:"#EAF2EF",color:"#3D6B5C"},
+  jsearch:{label:"JSearch",bg:"#E3EFF8",color:"#1A5A8A"},
+  manual:{label:"Manual",bg:"#F0F5F2",color:"#5A7168"},
+};
+
+// Tab icons chosen for clarity when seen at glyph-only size (collapsed sidebar):
+// each is semantically distinct at a glance. Emoji keeps the single-file spirit
+// without adding a font or SVG icon set.
+const TABS = [
+  {id:"dashboard",label:"Dashboard",icon:"📊",group:"overview"},
+  {id:"jobs",label:"My Jobs",icon:"📋",group:"jobs"},
+  {id:"profiles",label:"Search Profiles",icon:"🔍",group:"jobs"},
+  {id:"assistant",label:"Profile Assistant",icon:"💬",group:"jobs"},
+  {id:"scheduler",label:"Scheduler",icon:"⏱",group:"jobs"},
+  {id:"covers",label:"Cover Letters",icon:"✉️",group:"outputs"},
+  {id:"reports",label:"Reports",icon:"📈",group:"outputs"},
+  {id:"cv",label:"My CV",icon:"📄",group:"setup"},
+];
+
+// Groups in the sidebar. Order here = display order; each group header renders
+// above its tabs when the sidebar is expanded, or as a thin divider when collapsed.
+const TAB_GROUPS = [
+  {id:"overview",label:"Overview"},
+  {id:"jobs",label:"Jobs"},
+  {id:"outputs",label:"Outputs"},
+  {id:"setup",label:"Setup"},
+];
+
+const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+const DAY_FULL = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+const DEFAULT_SCHEDULE = {enabled:false,days:["Mon","Tue","Wed","Thu","Fri"],startTime:"08:00",stopTime:"18:00",intervalMinutes:60};
+
+const SAMPLE_JOBS = [
+  {id:1,title:"Senior Product Designer",company:"Stripe",location:"Remote",status:"New",score:87,source:"Manual",sourceType:"manual",date:"2026-04-17",lang:"English",tags:["Design","Fintech"],url:null},
+  {id:2,title:"UX Lead",company:"Spotify",location:"Stockholm",status:"Reviewing",score:74,source:"Email",sourceType:"manual",date:"2026-04-15",lang:"English",tags:["UX","Music"],url:null},
+  {id:3,title:"Head of Design",company:"Holaluz",location:"Barcelona",status:"Applied",score:91,source:"Arbetsförmedlingen",sourceType:"af",date:"2026-04-12",lang:"Spanish",tags:["Leadership"],url:null},
+];
+
+const SAMPLE_PROFILES = [
+  {id:1,name:"UX Design Sweden",query:"UX designer produktdesign",limit:10,active:true,sources:["af"]},
+  {id:2,name:"Design Lead Global",query:"design lead head of design",limit:10,active:true,sources:["jsearch"]},
+  {id:3,name:"Remote Design Roles",query:"product designer remote",limit:10,active:false,sources:["af","jsearch"]},
+];
+
+// ─── Network helpers ──────────────────────────────────────────────────────────
+// Both Arbetsförmedlingen and JSearch support CORS from browsers, so we call
+// them directly. If a direct request fails with a network/CORS error, we fall
+// back to a public CORS proxy. This was previously the default, but corsproxy.io's
+// free tier now 403s many requests from unregistered origins.
+const PROXY_FALLBACK = "https://corsproxy.io/?";
+
+// smartFetch: try direct first; on network/CORS error, retry via proxy.
+// Returns { response, viaProxy } so callers can show useful error messages.
+async function smartFetch(url,options){
+  try{
+    var res=await fetch(url,options);
+    return{response:res,viaProxy:false};
+  }catch(directErr){
+    // TypeError: Failed to fetch == CORS/network block. Try proxy as fallback.
+    try{
+      var res2=await fetch(PROXY_FALLBACK+encodeURIComponent(url),options);
+      return{response:res2,viaProxy:true};
+    }catch(proxyErr){
+      throw new Error("Both direct and proxy requests failed. Direct: "+directErr.message+" · Proxy: "+proxyErr.message);
+    }
+  }
+}
+
+// ─── Persistence ──────────────────────────────────────────────────────────────
+// All app state is saved to localStorage under a single versioned key.
+// Bump STORAGE_VERSION if the shape ever changes in an incompatible way.
+const STORAGE_KEY = "jobTracker.v1";
+const STORAGE_VERSION = 1;
+
+function loadState(){
+  try{
+    var raw=localStorage.getItem(STORAGE_KEY);
+    if(!raw) return null;
+    var parsed=JSON.parse(raw);
+    if(parsed.version!==STORAGE_VERSION) return null;
+    return parsed.data||null;
+  }catch(e){
+    console.warn("Failed to load saved state:",e);
+    return null;
+  }
+}
+
+function saveState(data){
+  try{
+    localStorage.setItem(STORAGE_KEY,JSON.stringify({version:STORAGE_VERSION,data:data,savedAt:Date.now()}));
+  }catch(e){
+    console.warn("Failed to save state:",e);
+  }
+}
+
+function clearState(){
+  try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
+}
+
+// Pick initial value: saved > sample/default. Only seed samples on first-ever load.
+function pick(saved,key,fallback){
+  if(saved&&Object.prototype.hasOwnProperty.call(saved,key)) return saved[key];
+  return fallback;
+}
+
+// ─── Email (mailto) ───────────────────────────────────────────────────────────
+// Most OSes handle mailto: reliably up to ~2000 characters. Longer bodies get
+// truncated silently on some clients. We warn the user and offer a fallback.
+const MAILTO_SAFE_LEN = 1800;
+
+function buildMailto(to,subject,body){
+  var params=[];
+  if(subject) params.push("subject="+encodeURIComponent(subject));
+  if(body) params.push("body="+encodeURIComponent(body));
+  return "mailto:"+encodeURIComponent(to||"")+(params.length?"?"+params.join("&"):"");
+}
+
+function isValidEmail(e){
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((e||"").trim());
+}
+
+// ─── Job search ───────────────────────────────────────────────────────────────
+// Case-insensitive substring match across the fields users realistically search
+// on. Keeps it simple — no regex, no weighting. Fast enough for thousands of
+// jobs since every comparison is just a toLowerCase().indexOf() call.
+function matchesSearch(job,query){
+  var q=(query||"").trim().toLowerCase();
+  if(!q) return true;
+  var haystack=[
+    job.title,job.company,job.location,job.source,
+    job.description,job.employmentType,job.salary,job.notes,
+    (job.tags||[]).join(" ")
+  ].filter(Boolean).join(" ").toLowerCase();
+  // Split query into tokens so "stockholm remote" matches even if the words
+  // don't appear adjacent in the job. Every token must match (AND).
+  var tokens=q.split(/\s+/);
+  for(var i=0;i<tokens.length;i++){
+    if(haystack.indexOf(tokens[i])===-1) return false;
+  }
+  return true;
+}
+
+// ─── PDF text extraction ──────────────────────────────────────────────────────
+// Uses pdf.js loaded from CDN in <head>. Returns a promise that resolves to the
+// full extracted text. Rejects with a clear message on failure so the UI can
+// surface it to the user.
+async function extractPdfText(file){
+  if(!window.pdfjsLib) throw new Error("PDF library not loaded. Check your internet connection and reload.");
+  var buffer=await file.arrayBuffer();
+  var loadingTask=window.pdfjsLib.getDocument({data:new Uint8Array(buffer)});
+  var pdf=await loadingTask.promise;
+  var pages=[];
+  for(var i=1;i<=pdf.numPages;i++){
+    var page=await pdf.getPage(i);
+    var content=await page.getTextContent();
+    // textContent.items is a list of text fragments; join with spaces and rebuild
+    // line breaks based on the y-coordinate change. Simple and good enough for CVs.
+    var lastY=null;
+    var line=[];
+    var lines=[];
+    for(var k=0;k<content.items.length;k++){
+      var it=content.items[k];
+      if(!it.str) continue;
+      var y=it.transform?it.transform[5]:null;
+      if(lastY!==null&&y!==null&&Math.abs(y-lastY)>1){
+        lines.push(line.join(" "));
+        line=[];
+      }
+      line.push(it.str);
+      lastY=y;
+    }
+    if(line.length) lines.push(line.join(" "));
+    pages.push(lines.join("\n"));
+  }
+  var text=pages.join("\n\n").trim();
+  if(!text) throw new Error("No text found in this PDF. It may be a scanned/image-based PDF that needs OCR. Try pasting the CV text directly instead.");
+  return text;
+}
+
+// ─── Job sort ─────────────────────────────────────────────────────────────────
+// User-facing sort options. Keys are used as state values; labels appear in UI.
+const SORT_OPTIONS=[
+  {key:"added_desc",label:"Newest first"},
+  {key:"added_asc",label:"Oldest first"},
+  {key:"score_desc",label:"Best match first"},
+  {key:"deadline_asc",label:"Deadline (soonest first)"},
+  {key:"company_asc",label:"Company (A–Z)"},
+];
+
+// Non-mutating sort. For deadlines, missing/past deadlines are pushed to the
+// end so the list reads "things to act on soon" → "things with no urgency".
+function sortJobs(jobs,sort){
+  var arr=jobs.slice();
+  var today=new Date().toISOString().slice(0,10);
+  arr.sort(function(a,b){
+    if(sort==="added_desc") return (b.date||"").localeCompare(a.date||"");
+    if(sort==="added_asc") return (a.date||"").localeCompare(b.date||"");
+    if(sort==="score_desc"){
+      // Unscored jobs (scored===false) sort last, regardless of placeholder score
+      var au=a.scored===false?1:0, bu=b.scored===false?1:0;
+      if(au!==bu) return au-bu;
+      return (b.score||0)-(a.score||0);
+    }
+    if(sort==="deadline_asc"){
+      var ad=a.deadline||"", bd=b.deadline||"";
+      // Push missing deadlines to the bottom
+      if(!ad&&!bd) return 0;
+      if(!ad) return 1;
+      if(!bd) return -1;
+      // Push passed deadlines below upcoming ones
+      var ap=ad<today?1:0, bp=bd<today?1:0;
+      if(ap!==bp) return ap-bp;
+      return ad.localeCompare(bd);
+    }
+    if(sort==="company_asc") return (a.company||"").localeCompare(b.company||"");
+    return 0;
+  });
+  return arr;
+}
+
+// ─── Job normalisation ────────────────────────────────────────────────────────
+// Map raw API responses into the normalised internal shape used by the app.
+
+function mapAfJob(a,profileName){
+  var addr=a.workplace_address||{};
+  var locParts=[addr.municipality,addr.region,addr.country].filter(Boolean);
+  var loc=locParts.length?locParts.join(", "):"Sweden";
+  var employer=a.employer||{};
+  var applyUrl=(a.application_details&&a.application_details.url)||a.webpage_url||null;
+  var salary=a.salary_description||(a.salary_type&&a.salary_type.label)||null;
+  var empType=(a.employment_type&&a.employment_type.label)||null;
+  var workType=(a.working_hours_type&&a.working_hours_type.label)||null;
+  var remote=typeof a.remote==="boolean"?a.remote:(a.remote_work===true?true:null);
+  return {
+    id:a.id||Date.now()+Math.random(),
+    title:a.headline||"Untitled",
+    company:employer.name||employer.workplace||"Unknown",
+    location:loc,
+    status:"New",
+    score:NEUTRAL_SCORE,scored:false,rationale:"",
+    source:"Arbetsförmedlingen",sourceType:"af",
+    date:(a.publication_date||new Date().toISOString()).slice(0,10),
+    lang:"Swedish",
+    tags:[profileName,empType,workType].filter(Boolean),
+    url:a.webpage_url||null,
+    // New detail fields
+    description:(a.description&&(a.description.text||a.description.text_formatted))||"",
+    applyUrl:applyUrl,
+    deadline:a.application_deadline?a.application_deadline.slice(0,10):null,
+    employmentType:empType,
+    salary:salary,
+    remote:remote,
+    employerUrl:employer.url||null,
+  };
+}
+
+function mapJsJob(a,profileName){
+  var locParts=[a.job_city,a.job_state,a.job_country].filter(Boolean);
+  var loc=locParts.length?locParts.join(", "):"Unknown";
+  var salary=null;
+  if(a.job_salary_min||a.job_salary_max){
+    var cur=a.job_salary_currency||"";
+    var per=a.job_salary_period?" / "+a.job_salary_period.toLowerCase():"";
+    if(a.job_salary_min&&a.job_salary_max) salary=a.job_salary_min+"–"+a.job_salary_max+" "+cur+per;
+    else salary=(a.job_salary_min||a.job_salary_max)+" "+cur+per;
+    salary=salary.trim();
+  }
+  return {
+    id:a.job_id||Date.now()+Math.random(),
+    title:a.job_title||"Untitled",
+    company:a.employer_name||"Unknown",
+    location:loc,
+    status:"New",
+    score:NEUTRAL_SCORE,scored:false,rationale:"",
+    source:a.job_publisher||"JSearch",sourceType:"jsearch",
+    date:a.job_posted_at_datetime_utc?a.job_posted_at_datetime_utc.slice(0,10):new Date().toISOString().slice(0,10),
+    lang:"English",
+    tags:[profileName,a.job_employment_type].filter(Boolean),
+    url:a.job_apply_link||null,
+    // New detail fields
+    description:a.job_description||"",
+    applyUrl:a.job_apply_link||null,
+    deadline:a.job_offer_expiration_datetime_utc?a.job_offer_expiration_datetime_utc.slice(0,10):null,
+    employmentType:a.job_employment_type||null,
+    salary:salary,
+    remote:typeof a.job_is_remote==="boolean"?a.job_is_remote:null,
+    employerUrl:a.employer_website||null,
+  };
+}
+
+// ─── AI Match Scoring ─────────────────────────────────────────────────────────
+// Uses Claude to score how well each job matches the candidate's CV + preferences.
+// Returns a 0–100 integer plus a one-line rationale. Batches up to ~15 jobs per
+// API call for speed and consistency. Falls back to a neutral score on error.
+
+const NEUTRAL_SCORE = 50;
+const BATCH_SIZE = 15;
+
+function cvSummaryText(cv){
+  if(!cv) return "";
+  var parts=[];
+  if(cv.text) parts.push("CV:\n"+cv.text.slice(0,4000));
+  if(cv.roles) parts.push("Target roles: "+cv.roles);
+  if(cv.industries) parts.push("Preferred industries: "+cv.industries);
+  if(cv.locations) parts.push("Preferred locations: "+cv.locations);
+  if(cv.workType&&cv.workType!=="Any") parts.push("Work type preference: "+cv.workType);
+  if(cv.salary) parts.push("Salary expectation: "+cv.salary);
+  return parts.join("\n\n");
+}
+
+function hasCv(cv){ return !!(cv&&(cv.text||cv.roles||cv.industries||cv.locations)); }
+
+// ─── PDF export (cover letters) ───────────────────────────────────────────────
+// Uses the browser's built-in print-to-PDF so we don't add any library.
+// Opens a new window with just the letter rendered for A4, triggers print,
+// and lets the user pick "Save as PDF" in the native print dialog.
+
+// Heuristic: pull the applicant's name from the CV text. In practice the name
+// is the first non-empty line of a CV. We keep it only if it looks name-shaped
+// (2-4 words, all alphabetic with reasonable chars, no obvious role/heading).
+// Returns null if we can't confidently extract one — the letterhead will then
+// just show the date, which is still useful.
+function extractApplicantName(cv){
+  if(!cv||!cv.text) return null;
+  var lines=cv.text.split(/\r?\n/).map(function(l){return l.trim();}).filter(Boolean);
+  if(!lines.length) return null;
+  var first=lines[0];
+  // Strip markdown heading prefix if present ("# Name")
+  first=first.replace(/^#+\s*/,"").trim();
+  if(first.length>80) return null;
+  // Reject lines with obvious non-name characters (email, phone, URLs, digits)
+  if(/[@:/\\\d]/.test(first)) return null;
+  // Reject common CV heading words
+  if(/\b(CV|Resume|Curriculum|Profile|Summary|Experience|Skills|Education)\b/i.test(first)) return null;
+  var words=first.split(/\s+/);
+  if(words.length<2||words.length>5) return null;
+  // Every word should start with uppercase (basic name shape)
+  var nameShaped=words.every(function(w){return /^[A-ZÅÄÖÉÈÀÁÍÓÚÑÆØ][a-zåäöéèàáíóúñæøA-Z\-']+$/.test(w);});
+  if(!nameShaped) return null;
+  return first;
+}
+
+function exportLetterPdf({letter,cv,job}){
+  if(!letter||!letter.trim()) return;
+  var name=extractApplicantName(cv);
+  var today=new Date().toLocaleDateString(undefined,{year:"numeric",month:"long",day:"numeric"});
+  var recipient="";
+  if(job){
+    recipient=job.company?job.company:"";
+    if(job.title) recipient+=(recipient?" — ":"")+"Re: "+job.title;
+  }
+  // Escape HTML so letter text can't break out of the template
+  function esc(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+  // Preserve paragraph breaks: split on blank lines, wrap each in <p>. Single
+  // newlines within a paragraph become <br> (for signatures etc.).
+  var paragraphs=letter.split(/\n\s*\n/).map(function(p){
+    return "<p>"+esc(p).replace(/\n/g,"<br>")+"</p>";
+  }).join("\n");
+  var docTitle=(name?name+" — ":"")+"Cover letter"+(job&&job.company?" — "+job.company:"");
+  var html=
+    "<!doctype html><html><head><meta charset=\"utf-8\"><title>"+esc(docTitle)+"</title>"+
+    "<style>"+
+    "@page{size:A4;margin:22mm 22mm 22mm 22mm}"+
+    "html,body{background:#fff}"+
+    "body{font-family:Georgia,'Times New Roman',serif;font-size:11.5pt;line-height:1.55;color:#1a1a1a;margin:0;padding:0}"+
+    ".letterhead{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:36px;padding-bottom:14px;border-bottom:1px solid #d0d0d0}"+
+    ".letterhead .sender{font-weight:600;font-size:13pt;color:#1a1a1a}"+
+    ".letterhead .date{font-size:10.5pt;color:#555}"+
+    ".recipient{margin-bottom:28px;font-size:10.5pt;color:#555}"+
+    "p{margin:0 0 12px 0;text-align:left;hyphens:auto;word-break:normal;overflow-wrap:break-word}"+
+    "p:last-child{margin-bottom:0}"+
+    "@media print{.no-print{display:none}}"+
+    ".no-print{position:fixed;top:10px;right:10px;background:#5C8A7A;color:#fff;padding:10px 16px;border-radius:8px;font-family:sans-serif;font-size:13px;cursor:pointer;border:none;box-shadow:0 2px 8px rgba(0,0,0,0.2)}"+
+    "</style></head><body>"+
+    "<button class=\"no-print\" onclick=\"window.print()\">Print / Save as PDF</button>"+
+    "<div class=\"letterhead\">"+
+    "<div class=\"sender\">"+esc(name||"")+"</div>"+
+    "<div class=\"date\">"+esc(today)+"</div>"+
+    "</div>"+
+    (recipient?"<div class=\"recipient\">"+esc(recipient)+"</div>":"")+
+    paragraphs+
+    "</body></html>";
+  // Open in a new window and auto-trigger print. Some browsers block the
+  // popup if not in direct response to a click — since this function is always
+  // called from a button click, it should succeed.
+  var w=window.open("","_blank");
+  if(!w){
+    alert("Your browser blocked the PDF window. Allow pop-ups for this page and try again.");
+    return;
+  }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+  // Give the browser a moment to render fonts before opening the print dialog
+  setTimeout(function(){
+    try{ w.focus(); w.print(); }catch(e){}
+  },250);
+}
+
+// ─── Claude API helper ────────────────────────────────────────────────────────
+// Centralised call so all three features (scoring, cover letters, reports) use
+// the same headers, error handling, and model. Required headers for browser use:
+//   x-api-key, anthropic-version, anthropic-dangerous-direct-browser-access.
+// Throws a descriptive Error on any failure so callers can surface it to the UI.
+const CLAUDE_MODEL = "claude-sonnet-4-6";
+async function callClaude({apiKey,prompt,maxTokens}){
+  if(!apiKey){
+    throw new Error("No Anthropic API key set. Add one in Search Profiles → API keys.");
+  }
+  var res;
+  try{
+    res=await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",
+      headers:{
+        "content-type":"application/json",
+        "x-api-key":apiKey,
+        "anthropic-version":"2023-06-01",
+        "anthropic-dangerous-direct-browser-access":"true",
+      },
+      body:JSON.stringify({
+        model:CLAUDE_MODEL,
+        max_tokens:maxTokens||1000,
+        messages:[{role:"user",content:prompt}],
+      }),
+    });
+  }catch(networkErr){
+    throw new Error("Network error calling Claude API: "+networkErr.message+". Check your internet connection.");
+  }
+  if(!res.ok){
+    var body="";
+    try{ body=await res.text(); }catch(e){}
+    if(res.status===401) throw new Error("401 Unauthorized — your Anthropic API key is missing or invalid.");
+    if(res.status===403) throw new Error("403 Forbidden — your API key does not have access to this model, or billing is not set up.");
+    if(res.status===429) throw new Error("429 Rate limited — too many requests, try again in a moment.");
+    if(res.status===400) throw new Error("400 Bad Request — "+(body?body.slice(0,200):"request was rejected by the API."));
+    throw new Error("Claude API error "+res.status+(body?": "+body.slice(0,200):""));
+  }
+  var data=await res.json();
+  var text=(data.content&&data.content[0]&&data.content[0].text)||"";
+  if(!text) throw new Error("Empty response from Claude API.");
+  return text;
+}
+
+// Multi-turn variant: accepts a system prompt and full message history.
+async function callClaudeChat({apiKey,system,messages,maxTokens}){
+  if(!apiKey) throw new Error("No Anthropic API key set. Add one in Search Profiles → API keys.");
+  var res;
+  try{
+    res=await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",
+      headers:{
+        "content-type":"application/json",
+        "x-api-key":apiKey,
+        "anthropic-version":"2023-06-01",
+        "anthropic-dangerous-direct-browser-access":"true",
+      },
+      body:JSON.stringify({
+        model:CLAUDE_MODEL,
+        max_tokens:maxTokens||1200,
+        system:system,
+        messages:messages,
+      }),
+    });
+  }catch(networkErr){
+    throw new Error("Network error calling Claude API: "+networkErr.message);
+  }
+  if(!res.ok){
+    var body="";
+    try{ body=await res.text(); }catch(e){}
+    if(res.status===401) throw new Error("401 Unauthorized — your Anthropic API key is missing or invalid.");
+    if(res.status===403) throw new Error("403 Forbidden — check API key and billing.");
+    if(res.status===429) throw new Error("429 Rate limited — try again in a moment.");
+    throw new Error("Claude API error "+res.status+(body?": "+body.slice(0,200):""));
+  }
+  var data=await res.json();
+  var text=(data.content&&data.content[0]&&data.content[0].text)||"";
+  if(!text) throw new Error("Empty response from Claude API.");
+  return text;
+}
+
+// ─── Profile Assistant ────────────────────────────────────────────────────────
+// Chatbot strictly scoped to: (1) how this app works, (2) building high-quality
+// search profiles from the user's CV + preferences + API capabilities. No general
+// Q&A. When proposing a concrete profile the model emits a PROFILE block that
+// the UI extracts and renders as a saveable card.
+
+function buildAssistantSystem(cv,profiles,jobs){
+  var cvBlock=hasCv(cv)?cvSummaryText(cv):"(No CV loaded yet. Ask the user to add their CV in the My CV tab before proposing profiles.)";
+  var existing=(profiles||[]).length
+    ? profiles.map(function(p){return "- \""+p.name+"\" · query: "+p.query+" · sources: "+(p.sources||[]).join("+")+" · max "+p.limit;}).join("\n")
+    : "(No profiles saved yet.)";
+
+  // Build top-matches and bottom-matches summaries from scored jobs. Scored
+  // jobs (scored!==false) are the signal; archived ones are excluded so the
+  // user's "decluttered" decisions don't skew the analysis.
+  var scored=(jobs||[]).filter(function(j){return j.scored!==false&&!j.archived&&typeof j.score==="number";});
+  var matchesBlock="(Not enough scored jobs yet — the assistant needs 10+ scored jobs to analyse patterns. Ingest and score some jobs first.)";
+  var hasEnoughMatches=scored.length>=10;
+  if(hasEnoughMatches){
+    var sortedDesc=scored.slice().sort(function(a,b){return (b.score||0)-(a.score||0);});
+    var top=sortedDesc.slice(0,10);
+    var bottom=sortedDesc.slice(-5).reverse(); // worst matches for anti-signal
+    function fmtJob(j){
+      var tags=(j.tags&&j.tags.length)?" · tags: "+j.tags.slice(0,5).join(", "):"";
+      var rat=j.rationale?" — "+j.rationale:"";
+      return "["+(j.score||0)+"%] "+j.title+" at "+j.company+" · "+j.location+tags+rat;
+    }
+    matchesBlock=
+      "TOP 10 highest-scoring jobs (use these to identify what the user fits WELL):\n"+
+      top.map(fmtJob).join("\n")+
+      "\n\nBOTTOM 5 lowest-scoring jobs (anti-signal — patterns to AVOID in queries):\n"+
+      bottom.map(fmtJob).join("\n");
+  }
+
+  return [
+    "You are the Profile Assistant embedded in a personal job-tracking app.",
+    "",
+    "STRICT SCOPE — you ONLY discuss these topics:",
+    "  (a) How this app's features work (Dashboard, My Jobs, Search Profiles, Scheduler, My CV, Cover Letters, Reports).",
+    "  (b) Helping the user design high-quality search profiles based on their CV and preferences.",
+    "  (c) What the connected job-search APIs (Arbetsförmedlingen, JSearch) can and cannot do.",
+    "",
+    "If the user asks about ANYTHING else (general knowledge, coding, personal advice, other products, news, math, trivia, etc.),",
+    "politely decline in one sentence and redirect: \"I'm only able to help with building search profiles and using this job tracker. What kind of role are you looking for?\"",
+    "Do not answer off-topic questions even partially.",
+    "",
+    "TONE: friendly, concise, practical. Ask at most one clarifying question at a time. Never dump long explanations.",
+    "",
+    "API CAPABILITIES (what you can and can't suggest):",
+    "• Arbetsförmedlingen (code: 'af') — Free Swedish Public Employment Service API. Good for Swedish jobs including Swedish-language roles. Accepts a single free-text query 'q' parameter. Does NOT support boolean AND/OR operators or nested expressions. Results are filtered only by the 'q' free-text and a 'limit'. The user query should read naturally, e.g. 'UX designer Stockholm' or 'produktdesigner remote'.",
+    "• JSearch (code: 'jsearch') — RapidAPI aggregator of Indeed/LinkedIn/Glassdoor/ZipRecruiter listings. Requires user's RapidAPI key. Good for English-language and international/remote roles. Accepts a single free-text 'query' parameter. Does NOT support boolean AND/OR. Can be combined in the same query string (e.g. 'senior product designer remote fintech').",
+    "• No other boards are connected. Do not promise LinkedIn-direct, Monster, etc.",
+    "",
+    "PROFILE DESIGN GUIDANCE:",
+    "• A profile has: name, query (free-text), sources (array of 'af' and/or 'jsearch'), limit (integer 5–50).",
+    "• Split into multiple focused profiles rather than one broad catch-all — narrower profiles produce higher-signal matches.",
+    "• Use the user's CV skills, years of experience, industries, and locations to inform the query terms.",
+    "• For Swedish roles, pick 'af' and include Swedish synonyms (e.g. 'produktdesigner' alongside 'product designer').",
+    "• For remote/international roles, pick 'jsearch' and use English terms.",
+    "• If the user wants both, suggest two separate profiles or one profile with both sources — explain the tradeoff.",
+    "",
+    "USING THE TOP-MATCHES DATA (when available):",
+    "When the user asks for profile suggestions based on their highest-scoring jobs, or when they ask what's working / what they should search for more of:",
+    "• Identify common patterns across the TOP 10 jobs: role titles, seniority keywords, industries/domains, locations, recurring tags, employer types (startup vs enterprise, agency vs in-house, etc.).",
+    "• Cross-reference with the BOTTOM 5 to identify anti-patterns. If top matches are startup design roles and bottom are enterprise PM roles, the new profile should lean into \"startup product design\" terms.",
+    "• Since neither API supports exclusion operators, you cannot filter out the anti-patterns directly in the query — mention them in the reasoning field instead so the user understands why the profile is shaped as it is.",
+    "• Prefer 1-2 highly focused profiles over one broad one. A profile built from top matches should surface MORE jobs like those top ones.",
+    "• When patterns are ambiguous (e.g. top matches span design, research, and strategy roles), ask one clarifying question before proposing.",
+    "",
+    "WHEN TO PROPOSE A CONCRETE PROFILE:",
+    "Only after you have enough detail about role, seniority, and location/remoteness. Ask for clarification first if needed.",
+    "When you propose a profile, emit it inside a special block exactly like this (including the markers):",
+    "<<<PROFILE>>>",
+    "{\"name\":\"Short descriptive name\",\"query\":\"free-text search terms\",\"sources\":[\"af\"],\"limit\":15,\"reasoning\":\"One sentence on why this query\"}",
+    "<<</PROFILE>>>",
+    "You may propose multiple profiles in one reply — emit a separate block per profile. Keep conversational text around each block short (one or two lines of intro per profile).",
+    "Do NOT use markdown code fences around the PROFILE block. Do NOT invent fields beyond name/query/sources/limit/reasoning.",
+    "",
+    "THE USER'S CV AND PREFERENCES:",
+    cvBlock,
+    "",
+    "THE USER'S EXISTING SEARCH PROFILES:",
+    existing,
+    "",
+    "THE USER'S SCORED JOBS (signal for smart suggestions):",
+    matchesBlock,
+  ].join("\n");
+}
+
+// Parse <<<PROFILE>>>...<<</PROFILE>>> blocks out of a Claude reply.
+// Returns { textParts: string[], profiles: object[] } where textParts is the
+// conversational content split around the profile blocks (for rendering).
+function extractProfiles(reply){
+  var re=/<<<PROFILE>>>([\s\S]*?)<<<\/PROFILE>>>/g;
+  var textParts=[];
+  var profiles=[];
+  var lastIndex=0;
+  var m;
+  while((m=re.exec(reply))!==null){
+    var before=reply.slice(lastIndex,m.index).trim();
+    if(before) textParts.push(before);
+    try{
+      var raw=m[1].trim().replace(/^```(?:json)?\s*/i,"").replace(/\s*```\s*$/,"").trim();
+      var obj=JSON.parse(raw);
+      // Defensive validation / coercion
+      if(obj&&typeof obj.name==="string"&&typeof obj.query==="string"){
+        profiles.push({
+          name:obj.name.slice(0,80),
+          query:obj.query.slice(0,300),
+          sources:Array.isArray(obj.sources)&&obj.sources.length?obj.sources.filter(function(s){return s==="af"||s==="jsearch";}):["af"],
+          limit:Math.max(1,Math.min(50,parseInt(obj.limit,10)||15)),
+          reasoning:typeof obj.reasoning==="string"?obj.reasoning.slice(0,300):"",
+        });
+      }
+    }catch(e){
+      // If parse fails, keep the raw block as conversational text so user sees something
+      textParts.push("[Could not parse a suggested profile — you can re-ask for it]");
+    }
+    lastIndex=re.lastIndex;
+  }
+  var tail=reply.slice(lastIndex).trim();
+  if(tail) textParts.push(tail);
+  if(!textParts.length&&!profiles.length) textParts.push(reply.trim());
+  return{textParts:textParts,profiles:profiles};
+}
+
+// Generate 3-4 starter prompts based on the user's CV and scored jobs.
+// Purely client-side; no API call. When the user has ≥10 scored matches,
+// a smart-suggestions prompt is prioritised since it leverages that signal.
+function getStarterPrompts(cv,jobs){
+  var scoredCount=(jobs||[]).filter(function(j){return j.scored!==false&&!j.archived&&typeof j.score==="number";}).length;
+  var smartPrompt=scoredCount>=10?"Suggest a new profile based on my highest-scoring jobs.":null;
+
+  if(!hasCv(cv)){
+    var base=[
+      "I'd like help building my first search profile.",
+      "What kinds of job searches can this app do?",
+      "How should I structure my CV to get better match scores?",
+    ];
+    return smartPrompt?[smartPrompt].concat(base).slice(0,4):base;
+  }
+  var prompts=[];
+  // Smart suggestion leads when available — highest-value starter
+  if(smartPrompt) prompts.push(smartPrompt);
+  prompts.push("Help me build a search profile from my CV.");
+  if(cv.locations) prompts.push("Find roles in "+cv.locations.split(",")[0].trim()+" that fit my background.");
+  if(cv.roles) prompts.push("I want to search for "+cv.roles.split(",")[0].trim()+" positions — where should I start?");
+  if(cv.workType&&cv.workType!=="Any") prompts.push("Help me find "+cv.workType.toLowerCase()+" roles.");
+  else prompts.push("Split my search into a local profile and a remote profile.");
+  return prompts.slice(0,4);
+}
+
+async function scoreJobBatch(jobs,cv,anthropicKey){
+  // Build a compact job list the model can reason over. IDs are quoted strings
+  // so Claude returns them verbatim and we can match on string equality regardless
+  // of whether source IDs are numeric (Date.now()) or strings (AF/JSearch).
+  var jobList=jobs.map(function(j,i){
+    var line=(i+1)+'. id="'+String(j.id)+'" | '+j.title+" at "+j.company+" | "+j.location;
+    if(j.employmentType) line+=" | "+j.employmentType;
+    if(j.salary) line+=" | "+j.salary;
+    if(j.tags&&j.tags.length) line+=" | tags: "+j.tags.join(", ");
+    if(j.description){
+      // Truncate long descriptions to keep prompt manageable across a batch
+      var desc=j.description.slice(0,1500).replace(/\s+/g," ").trim();
+      line+="\n   Description: "+desc;
+    }
+    return line;
+  }).join("\n");
+
+  var prompt="You are an expert career coach scoring how well each job matches this candidate.\n\n"+
+    "CANDIDATE:\n"+cvSummaryText(cv)+"\n\n"+
+    "JOBS TO SCORE:\n"+jobList+"\n\n"+
+    "For each job, produce a match score from 0 to 100 (integer) and a single-sentence rationale "+
+    "(max ~12 words) explaining the main reason for the score. Consider: role fit, skills overlap, "+
+    "location fit, industry, seniority, and work-type preference.\n\n"+
+    'Return ONLY a JSON array, no markdown fences, no preamble. Each id MUST be a STRING, copied verbatim from the id="..." value given. Format:\n'+
+    '[{"id": "<exact id string>", "score": <0-100>, "rationale": "<short reason>"}, ...]\n'+
+    "One object per job, in the same order.";
+
+  var text=await callClaude({apiKey:anthropicKey,prompt:prompt,maxTokens:1500});
+  // Strip any accidental markdown fences just in case
+  text=text.replace(/^```(?:json)?\s*/i,"").replace(/\s*```\s*$/,"").trim();
+  var parsed=JSON.parse(text);
+  if(!Array.isArray(parsed)) throw new Error("Expected JSON array from Claude");
+  return parsed;
+}
+
+// Score an array of jobs against a CV. Calls scoreJobBatch in batches.
+// Returns a Map of jobId (as string) -> {score, rationale}.
+async function scoreJobs(jobs,cv,anthropicKey){
+  if(!jobs.length) return new Map();
+  if(!hasCv(cv)) return new Map();
+  var result=new Map();
+  for(var i=0;i<jobs.length;i+=BATCH_SIZE){
+    var batch=jobs.slice(i,i+BATCH_SIZE);
+    try{
+      var scored=await scoreJobBatch(batch,cv,anthropicKey);
+      scored.forEach(function(s){
+        if(s&&s.id!==undefined&&s.id!==null){
+          var score=Math.max(0,Math.min(100,Math.round(Number(s.score)||0)));
+          // Key by String so numeric/string IDs match consistently
+          result.set(String(s.id),{score:score,rationale:(s.rationale||"").toString().slice(0,120)});
+        }
+      });
+    }catch(e){
+      console.warn("Batch scoring failed:",e);
+      // Rethrow so the caller can report the reason (was silently swallowed before)
+      throw e;
+    }
+  }
+  return result;
+}
+
+// ─── UI Components ────────────────────────────────────────────────────────────
+
+function Card({children,style}){ return <div className="jt-card" style={{background:C.surface,borderRadius:16,boxShadow:C.shadow,padding:"20px 24px",...(style||{})}}>{children}</div>; }
+
+// ─── Sidebar ──────────────────────────────────────────────────────────────────
+// Serves double duty: permanent left rail on desktop (collapsible), slide-out
+// drawer on mobile. Same component, behaviour controlled via CSS classes.
+// Props:
+//   activeTab, setActiveTab — navigation state
+//   collapsed — desktop collapsed mode (icon-only, ignored on mobile)
+//   setCollapsed — toggle collapsed mode
+//   mobileOpen — is the mobile drawer currently open
+//   setMobileOpen — open/close the mobile drawer
+function Sidebar({activeTab,setActiveTab,collapsed,setCollapsed,mobileOpen,setMobileOpen}){
+  function pickTab(id){
+    setActiveTab(id);
+    // On mobile, selecting an item closes the drawer; on desktop this is a no-op
+    if(setMobileOpen) setMobileOpen(false);
+  }
+  // Build groups → tabs map for rendering
+  var groupedTabs=TAB_GROUPS.map(function(g){
+    return{group:g,tabs:TABS.filter(function(t){return t.group===g.id;})};
+  }).filter(function(gp){return gp.tabs.length>0;});
+
+  var sidebarClass="jt-sidebar"+(collapsed?" collapsed":"")+(mobileOpen?" open":"");
+  return <React.Fragment>
+    {/* Dim overlay behind mobile drawer. Click to close. */}
+    <div className={"jt-sidebar-overlay"+(mobileOpen?" open":"")} onClick={function(){setMobileOpen(false);}} />
+    <nav className={sidebarClass} aria-label="Primary navigation">
+      {/* Brand row at top. Shows logo + name; compresses to logo-only when collapsed. */}
+      <div style={{display:"flex",alignItems:"center",gap:10,padding:"14px 14px 12px 14px",borderBottom:"1px solid "+C.border,minHeight:56,flexShrink:0}}>
+        <div style={{width:34,height:34,borderRadius:10,background:C.primary,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>🌿</div>
+        {!collapsed&&<div style={{flex:1,minWidth:0,overflow:"hidden"}}>
+          <div style={{fontSize:14,fontWeight:800,color:C.textPrimary,letterSpacing:"-0.3px",whiteSpace:"nowrap"}}>Job Tracker</div>
+          <div style={{fontSize:10,color:C.textHint,fontWeight:500,whiteSpace:"nowrap"}}>AI-powered assistant</div>
+        </div>}
+      </div>
+
+      {/* Scrollable tab list */}
+      <div className="jt-sidebar-scroll">
+        {groupedTabs.map(function(gp,i){
+          return <div key={gp.group.id} style={{marginBottom:4}}>
+            {!collapsed&&<div style={{fontSize:10,fontWeight:700,color:C.textHint,letterSpacing:"0.8px",textTransform:"uppercase",padding:"12px 18px 6px"}}>{gp.group.label}</div>}
+            {collapsed&&i>0&&<div style={{height:1,background:C.border,margin:"8px 12px"}} />}
+            {gp.tabs.map(function(t){
+              var on=activeTab===t.id;
+              return <button key={t.id} className={"jt-sb-item"+(on?" active":"")} onClick={function(){pickTab(t.id);}} title={collapsed?t.label:""} style={{display:"flex",alignItems:"center",gap:12,width:"calc(100% - 12px)",margin:"2px 6px",padding:collapsed?"10px":"10px 12px",border:"none",borderRadius:8,background:on?C.primaryLight:"transparent",color:on?C.primary:C.textSecondary,fontWeight:on?700:500,fontSize:13,cursor:"pointer",textAlign:"left",justifyContent:collapsed?"center":"flex-start"}}>
+                <span style={{fontSize:18,lineHeight:1,flexShrink:0,width:24,textAlign:"center"}}>{t.icon}</span>
+                {!collapsed&&<span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.label}</span>}
+              </button>;
+            })}
+          </div>;
+        })}
+      </div>
+
+      {/* Collapse toggle at the bottom (desktop only — hidden on mobile via CSS) */}
+      <div style={{borderTop:"1px solid "+C.border,padding:"8px"}}>
+        <button onClick={function(){setCollapsed(function(v){return !v;});}} title={collapsed?"Expand sidebar":"Collapse sidebar"} style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"8px 10px",border:"none",borderRadius:8,background:"transparent",color:C.textHint,cursor:"pointer",justifyContent:collapsed?"center":"flex-start",fontSize:13}}>
+          <span style={{fontSize:16,lineHeight:1,flexShrink:0,width:24,textAlign:"center"}}>{collapsed?"»":"«"}</span>
+          {!collapsed&&<span>Collapse</span>}
+        </button>
+      </div>
+    </nav>
+  </React.Fragment>;
+}
+function Label({children,hint}){ return <div style={{marginBottom:6}}><div style={{fontSize:13,fontWeight:600,color:C.textPrimary,marginBottom:hint?2:0}}>{children}</div>{hint&&<div style={{fontSize:11,color:C.textHint}}>{hint}</div>}</div>; }
+function Inp({value,onChange,placeholder,type,style,inputMode,autoComplete,enterKeyHint,onBlur,onKeyDown}){
+  // inputMode/autoComplete/enterKeyHint help mobile browsers show the right
+  // keyboard (email → @, decimal → numpad, etc.) and return key label.
+  var autoType=type==="email"?"email":type==="password"?"current-password":undefined;
+  return <input type={type||"text"} value={value} onChange={onChange} onBlur={onBlur} onKeyDown={onKeyDown}
+    inputMode={inputMode||(type==="email"?"email":type==="number"?"decimal":undefined)}
+    autoComplete={autoComplete||autoType||"off"}
+    enterKeyHint={enterKeyHint}
+    placeholder={placeholder||""}
+    style={{width:"100%",fontSize:14,padding:"10px 12px",borderRadius:10,border:"1.5px solid "+C.border,background:C.surface,color:C.textPrimary,boxSizing:"border-box",...(style||{})}} />;
+}
+function Txta({value,onChange,placeholder,rows}){ return <textarea value={value} onChange={onChange} placeholder={placeholder||""} rows={rows||4} style={{width:"100%",fontSize:14,padding:"10px 12px",borderRadius:10,border:"1.5px solid "+C.border,background:C.surface,color:C.textPrimary,boxSizing:"border-box",resize:"vertical",fontFamily:"inherit"}} />; }
+function Sel({value,onChange,children,style}){ return <select value={value} onChange={onChange} style={{width:"100%",fontSize:14,padding:"10px 12px",borderRadius:10,border:"1.5px solid "+C.border,background:C.surface,color:C.textPrimary,boxSizing:"border-box",...(style||{})}}>{children}</select>; }
+function Btn({children,onClick,variant,disabled,style}){
+  var base={fontSize:14,fontWeight:600,padding:"10px 20px",borderRadius:10,cursor:disabled?"not-allowed":"pointer",border:"none",opacity:disabled?0.5:1,...(style||{})};
+  if(variant==="primary") return <button onClick={onClick} disabled={disabled} style={{...base,background:C.primary,color:"#fff"}}>{children}</button>;
+  if(variant==="danger") return <button onClick={onClick} disabled={disabled} style={{...base,background:C.errorBg,color:C.error,border:"1.5px solid #F5C6C6"}}>{children}</button>;
+  return <button onClick={onClick} disabled={disabled} style={{...base,background:C.surfaceAlt,color:C.textPrimary,border:"1.5px solid "+C.border}}>{children}</button>;
+}
+function Toggle({value,onChange,label,hint}){
+  return <div style={{display:"flex",alignItems:"flex-start",gap:12,cursor:"pointer"}} onClick={onChange}>
+    <div style={{marginTop:2,width:44,height:24,borderRadius:12,background:value?C.primary:C.border,position:"relative",flexShrink:0}}>
+      <div style={{position:"absolute",top:3,left:value?22:3,width:18,height:18,borderRadius:"50%",background:"#fff",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",transition:"left 0.2s"}} />
+    </div>
+    {label&&<div><div style={{fontSize:14,fontWeight:600,color:C.textPrimary}}>{label}</div>{hint&&<div style={{fontSize:12,color:C.textHint,marginTop:2}}>{hint}</div>}</div>}
+  </div>;
+}
+function Chip({label,bg,color}){ return <span style={{display:"inline-block",fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:20,background:bg||C.surfaceAlt,color:color||C.textSecondary,letterSpacing:"0.3px"}}>{label}</span>; }
+function ScorePill({score,rationale,scored}){
+  var bg=score>=85?C.successBg:score>=70?C.warningBg:C.errorBg;
+  var col=score>=85?C.success:score>=70?C.warning:C.error;
+  // Unscored jobs get a neutral look so users don't mistake the placeholder for a real result
+  if(scored===false){ bg=C.surfaceAlt; col=C.textHint; }
+  var tip=scored===false?"Not scored yet — add your CV, then click Rescore all":(rationale||"");
+  return <span title={tip} style={{fontSize:13,fontWeight:700,padding:"4px 10px",borderRadius:20,background:bg,color:col,cursor:tip?"help":"default"}}>{scored===false?"—":score+"%"}</span>;
+}
+function SectionTitle({children,action}){ return <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}><h2 style={{margin:0,fontSize:17,fontWeight:700,color:C.textPrimary}}>{children}</h2>{action}</div>; }
+function EmptyState({icon,title,body}){ return <div style={{textAlign:"center",padding:"40px 20px",color:C.textHint}}><div style={{fontSize:36,marginBottom:12}}>{icon}</div><div style={{fontSize:16,fontWeight:600,color:C.textSecondary,marginBottom:6}}>{title}</div><div style={{fontSize:13}}>{body}</div></div>; }
+function Alert({type,children}){
+  var bg=type==="success"?C.successBg:type==="error"?C.errorBg:type==="warning"?C.warningBg:C.infoBg;
+  var col=type==="success"?C.success:type==="error"?C.error:type==="warning"?C.warning:C.info;
+  return <div style={{fontSize:13,padding:"10px 14px",borderRadius:10,background:bg,color:col,marginTop:10}}>{children}</div>;
+}
+
+// Inline email composer. Not a modal — it expands in place so users can see
+// the content they're about to send. Uses mailto: to hand off to the user's
+// own mail client (native Mail app on mobile, Gmail/Outlook/etc. on desktop).
+function EmailDialog({recipients,subject,body,onClose,onCopy}){
+  var defaultRec=(recipients||[]).find(function(r){return r.isDefault;});
+  var [selectedId,setSelectedId]=useState(defaultRec?defaultRec.id:"custom");
+  var [customEmail,setCustomEmail]=useState("");
+  var [editSubject,setEditSubject]=useState(subject||"");
+  var to=selectedId==="custom"?customEmail.trim():(recipients.find(function(r){return r.id===selectedId;})||{}).email||"";
+  var emailValid=isValidEmail(to);
+  var bodyTooLong=(body||"").length>MAILTO_SAFE_LEN;
+  function send(){
+    if(!emailValid) return;
+    var url=buildMailto(to,editSubject,body);
+    // Use location.href so mobile deep-links work; window.open can be blocked
+    window.location.href=url;
+  }
+  return <div style={{background:C.surfaceAlt,borderRadius:12,padding:"16px",marginTop:14,border:"1.5px solid "+C.border}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+      <div style={{fontSize:14,fontWeight:700,color:C.textPrimary}}>Send via email</div>
+      <button onClick={onClose} style={{background:"none",border:"none",fontSize:20,color:C.textHint,cursor:"pointer",padding:0,lineHeight:1}}>×</button>
+    </div>
+    <div style={{fontSize:12,color:C.textHint,marginBottom:12}}>This will open your email app with the content pre-filled. You can edit before sending.</div>
+    {recipients&&recipients.length>0&&<div style={{marginBottom:10}}>
+      <Label>Send to</Label>
+      <Sel value={selectedId} onChange={function(e){setSelectedId(e.target.value);}}>
+        {recipients.map(function(r){return <option key={r.id} value={r.id}>{r.name} — {r.email}{r.isDefault?" (default)":""}</option>;})}
+        <option value="custom">Other email address...</option>
+      </Sel>
+    </div>}
+    {(selectedId==="custom"||!recipients||!recipients.length)&&<div style={{marginBottom:10}}>
+      <Label hint="Type the recipient's email address.">Recipient email</Label>
+      <Inp value={customEmail} onChange={function(e){setCustomEmail(e.target.value);}} placeholder="name@example.com" type="email" />
+    </div>}
+    <div style={{marginBottom:12}}>
+      <Label>Subject</Label>
+      <Inp value={editSubject} onChange={function(e){setEditSubject(e.target.value);}} />
+    </div>
+    {bodyTooLong&&<Alert type="warning">This message is long ({(body||"").length.toLocaleString()} chars). Some email clients truncate mailto: links. If the body is cut off, use "Copy message" instead and paste it in manually.</Alert>}
+    {!emailValid&&to.length>0&&<Alert type="error">That doesn't look like a valid email address.</Alert>}
+    <div style={{display:"flex",gap:10,marginTop:14,flexWrap:"wrap"}}>
+      <Btn variant="primary" onClick={send} disabled={!emailValid}>Open in email app →</Btn>
+      <Btn onClick={function(){navigator.clipboard.writeText(body||"");if(onCopy) onCopy();}}>Copy message</Btn>
+      <Btn onClick={onClose}>Cancel</Btn>
+    </div>
+  </div>;
+}
+
+// ─── Dashboard ────────────────────────────────────────────────────────────────
+function Dashboard({jobs,schedule,setActiveTab}){
+  // All Dashboard stats reflect the ACTIVE pipeline — archived jobs are excluded
+  // so they don't inflate counts or compete for the "Best match" highlight.
+  var active=jobs.filter(function(j){return !j.archived;});
+  var total=active.length;
+  var avgScore=total?Math.round(active.reduce(function(a,j){return a+j.score;},0)/total):0;
+  // "Applications sent" counts every job you've ever applied to — including
+  // closed outcomes (Rejected, No response) — so the total reflects your real
+  // application volume, not just what's currently in flight.
+  var applied=active.filter(function(j){return APPLIED_STATUSES.includes(j.status);}).length;
+  var topMatch=active.reduce(function(a,j){return j.score>(a?a.score:0)?j:a;},null);
+  var newCount=active.filter(function(j){return j.status==="New";}).length;
+  // Closed/terminal outcomes — surfaced below the active pipeline strip as
+  // a compact summary so the loop is visible without cluttering the pipeline.
+  var rejectedCount=active.filter(function(j){return j.status==="Rejected";}).length;
+  var noResponseCount=active.filter(function(j){return j.status==="No response";}).length;
+  var closedTotal=rejectedCount+noResponseCount;
+  return <div style={{display:"flex",flexDirection:"column",gap:20}}>
+    <div style={{background:"linear-gradient(135deg,"+C.primary+" 0%,"+C.primaryDark+" 100%)",borderRadius:20,padding:"28px",color:"#fff",boxShadow:C.shadowMd}}>
+      <div style={{fontSize:22,fontWeight:700,marginBottom:6}}>Good to see you! 👋</div>
+      <div style={{fontSize:14,opacity:0.85,marginBottom:20}}>Here's your job search summary for today.</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12}}>
+        {[["Jobs tracked",total,"total in pipeline"],["New to review",newCount,"waiting for you"],["Applications sent",applied,"in progress"],["Best match",topMatch?topMatch.score+"%":"—",topMatch?topMatch.company:"no jobs yet"]].map(function(s){
+          return <div key={s[0]} style={{background:"rgba(255,255,255,0.15)",borderRadius:12,padding:"14px 16px"}}>
+            <div style={{fontSize:24,fontWeight:700,marginBottom:2}}>{s[1]}</div>
+            <div style={{fontSize:12,fontWeight:600,opacity:0.9}}>{s[0]}</div>
+            <div style={{fontSize:11,opacity:0.65,marginTop:2}}>{s[2]}</div>
+          </div>;
+        })}
+      </div>
+    </div>
+    <Card style={{display:"flex",alignItems:"center",gap:14,padding:"16px 20px"}}>
+      <div style={{width:12,height:12,borderRadius:"50%",background:schedule.enabled?"#4CAF50":C.border,flexShrink:0,boxShadow:schedule.enabled?"0 0 0 3px rgba(76,175,80,0.2)":"none"}} />
+      <div style={{flex:1}}>
+        <div style={{fontSize:14,fontWeight:600,color:C.textPrimary}}>{schedule.enabled?"Auto-fetch is running":"Auto-fetch is off"}</div>
+        <div style={{fontSize:12,color:C.textHint,marginTop:2}}>{schedule.enabled?"Fetching on "+schedule.days.join(", ")+" · "+schedule.startTime+"–"+schedule.stopTime+" · every "+schedule.intervalMinutes+" min":"Turn on the Scheduler to automatically fetch new jobs throughout the day."}</div>
+      </div>
+      <Btn onClick={function(){setActiveTab("scheduler");}} style={{fontSize:13,padding:"8px 16px",whiteSpace:"nowrap"}}>{schedule.enabled?"View schedule":"Set up schedule"}</Btn>
+    </Card>
+    <Card>
+      <SectionTitle>Application pipeline</SectionTitle>
+      <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+        {ACTIVE_STATUSES.map(function(s){
+          var count=active.filter(function(j){return j.status===s;}).length;
+          return <div key={s} style={{flex:"1 1 100px",minWidth:90,background:STATUS[s].bg,borderRadius:12,padding:"14px 10px",textAlign:"center"}}>
+            <div style={{fontSize:22,fontWeight:700,color:STATUS[s].color}}>{count}</div>
+            <div style={{fontSize:11,fontWeight:600,color:STATUS[s].color,marginTop:4,opacity:0.8}}>{s}</div>
+          </div>;
+        })}
+      </div>
+      {closedTotal>0&&<div style={{marginTop:14,paddingTop:14,borderTop:"1px solid "+C.border,display:"flex",alignItems:"center",gap:16,flexWrap:"wrap",fontSize:12,color:C.textSecondary}}>
+        <span style={{fontWeight:700,textTransform:"uppercase",letterSpacing:"0.5px",color:C.textHint,fontSize:11}}>Closed</span>
+        {rejectedCount>0&&<span><b style={{color:STATUS.Rejected.color}}>{rejectedCount}</b> rejected</span>}
+        {noResponseCount>0&&<span><b style={{color:STATUS["No response"].color}}>{noResponseCount}</b> no response</span>}
+        <span style={{color:C.textHint,marginLeft:"auto"}}>Total closed: {closedTotal}</span>
+      </div>}
+      {(function(){
+        // Gentle nudge: Applied jobs that have sat untouched for 30+ days are
+        // candidates for "No response". We surface them here as a soft prompt
+        // rather than auto-transitioning silently.
+        var now=Date.now();
+        var thirtyDaysMs=30*24*60*60*1000;
+        var stale=active.filter(function(j){
+          if(j.status!=="Applied") return false;
+          // Prefer `appliedAt` (when the user actually moved the job to Applied).
+          // Fall back to `date` (ingestion date) for legacy jobs that predate the
+          // appliedAt tracking. Imperfect for those, but reasonable proxy.
+          var ref=j.appliedAt||j.date;
+          if(!ref) return false;
+          return (now-new Date(ref).getTime())>thirtyDaysMs;
+        });
+        if(!stale.length) return null;
+        return <Alert type="info">
+          <span>{stale.length} applied job{stale.length!==1?"s have":" has"} been silent for 30+ days. <span style={{fontWeight:600,textDecoration:"underline",cursor:"pointer"}} onClick={function(){setActiveTab("jobs");}}>Review in My Jobs</span> and mark as <i>No response</i> if appropriate to close the loop.</span>
+        </Alert>;
+      })()}
+    </Card>
+    <Card>
+      <SectionTitle action={<Btn onClick={function(){setActiveTab("jobs");}} style={{fontSize:12,padding:"6px 14px"}}>View all</Btn>}>Recently added jobs</SectionTitle>
+      {active.length===0
+        ?<EmptyState icon="🔍" title="No jobs yet" body="Go to Search Profiles to fetch jobs automatically." />
+        :<div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {active.slice(0,5).map(function(j){
+            return <div key={j.id} style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",background:C.surfaceAlt,borderRadius:12}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:14,fontWeight:700,color:C.textPrimary,marginBottom:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{j.title}</div>
+                <div style={{fontSize:12,color:C.textSecondary}}>{j.company} · {j.location}</div>
+              </div>
+              <ScorePill score={j.score} rationale={j.rationale} scored={j.scored!==false} />
+              <Chip label={j.status} bg={STATUS[j.status].bg} color={STATUS[j.status].color} />
+            </div>;
+          })}
+        </div>}
+    </Card>
+  </div>;
+}
+
+// ─── Job Row (with expandable details) ───────────────────────────────────────
+function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,onNotesChange,onArchiveToggle,onDismiss}){
+  var src=SOURCES[j.sourceType]||SOURCES.manual;
+  // Notes are always editable, so the row is always expandable — description,
+  // deadline, links, etc. are now just extra content inside the expansion.
+  var hasRichDetails=!!(j.description||j.employerUrl||j.applyUrl);
+  var hasNotes=!!(j.notes&&j.notes.trim());
+  var todayStr=new Date().toISOString().slice(0,10);
+  var deadlineSoon=j.deadline&&j.deadline>=todayStr&&(new Date(j.deadline)-new Date())<7*24*60*60*1000;
+  var deadlinePast=j.deadline&&j.deadline<todayStr;
+  var isArchived=!!j.archived;
+  // Local draft for notes — commits on blur so we don't re-render / re-persist on every keystroke
+  var [noteDraft,setNoteDraft]=useState(j.notes||"");
+  // If the job's notes change upstream (e.g. external update) while not focused, sync local draft
+  useEffect(function(){ setNoteDraft(j.notes||""); },[j.id,j.notes]);
+  function commitNotes(){
+    if((j.notes||"")!==noteDraft) onNotesChange(noteDraft);
+  }
+  // Archived rows render muted with reduced opacity so they don't compete for
+  // attention with active pipeline jobs. Selection still wins visually.
+  var rowBg=selected?C.primaryLight:isArchived?"#F0F0EE":C.surfaceAlt;
+  var rowBorder=selected?"1.5px solid "+C.primary:isArchived?"1.5px dashed "+C.border:"1.5px solid transparent";
+  return <div style={{background:rowBg,borderRadius:14,padding:"16px",transition:"background 0.15s",border:rowBorder,opacity:isArchived&&!selected?0.72:1}}>
+    <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
+      {/* Selection checkbox — top-left so it's visible on every row without
+          disturbing the existing layout. Stops click propagation so clicking
+          the checkbox doesn't also trigger row-level interactions. */}
+      {onSelectToggle&&<input
+        type="checkbox"
+        checked={!!selected}
+        onChange={onSelectToggle}
+        onClick={function(e){e.stopPropagation();}}
+        style={{width:18,height:18,marginTop:3,flexShrink:0,cursor:"pointer",accentColor:C.primary}}
+        aria-label="Select this job"
+      />}
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6,flexWrap:"wrap"}}>
+          <span style={{fontSize:15,fontWeight:700,color:C.textPrimary}}>{j.title}</span>
+          {isArchived&&<span title="Archived" style={{fontSize:12,padding:"2px 8px",borderRadius:10,background:C.border,color:C.textSecondary,fontWeight:600}}>📦 Archived</span>}
+          <ScorePill score={j.score} rationale={j.rationale} scored={j.scored!==false} />
+          {hasNotes&&<span title="Has notes" onClick={onToggle} style={{fontSize:13,cursor:"pointer",userSelect:"none"}}>📝</span>}
+        </div>
+        <div style={{fontSize:13,color:C.textSecondary,marginBottom:8}}>
+          {j.company} · {j.location} · Added {j.date}
+          {j.employmentType&&<span> · {j.employmentType}</span>}
+          {j.remote===true&&<span> · 🌐 Remote</span>}
+          {j.salary&&<span> · 💰 {j.salary}</span>}
+        </div>
+        {j.rationale&&j.scored!==false&&<div style={{fontSize:12,color:C.textHint,fontStyle:"italic",marginBottom:8}}>💡 {j.rationale}</div>}
+        {j.deadline&&<div style={{fontSize:12,fontWeight:600,marginBottom:8,color:deadlinePast?C.error:deadlineSoon?C.warning:C.textSecondary}}>
+          {deadlinePast?"⚠ Deadline passed: ":deadlineSoon?"⏰ Apply by ":"📅 Apply by "}{j.deadline}
+        </div>}
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+          <Chip label={src.label} bg={src.bg} color={src.color} />
+          {j.tags.map(function(t,i){return <Chip key={t+i} label={t} />;})}
+          {(j.applyUrl||j.url)&&<a href={j.applyUrl||j.url} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:C.primary,fontWeight:600,textDecoration:"none"}}>View posting →</a>}
+          <button onClick={onToggle} style={{fontSize:12,color:C.primary,fontWeight:600,background:"none",border:"none",cursor:"pointer",padding:0,marginLeft:"auto"}}>
+            {expanded?"▲ Hide details":hasNotes?"▼ Details & notes":"▼ Show details & add notes"}
+          </button>
+        </div>
+      </div>
+      <div style={{flexShrink:0,display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
+        <div><Label>Status</Label>
+        <Sel value={j.status} onChange={onStatusChange} style={{width:"auto",fontSize:13,padding:"7px 10px",background:STATUS[j.status].bg,color:STATUS[j.status].color,fontWeight:700,border:"none"}}>
+          {STATUSES.map(function(s){return <option key={s}>{s}</option>;})}
+        </Sel></div>
+        {onArchiveToggle&&<button onClick={onArchiveToggle} style={{fontSize:11,color:C.textHint,background:"none",border:"none",cursor:"pointer",padding:"2px 6px",fontWeight:600}}>{isArchived?"↩ Unarchive":"📦 Archive"}</button>}
+        {onDismiss&&!isArchived&&<button onClick={onDismiss} title="Dismiss — not interested" style={{fontSize:11,color:C.textHint,background:"none",border:"none",cursor:"pointer",padding:"2px 6px",fontWeight:600}}>🗑 Dismiss</button>}
+      </div>
+    </div>
+    {expanded&&<div style={{marginTop:14,paddingTop:14,borderTop:"1.5px solid "+C.border}}>
+      <div style={{marginBottom:hasRichDetails?16:0}}>
+        <div style={{fontSize:12,fontWeight:600,color:C.textHint,letterSpacing:"0.5px",marginBottom:6}}>MY NOTES</div>
+        <div style={{fontSize:11,color:C.textHint,marginBottom:6}}>Track your progress, interview prep, contacts, next steps... Saves automatically when you click away.</div>
+        <Txta value={noteDraft} onChange={function(e){setNoteDraft(e.target.value);}} onBlur={commitNotes} placeholder="e.g. Applied via referral on 2026-04-20. Phone screen with Sarah scheduled for 4/25 at 14:00." rows={4} />
+      </div>
+      {j.description&&<div style={{marginBottom:12}}>
+        <div style={{fontSize:12,fontWeight:600,color:C.textHint,letterSpacing:"0.5px",marginBottom:6}}>ROLE DESCRIPTION</div>
+        <div style={{fontSize:13,lineHeight:1.6,color:C.textPrimary,maxHeight:320,overflowY:"auto",whiteSpace:"pre-wrap",background:C.surface,padding:"12px 14px",borderRadius:10,border:"1px solid "+C.border}}>{j.description}</div>
+      </div>}
+      <div className="jt-grid-2" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:10,fontSize:13}}>
+        {j.employerUrl&&<div>
+          <div style={{fontSize:11,fontWeight:600,color:C.textHint,letterSpacing:"0.5px",marginBottom:3}}>EMPLOYER</div>
+          <a href={j.employerUrl} target="_blank" rel="noopener noreferrer" style={{color:C.primary,fontWeight:600,textDecoration:"none",wordBreak:"break-all"}}>{j.company} ↗</a>
+        </div>}
+        {j.applyUrl&&<div>
+          <div style={{fontSize:11,fontWeight:600,color:C.textHint,letterSpacing:"0.5px",marginBottom:3}}>APPLY LINK</div>
+          <a href={j.applyUrl} target="_blank" rel="noopener noreferrer" style={{color:C.primary,fontWeight:600,textDecoration:"none",wordBreak:"break-all"}}>Open application ↗</a>
+        </div>}
+      </div>
+    </div>}
+  </div>;
+}
+
+// ─── Jobs ─────────────────────────────────────────────────────────────────────
+function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSort,dismissJob,tombstoneIds}){
+  var [filter,setFilter]=useState("All");
+  var [sourceFilter,setSourceFilter]=useState("all");
+  var [scoreFilter,setScoreFilter]=useState(0);
+  var [search,setSearch]=useState("");
+  var [showAdd,setShowAdd]=useState(false);
+  var [showArchived,setShowArchived]=useState(false);
+  var [expandedId,setExpandedId]=useState(null);
+  // Selection state for bulk actions. Set of String(id) for consistency with
+  // how we handle ID types elsewhere (numeric manual jobs vs string API jobs).
+  var [selectedIds,setSelectedIds]=useState(new Set());
+  var [form,setForm]=useState({title:"",company:"",location:"",tags:"",applyUrl:"",salary:"",employmentType:"",description:""});
+  // Archive filter: by default, archived jobs are hidden everywhere. User can
+  // flip the toggle to see them (greyed + 📦 in the row). Applied first so
+  // status / source / score / search counts reflect only visible jobs.
+  var filtered=jobs
+    .filter(function(j){return showArchived?true:!j.archived;})
+    .filter(function(j){return filter==="All"||j.status===filter;})
+    .filter(function(j){return sourceFilter==="all"||j.sourceType===sourceFilter;})
+    .filter(function(j){
+      if(scoreFilter===0) return true;
+      // Hide unscored jobs when a threshold is active — their score is a placeholder
+      if(j.scored===false) return false;
+      return(j.score||0)>=scoreFilter;
+    })
+    .filter(function(j){return matchesSearch(j,search);});
+  filtered=sortJobs(filtered,sort);
+
+  // Count passed-deadline non-archived jobs for the "Archive passed" helper button
+  var todayStr=new Date().toISOString().slice(0,10);
+  var passedCount=jobs.filter(function(j){return !j.archived&&j.deadline&&j.deadline<todayStr;}).length;
+  var archivedCount=jobs.filter(function(j){return j.archived;}).length;
+
+  // Selection helpers. Count only visible selected so user isn't confused when
+  // filters hide some of their ticked jobs.
+  var filteredIdSet=new Set(filtered.map(function(j){return String(j.id);}));
+  var visibleSelectedCount=0;
+  selectedIds.forEach(function(id){ if(filteredIdSet.has(id)) visibleSelectedCount++; });
+  var allVisibleSelected=filtered.length>0&&visibleSelectedCount===filtered.length;
+
+  function toggleSelect(jobId){
+    var key=String(jobId);
+    setSelectedIds(function(prev){
+      var next=new Set(prev);
+      if(next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+  function toggleSelectAllVisible(){
+    setSelectedIds(function(prev){
+      var next=new Set(prev);
+      if(allVisibleSelected){
+        // Deselect only visible ones, keep off-screen selections alone
+        filtered.forEach(function(j){ next.delete(String(j.id)); });
+      }else{
+        filtered.forEach(function(j){ next.add(String(j.id)); });
+      }
+      return next;
+    });
+  }
+  function clearSelection(){ setSelectedIds(new Set()); }
+  function bulkSetStatus(newStatus){
+    var nowIso=new Date().toISOString();
+    setJobs(function(prev){
+      return prev.map(function(j){
+        if(!selectedIds.has(String(j.id))) return j;
+        // Same appliedAt logic as the per-row handler: only stamp on first
+        // transition to Applied, preserving any earlier appliedAt.
+        var patch={status:newStatus};
+        if(newStatus==="Applied"&&!j.appliedAt) patch.appliedAt=nowIso;
+        return Object.assign({},j,patch);
+      });
+    });
+    clearSelection();
+  }
+  function bulkDelete(){
+    var n=selectedIds.size;
+    if(!confirm("Delete "+n+" job"+(n!==1?"s":"")+"? This cannot be undone."))return;
+    // Tombstone the IDs so these jobs won't be re-ingested on a later fetch.
+    if(tombstoneIds) tombstoneIds(Array.from(selectedIds));
+    setJobs(function(prev){return prev.filter(function(j){return !selectedIds.has(String(j.id));});});
+    clearSelection();
+  }
+  function bulkArchive(){
+    setJobs(function(prev){
+      return prev.map(function(j){
+        return selectedIds.has(String(j.id))?Object.assign({},j,{archived:true}):j;
+      });
+    });
+    clearSelection();
+  }
+  function bulkUnarchive(){
+    setJobs(function(prev){
+      return prev.map(function(j){
+        return selectedIds.has(String(j.id))?Object.assign({},j,{archived:false}):j;
+      });
+    });
+    clearSelection();
+  }
+  // Flip archive state for a single job (used by the row's status dropdown).
+  function toggleArchive(jobId){
+    setJobs(function(prev){return prev.map(function(j){return j.id===jobId?Object.assign({},j,{archived:!j.archived}):j;});});
+  }
+  // One-click helper: archive every non-archived job with a passed deadline.
+  // Shown in the filter card when passedCount > 0.
+  function archivePassed(){
+    if(!passedCount) return;
+    if(!confirm("Archive "+passedCount+" job"+(passedCount!==1?"s":"")+" with passed deadlines? You can still view them with \"Show archived\"."))return;
+    var today=todayStr;
+    setJobs(function(prev){return prev.map(function(j){
+      if(!j.archived&&j.deadline&&j.deadline<today) return Object.assign({},j,{archived:true});
+      return j;
+    });});
+  }
+
+  function addJob(){
+    if(!form.title||!form.company) return;
+    setJobs(function(prev){return [{
+      id:Date.now(),title:form.title,company:form.company,location:form.location,
+      status:"New",score:NEUTRAL_SCORE,scored:false,rationale:"",
+      source:"Manual",sourceType:"manual",
+      date:new Date().toISOString().slice(0,10),lang:"English",
+      tags:form.tags.split(",").map(function(t){return t.trim();}).filter(Boolean),
+      url:form.applyUrl||null,
+      description:form.description||"",applyUrl:form.applyUrl||null,
+      deadline:null,employmentType:form.employmentType||null,
+      salary:form.salary||null,remote:null,employerUrl:null,
+    }].concat(prev);});
+    setForm({title:"",company:"",location:"",tags:"",applyUrl:"",salary:"",employmentType:"",description:""});
+    setShowAdd(false);
+  }
+  return <div style={{display:"flex",flexDirection:"column",gap:16}}>
+    <Card style={{padding:"16px 20px"}}>
+      <div style={{fontSize:12,color:C.textHint,marginBottom:8,fontWeight:600,letterSpacing:"0.5px"}}>SEARCH</div>
+      <div style={{position:"relative",marginBottom:14}}>
+        <Inp value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search by title, company, location, description..." style={{paddingLeft:36,paddingRight:search?36:12}} />
+        <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:14,color:C.textHint,pointerEvents:"none"}}>🔍</span>
+        {search&&<button onClick={function(){setSearch("");}} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",fontSize:18,color:C.textHint,cursor:"pointer",padding:"4px 8px",lineHeight:1}}>×</button>}
+      </div>
+      <div style={{display:"flex",gap:14,alignItems:"center",marginBottom:14,flexWrap:"wrap"}}>
+        <div style={{fontSize:12,color:C.textHint,fontWeight:600,letterSpacing:"0.5px",flexShrink:0}}>SORT BY</div>
+        <Sel value={sort} onChange={function(e){setSort(e.target.value);}} style={{width:"auto",minWidth:200,flexShrink:0}}>
+          {SORT_OPTIONS.map(function(o){return <option key={o.key} value={o.key}>{o.label}</option>;})}
+        </Sel>
+      </div>
+      <div style={{fontSize:12,color:C.textHint,marginBottom:8,fontWeight:600,letterSpacing:"0.5px"}}>FILTER BY STATUS</div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14}}>
+        {["All"].concat(STATUSES).map(function(s){
+          var on=filter===s;
+          // Count only jobs visible under current archive setting — otherwise
+          // the chip promises results the filter chain will then hide.
+          var cnt=s!=="All"?"("+jobs.filter(function(j){return j.status===s&&(showArchived||!j.archived);}).length+")":"";
+          return <button key={s} onClick={function(){setFilter(s);}} style={{fontSize:13,fontWeight:on?700:500,padding:"7px 16px",borderRadius:20,border:"1.5px solid "+(on?STATUS[s]?STATUS[s].color:C.primary:C.border),background:on?(STATUS[s]?STATUS[s].bg:C.primaryLight):"transparent",color:on?(STATUS[s]?STATUS[s].color:C.primary):C.textSecondary,cursor:"pointer"}}>{s} {cnt}</button>;
+        })}
+      </div>
+      <div style={{fontSize:12,color:C.textHint,marginBottom:8,fontWeight:600,letterSpacing:"0.5px"}}>FILTER BY SOURCE</div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14}}>
+        {[["All sources","all"],["Arbetsförmedlingen","af"],["JSearch","jsearch"],["Manual","manual"]].map(function(item){
+          var on=sourceFilter===item[1];
+          return <button key={item[1]} onClick={function(){setSourceFilter(item[1]);}} style={{fontSize:12,fontWeight:on?700:500,padding:"5px 14px",borderRadius:20,border:"1.5px solid "+(on?C.primary:C.border),background:on?C.primaryLight:"transparent",color:on?C.primary:C.textSecondary,cursor:"pointer"}}>{item[0]}</button>;
+        })}
+      </div>
+      <div style={{fontSize:12,color:C.textHint,marginBottom:8,fontWeight:600,letterSpacing:"0.5px"}}>FILTER BY MATCH SCORE</div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        {[
+          [0,"Any score",C.border,C.textSecondary,C.surfaceAlt],
+          [50,"≥ 50%",C.error,C.error,C.errorBg],
+          [70,"≥ 70%",C.warning,C.warning,C.warningBg],
+          [85,"≥ 85%",C.success,C.success,C.successBg],
+        ].map(function(item){
+          var on=scoreFilter===item[0];
+          return <button key={item[0]} onClick={function(){setScoreFilter(item[0]);}} style={{fontSize:12,fontWeight:on?700:500,padding:"5px 14px",borderRadius:20,border:"1.5px solid "+(on?item[2]:C.border),background:on?item[4]:"transparent",color:on?item[3]:C.textSecondary,cursor:"pointer"}}>{item[1]}</button>;
+        })}
+      </div>
+      {scoreFilter>0&&<div style={{fontSize:11,color:C.textHint,marginTop:8,fontStyle:"italic"}}>Jobs that haven't been scored yet are hidden while a threshold is active.</div>}
+      {/* Archive controls — shown only when there's something relevant:
+          either archived jobs to reveal, or passed deadlines to archive. */}
+      {(archivedCount>0||passedCount>0)&&<div style={{marginTop:16,paddingTop:16,borderTop:"1px solid "+C.border,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+        {archivedCount>0&&<label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",userSelect:"none",fontSize:13,color:C.textSecondary}}>
+          <input type="checkbox" checked={showArchived} onChange={function(){setShowArchived(function(v){return !v;});}} style={{width:16,height:16,cursor:"pointer",accentColor:C.primary}} />
+          <span>Show archived ({archivedCount})</span>
+        </label>}
+        {passedCount>0&&<Btn onClick={archivePassed} style={{fontSize:12,padding:"6px 12px",marginLeft:"auto"}}>📦 Archive passed deadlines ({passedCount})</Btn>}
+      </div>}
+    </Card>
+    <Card>
+      <SectionTitle action={<div style={{display:"flex",gap:8}}>
+        <Btn onClick={rescoreAll} disabled={scoringStatus.active||jobs.length===0||!hasCv(cv)} style={{fontSize:13,padding:"8px 16px"}}>{scoringStatus.active?"Scoring "+scoringStatus.done+"/"+scoringStatus.total+"...":"⟳ Rescore all"}</Btn>
+        <Btn variant="primary" onClick={function(){setShowAdd(function(v){return !v;});}} style={{fontSize:13,padding:"8px 16px"}}>+ Add job manually</Btn>
+      </div>}>Jobs ({filtered.length}{(function(){
+        // Show " of N" only when filters are hiding something. "N" reflects the
+        // pool the user is navigating — active jobs by default, or all jobs
+        // when "Show archived" is on.
+        var pool=showArchived?jobs.length:jobs.length-archivedCount;
+        return filtered.length!==pool?" of "+pool:"";
+      })()})</SectionTitle>
+      {!hasCv(cv)&&jobs.length>0&&<Alert type="info">Add your CV in the My CV tab to enable AI match scoring. Until then, scores show as "—".</Alert>}
+      {scoringStatus.active&&<Alert type="info">AI is scoring your jobs against your CV... ({scoringStatus.done} of {scoringStatus.total} done)</Alert>}
+      {scoringError&&!scoringStatus.active&&<Alert type="error">Scoring failed: {scoringError}</Alert>}
+      {showAdd&&<div style={{background:C.surfaceAlt,borderRadius:12,padding:"16px",marginBottom:16,border:"1.5px solid "+C.border}}>
+        <div style={{fontSize:14,fontWeight:700,color:C.textPrimary,marginBottom:14}}>Add a job manually</div>
+        <div className="jt-grid-2" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:12,marginBottom:12}}>
+          <div><Label hint="e.g. Senior UX Designer">Job title *</Label><Inp value={form.title} onChange={function(e){var v=e.target.value;setForm(function(f){return Object.assign({},f,{title:v});});}} placeholder="Job title" /></div>
+          <div><Label hint="e.g. Spotify">Company *</Label><Inp value={form.company} onChange={function(e){var v=e.target.value;setForm(function(f){return Object.assign({},f,{company:v});});}} placeholder="Company name" /></div>
+          <div><Label hint="e.g. Stockholm or Remote">Location</Label><Inp value={form.location} onChange={function(e){var v=e.target.value;setForm(function(f){return Object.assign({},f,{location:v});});}} placeholder="Location" /></div>
+          <div><Label hint="Direct link to the job posting">Apply URL</Label><Inp value={form.applyUrl} onChange={function(e){var v=e.target.value;setForm(function(f){return Object.assign({},f,{applyUrl:v});});}} placeholder="https://..." /></div>
+          <div><Label hint="e.g. Full-time, Contract">Employment type</Label><Inp value={form.employmentType} onChange={function(e){var v=e.target.value;setForm(function(f){return Object.assign({},f,{employmentType:v});});}} placeholder="e.g. Full-time" /></div>
+          <div><Label hint="e.g. 60 000–80 000 SEK/month">Salary range</Label><Inp value={form.salary} onChange={function(e){var v=e.target.value;setForm(function(f){return Object.assign({},f,{salary:v});});}} placeholder="e.g. 70 000 SEK/month" /></div>
+          <div style={{gridColumn:"1 / -1"}}><Label hint="Separate with commas">Tags</Label><Inp value={form.tags} onChange={function(e){var v=e.target.value;setForm(function(f){return Object.assign({},f,{tags:v});});}} placeholder="e.g. Design, Remote" /></div>
+          <div style={{gridColumn:"1 / -1"}}><Label hint="Paste the full role description for better AI match scoring">Role description</Label><Txta value={form.description} onChange={function(e){var v=e.target.value;setForm(function(f){return Object.assign({},f,{description:v});});}} placeholder="Paste the job description here..." rows={6} /></div>
+        </div>
+        <div style={{display:"flex",gap:10}}><Btn variant="primary" onClick={addJob}>Save job</Btn><Btn onClick={function(){setShowAdd(false);}}>Cancel</Btn></div>
+      </div>}
+      {filtered.length===0
+        ?(jobs.length>0
+          ?<div style={{textAlign:"center",padding:"30px 20px"}}>
+            <div style={{fontSize:32,marginBottom:10}}>🔍</div>
+            <div style={{fontSize:15,fontWeight:600,color:C.textSecondary,marginBottom:6}}>No jobs match your filters</div>
+            <div style={{fontSize:13,color:C.textHint,marginBottom:14}}>Try clearing the search or changing the filters.</div>
+            <Btn onClick={function(){setSearch("");setFilter("All");setSourceFilter("all");setScoreFilter(0);}}>Clear all filters</Btn>
+          </div>
+          :<EmptyState icon="📋" title="No jobs here yet" body="Add a job manually or fetch from your search profiles." />)
+        :<div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {/* Bulk action header. Shown only when there are jobs visible. Pairs
+              a "Select all visible" checkbox with a status changer + delete
+              button that appear once something is selected. Becomes sticky
+              when there's an active selection so the actions stay reachable
+              during long scrolls. */}
+          <div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:visibleSelectedCount>0?C.primaryLight:C.surfaceAlt,borderRadius:10,flexWrap:"wrap",transition:"background 0.15s",position:visibleSelectedCount>0?"sticky":"static",top:visibleSelectedCount>0?4:"auto",zIndex:5,boxShadow:visibleSelectedCount>0?"0 2px 8px rgba(0,0,0,0.06)":"none"}}>
+            <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",userSelect:"none",flex:"0 0 auto"}}>
+              <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAllVisible} style={{width:18,height:18,cursor:"pointer",accentColor:C.primary}} />
+              <span style={{fontSize:13,fontWeight:600,color:visibleSelectedCount>0?C.primary:C.textSecondary}}>
+                {visibleSelectedCount>0?visibleSelectedCount+" selected":"Select all visible"}
+              </span>
+            </label>
+            {visibleSelectedCount>0&&<div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginLeft:"auto"}}>
+              <Sel value="" onChange={function(e){if(e.target.value) bulkSetStatus(e.target.value);}} style={{width:"auto",fontSize:13,padding:"6px 10px",minWidth:160}}>
+                <option value="">Change status to…</option>
+                {STATUSES.map(function(s){return <option key={s} value={s}>{s}</option>;})}
+              </Sel>
+              {/* Show Archive if any selected job is NOT archived; show Unarchive
+                  only when every selected job IS archived (keeps intent clear). */}
+              {(function(){
+                var sel=jobs.filter(function(j){return selectedIds.has(String(j.id));});
+                var allArch=sel.length>0&&sel.every(function(j){return j.archived;});
+                return allArch
+                  ?<Btn onClick={bulkUnarchive} style={{fontSize:12,padding:"6px 12px"}}>↩ Unarchive</Btn>
+                  :<Btn onClick={bulkArchive} style={{fontSize:12,padding:"6px 12px"}}>📦 Archive</Btn>;
+              })()}
+              <Btn variant="danger" onClick={bulkDelete} style={{fontSize:12,padding:"6px 12px"}}>Delete selected</Btn>
+              <Btn onClick={clearSelection} style={{fontSize:12,padding:"6px 12px"}}>Cancel</Btn>
+            </div>}
+          </div>
+          {filtered.map(function(j){
+            var jid=String(j.id);
+            return <JobRow
+              key={j.id}
+              job={j}
+              expanded={expandedId===j.id}
+              selected={selectedIds.has(jid)}
+              onSelectToggle={function(){toggleSelect(j.id);}}
+              onToggle={function(){setExpandedId(function(cur){return cur===j.id?null:j.id;});}}
+              onStatusChange={function(e){var val=e.target.value;setJobs(function(prev){return prev.map(function(x){
+                if(x.id!==j.id) return x;
+                // Record when a job first enters "Applied" so the 30-day nudge
+                // can measure from the right moment. Never overwrites an
+                // existing appliedAt — subsequent transitions back/forth
+                // preserve the original application timestamp.
+                var patch={status:val};
+                if(val==="Applied"&&!x.appliedAt) patch.appliedAt=new Date().toISOString();
+                return Object.assign({},x,patch);
+              });});}}
+              onNotesChange={function(val){setJobs(function(prev){return prev.map(function(x){return x.id===j.id?Object.assign({},x,{notes:val}):x;});});}}
+              onArchiveToggle={function(){toggleArchive(j.id);}}
+              onDismiss={dismissJob?function(){dismissJob(j.id);}:null}
+            />;
+          })}
+        </div>}
+    </Card>
+  </div>;
+}
+
+// ─── Search Profiles ──────────────────────────────────────────────────────────
+function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJsKey,anthropicKey,setAnthropicKey,pendingProfileRun,setPendingProfileRun,dismissedIds}){
+  var [showAfKey,setShowAfKey]=useState(false);
+  var [showJsKey,setShowJsKey]=useState(false);
+  var [showAnthropicKey,setShowAnthropicKey]=useState(false);
+  var [editId,setEditId]=useState(null);
+  var [showForm,setShowForm]=useState(false);
+  var [form,setForm]=useState({name:"",query:"",limit:10,sources:["af"]});
+  var [runStatus,setRunStatus]=useState({});
+
+  function toggleSource(src){setForm(function(f){var srcs=f.sources.includes(src)?f.sources.filter(function(s){return s!==src;}):f.sources.concat([src]);return Object.assign({},f,{sources:srcs});});}
+  function saveProfile(){
+    if(!form.name||!form.query||form.sources.length===0) return;
+    if(editId){setProfiles(function(prev){return prev.map(function(p){return p.id===editId?Object.assign({},p,form,{limit:Number(form.limit)}):p;});});setEditId(null);}
+    else{setProfiles(function(prev){return prev.concat([Object.assign({id:Date.now()},form,{limit:Number(form.limit),active:true})]);});}
+    setForm({name:"",query:"",limit:10,sources:["af"]});setShowForm(false);
+  }
+  function startEdit(p){setForm({name:p.name,query:p.query,limit:p.limit,sources:p.sources||["af"]});setEditId(p.id);setShowForm(true);}
+
+  async function fetchAF(p){
+    try{
+      var url="https://jobsearch.api.jobtechdev.se/search?q="+encodeURIComponent(p.query)+"&limit="+p.limit+"&resdet=full";
+      var headers={"accept":"application/json"};
+      if(afKey) headers["api-key"]=afKey;
+      var out=await smartFetch(url,{headers:headers});
+      var res=out.response;
+      if(!res.ok){
+        if(res.status===403){
+          throw new Error("403 Forbidden"+(out.viaProxy?" (the CORS proxy rejected the request — try again in a moment)":" (the API rejected the request — check your API key if you added one)"));
+        }
+        if(res.status===429) throw new Error("429 Rate limited — slow down and try again in a minute");
+        throw new Error("Error "+res.status);
+      }
+      var data=await res.json();
+      var ads=data.hits||[];
+      var added=0;
+      var skippedDismissed=0;
+      // Build a Set of tombstoned ids. Captured from props at fetch time — fine
+      // because list changes (dismissals) are user-driven and rare.
+      var tombstones=new Set((dismissedIds||[]).map(String));
+      setJobs(function(prev){
+        var ex=new Set(prev.map(function(j){return j.id?j.id.toString():""; }));
+        var nj=ads.filter(function(a){
+          var aid=a.id?a.id.toString():"";
+          if(!aid) return false;
+          if(ex.has(aid)) return false;       // already in current jobs
+          if(tombstones.has(aid)){ skippedDismissed++; return false; } // previously dismissed
+          return true;
+        }).map(function(a){return mapAfJob(a,p.name);});
+        added=nj.length;return nj.concat(prev);
+      });
+      return{added:added,skipped:skippedDismissed};
+    }catch(e){return{added:0,error:e.message};}
+  }
+
+  async function fetchJS(p){
+    if(!jsKey) return{added:0,error:"No JSearch API key entered. Go to Search Profiles and add your RapidAPI key."};
+    try{
+      var url="https://jsearch.p.rapidapi.com/search?query="+encodeURIComponent(p.query)+"&num_pages=1&page=1";
+      var out=await smartFetch(url,{headers:{"x-rapidapi-key":jsKey,"x-rapidapi-host":"jsearch.p.rapidapi.com"}});
+      var res=out.response;
+      if(!res.ok){
+        if(res.status===401||res.status===403) throw new Error(res.status+" — check your RapidAPI key and that you're subscribed to JSearch");
+        if(res.status===429) throw new Error("429 Rate limited — JSearch free tier is limited, try again later");
+        throw new Error("Error "+res.status);
+      }
+      var data=await res.json();
+      var ads=(data.data||[]).slice(0,p.limit);
+      var added=0;
+      var skippedDismissed=0;
+      var tombstones=new Set((dismissedIds||[]).map(String));
+      setJobs(function(prev){
+        var ex=new Set(prev.map(function(j){return j.id?j.id.toString():""; }));
+        var nj=ads.filter(function(a){
+          var aid=a.job_id?String(a.job_id):"";
+          if(!aid) return false;
+          if(ex.has(aid)) return false;
+          if(tombstones.has(aid)){ skippedDismissed++; return false; }
+          return true;
+        }).map(function(a){return mapJsJob(a,p.name);});
+        added=nj.length;return nj.concat(prev);
+      });
+      return{added:added,skipped:skippedDismissed};
+    }catch(e){return{added:0,error:e.message};}
+  }
+
+  async function runProfile(p){
+    setRunStatus(function(s){var u=Object.assign({},s);u[p.id]={type:"loading",msg:"Fetching jobs..."};return u;});
+    var srcs=p.sources||["af"];
+    var results=[];
+    for(var i=0;i<srcs.length;i++){var r=srcs[i]==="af"?await fetchAF(p):await fetchJS(p);results.push({src:srcs[i],added:r.added,skipped:r.skipped||0,error:r.error});}
+    var totalAdded=results.reduce(function(a,r){return a+(r.added||0);},0);
+    var parts=results.map(function(r){
+      if(r.error) return (r.src==="af"?"Arbetsförmedlingen":"JSearch")+": "+r.error;
+      var msg=(r.src==="af"?"Arbetsförmedlingen":"JSearch")+": "+r.added+" new jobs added";
+      if(r.skipped>0) msg+=" ("+r.skipped+" previously dismissed, skipped)";
+      return msg;
+    });
+    var hasError=results.some(function(r){return r.error;});
+    setRunStatus(function(s){var u=Object.assign({},s);u[p.id]={type:hasError&&!totalAdded?"error":"success",msg:parts.join(" · ")};return u;});
+  }
+
+  async function runAll(){var active=profiles.filter(function(p){return p.active;});for(var i=0;i<active.length;i++) await runProfile(active[i]);}
+
+  // When Profile Assistant's "Run now" button hands us a profile ID, auto-fetch it once.
+  // We consume the pending request by clearing it, so this never re-fires on re-renders.
+  useEffect(function(){
+    if(!pendingProfileRun) return;
+    var p=profiles.find(function(x){return x.id===pendingProfileRun;});
+    if(p){ runProfile(p); }
+    setPendingProfileRun(null);
+  // eslint-disable-next-line
+  },[pendingProfileRun]);
+
+  return <div style={{display:"flex",flexDirection:"column",gap:16}}>
+    <Card>
+      <SectionTitle>API keys</SectionTitle>
+      <div style={{display:"flex",flexDirection:"column",gap:16}}>
+        <div>
+          <Label hint="The Arbetsförmedlingen API is free and open — no key needed. Leave blank to use it without authentication.">Arbetsförmedlingen API key (optional)</Label>
+          <div style={{display:"flex",gap:8}}><Inp type={showAfKey?"text":"password"} value={afKey} onChange={function(e){var v=e.target.value;setAfKey(v);}} placeholder="Leave blank — no key needed" style={{fontFamily:"monospace"}} /><Btn onClick={function(){setShowAfKey(function(v){return !v;});}} style={{whiteSpace:"nowrap",padding:"10px 16px"}}>{showAfKey?"Hide":"Show"}</Btn></div>
+        </div>
+        <div>
+          <Label hint="Sign up free at rapidapi.com, search for JSearch by OpenWeb Ninja, subscribe to the free plan, and paste your key here.">JSearch API key (for Indeed, LinkedIn, Glassdoor)</Label>
+          <div style={{display:"flex",gap:8}}><Inp type={showJsKey?"text":"password"} value={jsKey} onChange={function(e){var v=e.target.value;setJsKey(v);}} placeholder="Paste your RapidAPI key here" style={{fontFamily:"monospace"}} /><Btn onClick={function(){setShowJsKey(function(v){return !v;});}} style={{whiteSpace:"nowrap",padding:"10px 16px"}}>{showJsKey?"Hide":"Show"}</Btn></div>
+        </div>
+        <div>
+          <Label hint="Required for AI match scoring, cover letters, and reports. Get a key at console.anthropic.com and paste it here. Starts with 'sk-ant-'.">Anthropic API key (for AI features)</Label>
+          <div style={{display:"flex",gap:8}}><Inp type={showAnthropicKey?"text":"password"} value={anthropicKey} onChange={function(e){var v=e.target.value;setAnthropicKey(v);}} placeholder="sk-ant-..." style={{fontFamily:"monospace"}} /><Btn onClick={function(){setShowAnthropicKey(function(v){return !v;});}} style={{whiteSpace:"nowrap",padding:"10px 16px"}}>{showAnthropicKey?"Hide":"Show"}</Btn></div>
+        </div>
+        <Alert type="info">🔒 Keys are stored in your browser's memory only and are never saved to a server or shared with anyone.</Alert>
+      </div>
+    </Card>
+    <Card>
+      <SectionTitle action={<div style={{display:"flex",gap:8}}><Btn onClick={runAll} style={{fontSize:13,padding:"8px 14px"}}>▶ Run all active</Btn><Btn variant="primary" onClick={function(){setEditId(null);setForm({name:"",query:"",limit:10,sources:["af"]});setShowForm(function(v){return !v;});}} style={{fontSize:13,padding:"8px 14px"}}>+ New profile</Btn></div>}>Search profiles</SectionTitle>
+      <Alert type="info">A search profile is a saved search query. When you click Fetch or run the scheduler, each active profile searches its sources and adds new matching jobs to your list automatically.</Alert>
+      {showForm&&<div style={{background:C.surfaceAlt,borderRadius:14,padding:"20px",margin:"16px 0",border:"1.5px solid "+C.border}}>
+        <div style={{fontSize:15,fontWeight:700,color:C.textPrimary,marginBottom:16}}>{editId?"Edit profile":"New search profile"}</div>
+        <div className="jt-grid-2" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:14,marginBottom:14}}>
+          <div><Label hint="A name to help you identify this search">Profile name</Label><Inp value={form.name} onChange={function(e){var v=e.target.value;setForm(function(f){return Object.assign({},f,{name:v});});}} placeholder="e.g. UX Design Sweden" /></div>
+          <div><Label hint="Maximum jobs to fetch each time this profile runs">Max results</Label><Inp type="number" value={form.limit} onChange={function(e){var v=e.target.value;setForm(function(f){return Object.assign({},f,{limit:v});});}} placeholder="10" style={{width:100}} /></div>
+        </div>
+        <div style={{marginBottom:14}}><Label hint="Write naturally — e.g. UX designer Stockholm or product manager fintech remote">Search query</Label><Txta value={form.query} onChange={function(e){var v=e.target.value;setForm(function(f){return Object.assign({},f,{query:v});});}} placeholder='e.g. "UX designer Stockholm"' rows={2} /></div>
+        <div style={{marginBottom:16}}>
+          <Label hint="Choose which job boards to search">Search in</Label>
+          <div style={{display:"flex",gap:10,marginTop:4}}>
+            {[["af","Arbetsförmedlingen (Swedish jobs)","#EAF2EF","#3D6B5C"],["jsearch","JSearch — Indeed, LinkedIn, Glassdoor","#E3EFF8","#1A5A8A"]].map(function(item){
+              var on=form.sources.includes(item[0]);
+              return <button key={item[0]} onClick={function(){toggleSource(item[0]);}} style={{flex:1,padding:"12px 16px",borderRadius:12,border:"2px solid "+(on?item[3]:C.border),background:on?item[2]:"transparent",color:on?item[3]:C.textSecondary,cursor:"pointer",fontSize:13,fontWeight:on?700:500,textAlign:"left"}}>{on?"✓ ":""}{item[1]}</button>;
+            })}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:10}}><Btn variant="primary" onClick={saveProfile}>{editId?"Update profile":"Save profile"}</Btn><Btn onClick={function(){setShowForm(false);setEditId(null);}}>Cancel</Btn></div>
+      </div>}
+      {profiles.length===0
+        ?<EmptyState icon="🔎" title="No search profiles yet" body="Create a profile with a search query to start fetching jobs." />
+        :<div style={{display:"flex",flexDirection:"column",gap:12,marginTop:16}}>
+          {profiles.map(function(p){
+            var st=runStatus[p.id];
+            return <div key={p.id} style={{background:C.surfaceAlt,borderRadius:14,padding:"16px 18px",opacity:p.active?1:0.65}}>
+              <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
+                <div style={{paddingTop:2}}><Toggle value={p.active} onChange={function(){var pid=p.id;setProfiles(function(prev){return prev.map(function(x){return x.id===pid?Object.assign({},x,{active:!x.active}):x;});});}} /></div>
+                <div style={{flex:1}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
+                    <span style={{fontSize:15,fontWeight:700,color:C.textPrimary}}>{p.name}</span>
+                    <Chip label={p.active?"Active":"Inactive"} bg={p.active?C.primaryLight:C.surfaceAlt} color={p.active?C.primary:C.textHint} />
+                    <Chip label={"max "+p.limit+" results"} />
+                  </div>
+                  <div style={{fontSize:13,color:C.textSecondary,marginBottom:8,fontFamily:"monospace",background:C.surface,padding:"6px 10px",borderRadius:8,display:"inline-block"}}>"{p.query}"</div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{(p.sources||["af"]).map(function(src){var s=SOURCES[src];return <Chip key={src} label={s.label} bg={s.bg} color={s.color} />;})}</div>
+                  {st&&<Alert type={st.type==="loading"?"info":st.type}>{st.msg}</Alert>}
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  <Btn onClick={function(){startEdit(p);}} style={{fontSize:12,padding:"6px 12px"}}>Edit</Btn>
+                  <Btn onClick={function(){if(p.active) runProfile(p);}} disabled={!p.active} style={{fontSize:12,padding:"6px 12px",background:p.active?C.primaryLight:"transparent",color:p.active?C.primary:C.textHint}}>Fetch now</Btn>
+                  <Btn variant="danger" onClick={function(){var pid=p.id;setProfiles(function(prev){return prev.filter(function(x){return x.id!==pid;});});}} style={{fontSize:12,padding:"6px 12px"}}>Delete</Btn>
+                </div>
+              </div>
+            </div>;
+          })}
+        </div>}
+    </Card>
+  </div>;
+}
+
+// ─── Scheduler ────────────────────────────────────────────────────────────────
+function Scheduler({schedule,setSchedule,profiles,log,resetAllData,exportData,importData,validateImport,dismissedIds,clearDismissedIds}){
+  var [draft,setDraft]=useState(schedule);
+  var [dirty,setDirty]=useState(false);
+  var [excludeKeys,setExcludeKeys]=useState(false); // for export
+  var [importPreview,setImportPreview]=useState(null); // {payload,stats} or null
+  var [importError,setImportError]=useState("");
+  var fileInputRef=useRef(null);
+  function update(patch){setDraft(function(d){return Object.assign({},d,patch);});setDirty(true);}
+  function toggleDay(day){update({days:draft.days.includes(day)?draft.days.filter(function(d){return d!==day;}):draft.days.concat([day])});}
+  function save(){setSchedule(draft);setDirty(false);}
+  function revert(){setDraft(schedule);setDirty(false);}
+
+  // Kick off the native file picker. Parse + validate happens in onFileChosen.
+  function startImport(){
+    setImportError("");
+    setImportPreview(null);
+    if(fileInputRef.current) fileInputRef.current.click();
+  }
+  function onFileChosen(e){
+    var file=e.target.files&&e.target.files[0];
+    if(!file) return;
+    var reader=new FileReader();
+    reader.onload=function(evt){
+      try{
+        var obj=JSON.parse(evt.target.result);
+        var err=validateImport(obj);
+        if(err){ setImportError(err); e.target.value=""; return; }
+        // Build a preview summary so the user can sanity-check before restoring
+        var d=obj.data||{};
+        var stats={
+          jobs:(d.jobs||[]).length,
+          profiles:(d.profiles||[]).length,
+          hasCv:!!(d.cv&&d.cv.text),
+          hasKeys:!!(d.afKey||d.jsKey||d.anthropicKey),
+          exportedAt:obj.exportedAt||"unknown",
+        };
+        setImportPreview({payload:obj,stats:stats});
+      }catch(err){
+        setImportError("Couldn't parse file: "+(err.message||err));
+      }
+      // Reset the input so picking the same file again triggers onChange
+      e.target.value="";
+    };
+    reader.onerror=function(){ setImportError("Couldn't read the file."); e.target.value=""; };
+    reader.readAsText(file);
+  }
+  function confirmImport(){
+    if(!importPreview) return;
+    if(!confirm("This will REPLACE all your current jobs, profiles, CV, schedule, and log with the contents of the backup. Continue?")) return;
+    importData(importPreview.payload);
+    setImportPreview(null);
+  }
+
+  var activeCount=profiles.filter(function(p){return p.active;}).length;
+  var timeInvalid=draft.startTime>=draft.stopTime;
+  return <div style={{display:"flex",flexDirection:"column",gap:16}}>
+    <Card>
+      <SectionTitle>Scheduler status</SectionTitle>
+      <Toggle value={draft.enabled} onChange={function(){update({enabled:!draft.enabled});}} label={draft.enabled?"Scheduler is ON — jobs will be fetched automatically":"Scheduler is OFF — turn on to fetch jobs automatically"} hint={draft.enabled?"Active profiles will be fetched on the days and times set below.":"Enable this to have the app check for new jobs in the background."} />
+      {schedule.enabled&&<Alert type="success">Currently running · {activeCount} active profile{activeCount!==1?"s":""} · {schedule.days.join(", ")} · {schedule.startTime}–{schedule.stopTime} · every {schedule.intervalMinutes} min</Alert>}
+      <Alert type="info">ℹ Scheduled fetches only run while the app is open in an active tab. On mobile, minimising the browser or locking the screen pauses scheduling. For true always-on fetching, keep the app open in a pinned tab.</Alert>
+    </Card>
+    <Card>
+      <SectionTitle>Which days should it run?</SectionTitle>
+      <div style={{fontSize:13,color:C.textHint,marginBottom:12}}>Tap a day to toggle it on or off. Green = active.</div>
+      <div style={{display:"flex",gap:8,marginBottom:12}}>
+        {DAYS.map(function(d){var on=draft.days.includes(d);return <button key={d} onClick={function(){toggleDay(d);}} style={{flex:1,padding:"10px 4px",borderRadius:10,border:"2px solid "+(on?C.primary:C.border),background:on?C.primaryLight:"transparent",color:on?C.primary:C.textSecondary,fontSize:13,fontWeight:on?700:500,cursor:"pointer"}}>{d}</button>;})}
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        {[["Weekdays only",["Mon","Tue","Wed","Thu","Fri"]],["Every day",DAYS.slice()],["Clear all",[]]].map(function(item){return <Btn key={item[0]} onClick={function(){update({days:item[1]});}} style={{fontSize:12,padding:"6px 14px"}}>{item[0]}</Btn>;})}
+      </div>
+    </Card>
+    <Card>
+      <SectionTitle>Active time window</SectionTitle>
+      <div style={{fontSize:13,color:C.textHint,marginBottom:14}}>The scheduler only runs between these times — so it doesn't disturb you outside working hours.</div>
+      <div className="jt-grid-2" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:16}}>
+        {[["Start fetching at","startTime"],["Stop fetching at","stopTime"]].map(function(item){return <div key={item[1]}><Label>{item[0]}</Label><Inp type="time" value={draft[item[1]]} onChange={function(e){var v=e.target.value;var patch={};patch[item[1]]=v;update(patch);}} /></div>;})}
+      </div>
+      {timeInvalid&&<Alert type="error">The stop time must be later than the start time.</Alert>}
+    </Card>
+    <Card>
+      <SectionTitle>How often should it fetch?</SectionTitle>
+      <div style={{fontSize:13,color:C.textHint,marginBottom:14}}>Choose how frequently the app checks for new jobs within your active time window.</div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        {[15,30,60,120,240,480].map(function(m){var on=draft.intervalMinutes===m;var label=m<60?m+" minutes":(m/60)+" hour"+(m>60?"s":"");return <button key={m} onClick={function(){update({intervalMinutes:m});}} style={{flex:1,minWidth:80,padding:"12px 8px",borderRadius:12,border:"2px solid "+(on?C.primary:C.border),background:on?C.primaryLight:"transparent",color:on?C.primary:C.textSecondary,fontSize:13,fontWeight:on?700:500,cursor:"pointer",textAlign:"center"}}>{label}</button>;})}
+      </div>
+    </Card>
+    <div style={{display:"flex",gap:10,alignItems:"center"}}>
+      <Btn variant="primary" onClick={save} disabled={!dirty||timeInvalid} style={{padding:"12px 28px"}}>Save schedule</Btn>
+      {dirty&&<Btn onClick={revert}>Revert changes</Btn>}
+      <span style={{fontSize:13,color:C.textHint}}>{activeCount} active profile{activeCount!==1?"s":""} will run on this schedule.</span>
+    </div>
+    <Card>
+      <SectionTitle>Run log</SectionTitle>
+      <div style={{fontSize:13,color:C.textHint,marginBottom:12}}>A record of every time the scheduler ran and what it found.</div>
+      {log.length===0
+        ?<EmptyState icon="📋" title="No runs logged yet" body="Enable the scheduler and save your settings to start." />
+        :<div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {log.slice().reverse().map(function(e,i){return <div key={i} style={{display:"flex",gap:12,padding:"10px 14px",background:C.surfaceAlt,borderRadius:10,fontSize:13}}><span style={{color:C.textHint,whiteSpace:"nowrap",fontFamily:"monospace",fontSize:12}}>{e.time}</span><span style={{color:e.type==="error"?C.error:e.type==="manual"?C.info:C.success}}>{e.msg}</span></div>;})}
+        </div>}
+    </Card>
+    <Card>
+      <SectionTitle>Backup & restore</SectionTitle>
+      <div style={{fontSize:13,color:C.textHint,marginBottom:14,lineHeight:1.55}}>Download a JSON file containing all your jobs, profiles, CV, schedule, conversations and settings. Keep it safe — this is your only recovery option if your browser data is cleared.</div>
+      <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:18}}>
+        <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:C.textSecondary,cursor:"pointer",userSelect:"none"}}>
+          <input type="checkbox" checked={excludeKeys} onChange={function(){setExcludeKeys(function(v){return !v;});}} style={{width:16,height:16,cursor:"pointer",accentColor:C.primary}} />
+          <span>Exclude API keys from export <span style={{color:C.textHint}}>(recommended if you'll share the file)</span></span>
+        </label>
+        <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+          <Btn variant="primary" onClick={function(){exportData(excludeKeys);}}>⬇ Export backup ({excludeKeys?"without keys":"with keys"})</Btn>
+        </div>
+      </div>
+      <div style={{borderTop:"1px solid "+C.border,paddingTop:16}}>
+        <div style={{fontSize:13,color:C.textHint,marginBottom:14,lineHeight:1.55}}>Restore from a previous backup. Your current data will be fully replaced.</div>
+        <input ref={fileInputRef} type="file" accept="application/json,.json" onChange={onFileChosen} style={{display:"none"}} />
+        <Btn onClick={startImport}>⬆ Import backup…</Btn>
+        {importError&&<Alert type="error">{importError}</Alert>}
+        {importPreview&&<div style={{marginTop:14,padding:"14px 16px",background:C.primaryLight,borderRadius:12,border:"2px solid "+C.primary}}>
+          <div style={{fontSize:13,fontWeight:700,color:C.primary,marginBottom:8,letterSpacing:"0.5px"}}>BACKUP READY TO RESTORE</div>
+          <div style={{fontSize:13,color:C.textPrimary,lineHeight:1.7,marginBottom:12}}>
+            • {importPreview.stats.jobs} job{importPreview.stats.jobs!==1?"s":""}<br/>
+            • {importPreview.stats.profiles} search profile{importPreview.stats.profiles!==1?"s":""}<br/>
+            • CV: {importPreview.stats.hasCv?"included":"not included"}<br/>
+            • API keys: {importPreview.stats.hasKeys?"included":"not included"}<br/>
+            • Exported: {importPreview.stats.exportedAt!=="unknown"?new Date(importPreview.stats.exportedAt).toLocaleString():"unknown"}
+          </div>
+          <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+            <Btn variant="primary" onClick={confirmImport}>Replace all data with this backup</Btn>
+            <Btn onClick={function(){setImportPreview(null);}}>Cancel</Btn>
+          </div>
+        </div>}
+      </div>
+    </Card>
+    <Card>
+      <SectionTitle>Dismissed jobs list</SectionTitle>
+      <div style={{fontSize:13,color:C.textHint,marginBottom:14,lineHeight:1.55}}>
+        When you dismiss or delete a job, its ID is remembered so future fetches from Arbetsförmedlingen or JSearch won't re-add it.
+        {(dismissedIds&&dismissedIds.length)?" Currently blocking "+dismissedIds.length+" job ID"+(dismissedIds.length!==1?"s":"")+" from re-ingestion.":" The list is currently empty."}
+      </div>
+      <Btn onClick={function(){
+        if(!dismissedIds||!dismissedIds.length) return;
+        if(!confirm("Clear the dismissed-jobs list? Previously dismissed jobs will become eligible for re-ingestion on the next fetch.")) return;
+        if(clearDismissedIds) clearDismissedIds();
+      }} disabled={!dismissedIds||!dismissedIds.length}>Clear dismissed list</Btn>
+    </Card>
+    <Card>
+      <SectionTitle>Reset</SectionTitle>
+      <div style={{fontSize:13,color:C.textHint,marginBottom:14,lineHeight:1.55}}>Your jobs, profiles, CV, API keys and schedule are saved in this browser only. Nothing is sent anywhere unless you trigger a fetch or AI action yourself.</div>
+      <Btn variant="danger" onClick={resetAllData}>Reset all data</Btn>
+    </Card>
+  </div>;
+}
+
+// ─── CV & Profile ─────────────────────────────────────────────────────────────
+function CVProfile({cv,setCv}){
+  // Default to upload tab if a file has been uploaded previously, otherwise paste
+  var [tab,setTab]=useState(cv.uploaded?"upload":"paste");
+  var fileRef=useRef();
+  var [uploadState,setUploadState]=useState({status:"idle",msg:""}); // idle | loading | success | error
+  var recipients=cv.recipients||[];
+  var [newRec,setNewRec]=useState({name:"",email:""});
+
+  async function handleFile(f){
+    if(!f) return;
+    setUploadState({status:"loading",msg:"Extracting text from "+f.name+"..."});
+    try{
+      var text=await extractPdfText(f);
+      setCv(function(c){return Object.assign({},c,{text:text,fileName:f.name,uploaded:true});});
+      setUploadState({status:"success",msg:"Extracted "+text.length.toLocaleString()+" characters from "+f.name+"."});
+    }catch(e){
+      setUploadState({status:"error",msg:e.message||"Failed to read PDF."});
+    }
+  }
+
+  function addRecipient(){
+    var name=newRec.name.trim();
+    var email=newRec.email.trim();
+    if(!name||!isValidEmail(email)) return;
+    // First recipient added becomes default automatically
+    var isDefault=recipients.length===0;
+    setCv(function(c){
+      var list=(c.recipients||[]).concat([{id:Date.now(),name:name,email:email,isDefault:isDefault}]);
+      return Object.assign({},c,{recipients:list});
+    });
+    setNewRec({name:"",email:""});
+  }
+  function removeRecipient(id){
+    setCv(function(c){
+      var list=(c.recipients||[]).filter(function(r){return r.id!==id;});
+      // If we removed the default, promote the first remaining one
+      if(!list.some(function(r){return r.isDefault;})&&list.length>0) list[0].isDefault=true;
+      return Object.assign({},c,{recipients:list});
+    });
+  }
+  function setDefaultRecipient(id){
+    setCv(function(c){
+      var list=(c.recipients||[]).map(function(r){return Object.assign({},r,{isDefault:r.id===id});});
+      return Object.assign({},c,{recipients:list});
+    });
+  }
+
+  var hasText=!!(cv.text&&cv.text.trim());
+  var cvCharCount=hasText?cv.text.length:0;
+
+  return <div style={{display:"flex",flexDirection:"column",gap:16}}>
+    <Card>
+      <SectionTitle>Your CV</SectionTitle>
+      <div style={{fontSize:13,color:C.textHint,marginBottom:14}}>Your CV is used to generate personalised cover letters and AI match scoring. The more detail you add, the better the results.</div>
+      {hasText&&<Alert type="success">CV loaded · {cvCharCount.toLocaleString()} characters{cv.fileName?" · from "+cv.fileName:" · pasted text"}</Alert>}
+      <div style={{display:"flex",gap:8,marginBottom:16,marginTop:hasText?14:0}}>
+        {["paste","upload"].map(function(t){return <button key={t} onClick={function(){setTab(t);}} style={{padding:"8px 20px",borderRadius:10,border:"2px solid "+(tab===t?C.primary:C.border),background:tab===t?C.primaryLight:"transparent",color:tab===t?C.primary:C.textSecondary,fontSize:13,fontWeight:tab===t?700:500,cursor:"pointer"}}>{t==="paste"?"Paste text":"Upload PDF"}</button>;})}
+      </div>
+      {tab==="paste"
+        ?<div>
+          <Label hint="Paste the full text of your CV — experience, skills, education. Also shows text extracted from an uploaded PDF so you can review it.">CV content</Label>
+          <Txta value={cv.text||""} onChange={function(e){var v=e.target.value;setCv(function(c){return Object.assign({},c,{text:v});});}} placeholder="Paste your CV here..." rows={12} />
+        </div>
+        :<div>
+          <div onClick={function(){if(uploadState.status!=="loading") fileRef.current.click();}} style={{border:"2px dashed "+(uploadState.status==="error"?C.error:C.border),borderRadius:14,padding:"40px 20px",textAlign:"center",cursor:uploadState.status==="loading"?"wait":"pointer",background:C.surfaceAlt,opacity:uploadState.status==="loading"?0.7:1}}>
+            <div style={{fontSize:32,marginBottom:10}}>{uploadState.status==="loading"?"⏳":uploadState.status==="success"?"✅":"📄"}</div>
+            <div style={{fontSize:15,fontWeight:600,color:C.textPrimary,marginBottom:4}}>
+              {uploadState.status==="loading"?"Reading PDF..."
+                :cv.uploaded?"✓ "+cv.fileName+" — click to replace"
+                :"Click to upload your CV as a PDF"}
+            </div>
+            <div style={{fontSize:13,color:C.textHint}}>PDF files only. Text-based PDFs work best — scanned/image PDFs are not supported.</div>
+            <input ref={fileRef} type="file" accept=".pdf,application/pdf" style={{display:"none"}} onChange={function(e){var f=e.target.files[0];handleFile(f);e.target.value="";}} />
+          </div>
+          {uploadState.status==="success"&&<Alert type="success">{uploadState.msg} You can review it in the "Paste text" tab.</Alert>}
+          {uploadState.status==="error"&&<Alert type="error">{uploadState.msg}</Alert>}
+        </div>}
+    </Card>
+    <Card>
+      <SectionTitle>Job preferences</SectionTitle>
+      <div style={{fontSize:13,color:C.textHint,marginBottom:16}}>These help personalise your cover letters and future AI scoring.</div>
+      <div className="jt-grid-2" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:14}}>
+        <div><Label hint="e.g. Product Designer, UX Lead">Target job titles</Label><Inp value={cv.roles||""} onChange={function(e){var v=e.target.value;setCv(function(c){return Object.assign({},c,{roles:v});});}} placeholder="e.g. Product Designer, UX Lead" /></div>
+        <div><Label hint="e.g. Fintech, SaaS, Healthcare">Preferred industries</Label><Inp value={cv.industries||""} onChange={function(e){var v=e.target.value;setCv(function(c){return Object.assign({},c,{industries:v});});}} placeholder="e.g. Fintech, SaaS" /></div>
+        <div><Label hint="e.g. Stockholm, Remote, Malmö">Preferred locations</Label><Inp value={cv.locations||""} onChange={function(e){var v=e.target.value;setCv(function(c){return Object.assign({},c,{locations:v});});}} placeholder="e.g. Stockholm, Remote" /></div>
+        <div><Label hint="e.g. 60 000 – 90 000 SEK/month">Salary expectation</Label><Inp value={cv.salary||""} onChange={function(e){var v=e.target.value;setCv(function(c){return Object.assign({},c,{salary:v});});}} placeholder="e.g. 70 000 SEK/month" /></div>
+        <div><Label hint="Remote, hybrid, or in the office?">Work type preference</Label><Sel value={cv.workType||"Any"} onChange={function(e){var v=e.target.value;setCv(function(c){return Object.assign({},c,{workType:v});}); }}>{["Any","Remote","Hybrid","On-site"].map(function(o){return <option key={o}>{o}</option>;})}</Sel></div>
+      </div>
+      <div style={{marginTop:16}}><Btn variant="primary" onClick={function(){alert("Profile saved!");}}>Save profile</Btn></div>
+    </Card>
+    <Card>
+      <SectionTitle>Email recipients</SectionTitle>
+      <div style={{fontSize:13,color:C.textHint,marginBottom:14}}>Save email addresses you use often — your own, recruiters, specific contacts. When you send a cover letter or report, you can pick from this list. The default is pre-selected.</div>
+      {recipients.length>0&&<div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
+        {recipients.map(function(r){return <div key={r.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:C.surfaceAlt,borderRadius:10}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:14,fontWeight:600,color:C.textPrimary,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.name}{r.isDefault&&<Chip label="Default" bg={C.primaryLight} color={C.primary} />}</div>
+            <div style={{fontSize:12,color:C.textSecondary,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.email}</div>
+          </div>
+          {!r.isDefault&&<Btn onClick={function(){setDefaultRecipient(r.id);}} style={{fontSize:12,padding:"5px 10px"}}>Make default</Btn>}
+          <Btn variant="danger" onClick={function(){removeRecipient(r.id);}} style={{fontSize:12,padding:"5px 10px"}}>Remove</Btn>
+        </div>;})}
+      </div>}
+      {recipients.length===0&&<div style={{fontSize:13,color:C.textHint,fontStyle:"italic",marginBottom:14}}>No recipients saved yet. Add one below.</div>}
+      <div className="jt-grid-recipient" style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:10,alignItems:"end"}}>
+        <div><Label hint="e.g. Me, Alex at Spotify, General recruiter">Name or label</Label><Inp value={newRec.name} onChange={function(e){var v=e.target.value;setNewRec(function(n){return Object.assign({},n,{name:v});});}} placeholder="e.g. Me (personal)" /></div>
+        <div><Label>Email</Label><Inp value={newRec.email} onChange={function(e){var v=e.target.value;setNewRec(function(n){return Object.assign({},n,{email:v});});}} placeholder="name@example.com" type="email" /></div>
+        <Btn variant="primary" onClick={addRecipient} disabled={!newRec.name.trim()||!isValidEmail(newRec.email)}>+ Add</Btn>
+      </div>
+    </Card>
+  </div>;
+}
+
+// ─── Cover Letters ────────────────────────────────────────────────────────────
+function CoverLetters({jobs,cv,anthropicKey,setActiveTab}){
+  // Default to only showing Reviewing (non-archived) jobs — that's the "I'm
+  // about to apply, draft me a letter" window. Archived and already-applied
+  // jobs aren't useful targets. User can flip the toggle for edge cases like
+  // drafting a speculative letter for a New job.
+  var [showAllStatuses,setShowAllStatuses]=useState(false);
+  var eligibleJobs=jobs.filter(function(j){
+    if(j.archived) return false;
+    return showAllStatuses?true:j.status==="Reviewing";
+  });
+  // Auto-select the first eligible job; re-select when the pool changes (e.g.
+  // toggle flipped, or the user moved a job to Reviewing in another tab).
+  var [selectedJob,setSelectedJob]=useState(eligibleJobs[0]?eligibleJobs[0].id:null);
+  useEffect(function(){
+    // If current selection isn't in the eligible pool anymore, pick the first
+    // one that is. Preserves selection when possible.
+    var stillEligible=eligibleJobs.some(function(j){return j.id===selectedJob;});
+    if(!stillEligible){
+      setSelectedJob(eligibleJobs[0]?eligibleJobs[0].id:null);
+    }
+  // eslint-disable-next-line
+  },[eligibleJobs.length,showAllStatuses]);
+  var [tone,setTone]=useState("Professional");
+  var [letter,setLetter]=useState("");
+  var [error,setError]=useState("");
+  var [loading,setLoading]=useState(false);
+  var [showEmail,setShowEmail]=useState(false);
+  async function generate(){
+    var job=eligibleJobs.find(function(j){return j.id===selectedJob;});
+    if(!job) return;
+    if(!cv.text||cv.text.trim().length<100){
+      setError("Please add a substantive CV in the My CV tab first. The letter can only be grounded in what you've actually written.");
+      return;
+    }
+    setLoading(true);setLetter("");setError("");setShowEmail(false);
+    try{
+      // Build a tight job brief — includes description when available so the
+      // model can map requirements to CV evidence without inventing needs.
+      var jobBrief="Title: "+job.title+"\nCompany: "+job.company+"\nLocation: "+(job.location||"Not specified");
+      if(job.employmentType) jobBrief+="\nEmployment type: "+job.employmentType;
+      if(job.tags&&job.tags.length) jobBrief+="\nTags: "+job.tags.join(", ");
+      if(job.description){
+        var desc=job.description.slice(0,3000).replace(/\s+/g," ").trim();
+        jobBrief+="\n\nJob description:\n"+desc;
+      }
+
+      // GROUNDING RULES: the prompt explicitly forbids fabrication. The model
+      // is told to treat the CV as the ONLY source of truth for claims about
+      // the candidate, and to omit rather than invent. This is the single
+      // biggest quality lever for cover letters.
+      var prompt=
+        "You are writing a cover letter for a job applicant. Write it in "+job.lang+" with a "+tone.toLowerCase()+" tone.\n\n"+
+        "═══ STRICT GROUNDING RULES — FOLLOW EXACTLY ═══\n"+
+        "1. The CV below is the ONLY source of truth about the applicant. Do NOT invent, infer, or extrapolate skills, experience, qualifications, achievements, tools, languages, certifications, employers, education, or soft skills that are not explicitly stated in the CV.\n"+
+        "2. If the job description lists a requirement that is NOT evidenced in the CV, do NOT claim the applicant has it. Do NOT hint at it, imply it, or use filler phrases suggesting it. Either omit it entirely or frame it honestly as something the applicant is eager to learn.\n"+
+        "3. Do NOT use generic stock phrases like \"proven track record\", \"passionate about\", \"results-driven\", \"strong communication skills\", \"team player\", \"proactive self-starter\", \"wealth of experience\", unless those exact qualities are demonstrated by specific content in the CV.\n"+
+        "4. When you reference a skill or achievement, it must be traceable to a concrete line or section of the CV. Prefer specific wording from the CV itself.\n"+
+        "5. Do NOT fabricate numbers, percentages, metrics, project names, client names, or dates. Only cite numbers that appear in the CV.\n"+
+        "6. Keep the letter CONCISE — aim for 200-300 words. A shorter, honest letter is better than a padded, speculative one.\n"+
+        "7. If the CV is sparse on something the job needs, it is better to write a shorter letter that highlights what IS a fit, than to pad with generic claims.\n"+
+        "8. Start directly with the salutation. No preamble, no meta-commentary, no \"Here is your cover letter\".\n\n"+
+        "═══ JOB ═══\n"+jobBrief+"\n\n"+
+        "═══ CV (ONLY source of truth about the applicant) ═══\n"+cv.text+"\n\n"+
+        "Write the cover letter now, following every rule above.";
+      var text=await callClaude({apiKey:anthropicKey,prompt:prompt,maxTokens:1500});
+      setLetter(text);
+    }catch(e){setError(e.message||"Error connecting to Claude. Please try again.");}
+    setLoading(false);
+  }
+  var currentJob=eligibleJobs.find(function(j){return j.id===selectedJob;});
+  var emailSubject=currentJob?"Application — "+currentJob.title+" at "+currentJob.company:"Cover letter";
+  // Count Reviewing jobs in the whole non-archived pool to show a helpful
+  // empty-state when none exist.
+  var reviewingCount=jobs.filter(function(j){return !j.archived&&j.status==="Reviewing";}).length;
+  var noJobsAtAll=jobs.filter(function(j){return !j.archived;}).length===0;
+  return <div style={{display:"flex",flexDirection:"column",gap:16}}>
+    <Card>
+      <SectionTitle>Generate a cover letter</SectionTitle>
+      <div style={{fontSize:13,color:C.textHint,marginBottom:16}}>Claude will write a personalised cover letter based on the job and your CV. You can edit it before sending.</div>
+      {/* Empty-state branches: no jobs at all vs. no Reviewing jobs.
+          The latter nudges the user to go mark a job Reviewing, which is the
+          intended workflow. Toggle overrides for the rare speculative case. */}
+      {noJobsAtAll
+        ?<Alert type="warning">Add some jobs first — go to My Jobs or Search Profiles to get started.</Alert>
+        :eligibleJobs.length===0
+          ?<div style={{padding:"20px",background:C.surfaceAlt,borderRadius:12,textAlign:"center"}}>
+            <div style={{fontSize:32,marginBottom:10}}>📝</div>
+            <div style={{fontSize:15,fontWeight:600,color:C.textPrimary,marginBottom:6}}>No jobs ready for a cover letter</div>
+            <div style={{fontSize:13,color:C.textSecondary,marginBottom:14,lineHeight:1.5}}>Cover letters are drafted for jobs you're actively considering.<br/>Move a job to the <b>Reviewing</b> status first, then come back here.</div>
+            <div style={{display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap"}}>
+              <Btn variant="primary" onClick={function(){if(setActiveTab) setActiveTab("jobs");}} style={{fontSize:13}}>Go to My Jobs</Btn>
+              <Btn onClick={function(){setShowAllStatuses(true);}} style={{fontSize:13}}>Show all statuses anyway</Btn>
+            </div>
+          </div>
+          :<div>
+            <div className="jt-grid-2" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:14,marginBottom:10}}>
+              <div><Label hint={showAllStatuses?"Showing all non-archived jobs.":"Showing jobs you're actively reviewing."}>Select a job</Label><Sel value={selectedJob||""} onChange={function(e){var v=e.target.value;var num=Number(v);setSelectedJob(isNaN(num)||String(num)!==v?v:num);}}>{eligibleJobs.map(function(j){return <option key={j.id} value={j.id}>{j.title} – {j.company}{showAllStatuses?" ["+j.status+"]":""}</option>;})}</Sel></div>
+              <div><Label hint="This affects the writing style of the letter.">Tone of voice</Label><Sel value={tone} onChange={function(e){setTone(e.target.value);}}>{["Professional","Conversational","Enthusiastic","Formal","Creative"].map(function(t){return <option key={t}>{t}</option>;})}</Sel></div>
+            </div>
+            <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:C.textSecondary,cursor:"pointer",userSelect:"none",marginBottom:14}}>
+              <input type="checkbox" checked={showAllStatuses} onChange={function(){setShowAllStatuses(function(v){return !v;});}} style={{width:14,height:14,cursor:"pointer",accentColor:C.primary}} />
+              <span>Show all statuses (by default only jobs in <b>Reviewing</b> status are listed)</span>
+              {!showAllStatuses&&reviewingCount>0&&<span style={{color:C.textHint}}>· {reviewingCount} job{reviewingCount!==1?"s":""} reviewing</span>}
+            </label>
+            <Btn variant="primary" onClick={generate} disabled={loading||!selectedJob||!anthropicKey} style={{padding:"12px 28px"}}>{loading?"Writing your letter...":"Generate cover letter ↗"}</Btn>
+            <div style={{fontSize:11,color:C.textHint,marginTop:10,fontStyle:"italic",lineHeight:1.5}}>The letter will only reference skills and experience that appear in your CV. If the job asks for something your CV doesn't cover, it won't be claimed. A sparse CV produces a shorter letter — that's intentional.</div>
+          </div>
+      }
+      {!anthropicKey&&<Alert type="warning">Add your Anthropic API key in Search Profiles → API keys to use this feature.</Alert>}
+      {error&&<Alert type="error">{error}</Alert>}
+    </Card>
+    {letter&&<Card>
+      <SectionTitle>Your cover letter</SectionTitle>
+      <div style={{fontSize:13,color:C.textHint,marginBottom:12}}>You can edit the letter directly below before copying, exporting, or emailing it.</div>
+      <Txta value={letter} onChange={function(e){setLetter(e.target.value);}} rows={16} />
+      <div style={{display:"flex",gap:10,marginTop:14,flexWrap:"wrap"}}>
+        <Btn variant="primary" onClick={function(){setShowEmail(true);}}>✉ Send via email</Btn>
+        <Btn onClick={function(){exportLetterPdf({letter:letter,cv:cv,job:currentJob});}}>📄 Export as PDF</Btn>
+        <Btn onClick={function(){navigator.clipboard.writeText(letter);}}>Copy to clipboard</Btn>
+        <Btn onClick={function(){var b=new Blob([letter],{type:"text/plain"});var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="cover-letter.txt";a.click();}}>Export as text file</Btn>
+      </div>
+      {showEmail&&<EmailDialog recipients={cv.recipients||[]} subject={emailSubject} body={letter} onClose={function(){setShowEmail(false);}} />}
+    </Card>}
+  </div>;
+}
+
+// ─── Reports ──────────────────────────────────────────────────────────────────
+function Reports({jobs,cv,anthropicKey}){
+  var [type,setType]=useState("Weekly digest");
+  var [report,setReport]=useState("");
+  var [error,setError]=useState("");
+  var [loading,setLoading]=useState(false);
+  var [showEmail,setShowEmail]=useState(false);
+  async function generate(){
+    setLoading(true);setReport("");setError("");setShowEmail(false);
+    // Pre-compute funnel stats so Claude doesn't have to reason about counts
+    // from the job list alone — grounds the report in accurate numbers and
+    // highlights response rate, which is the key insight closed statuses enable.
+    var active=jobs.filter(function(j){return !j.archived;});
+    var byStatus={};
+    STATUSES.forEach(function(s){byStatus[s]=0;});
+    active.forEach(function(j){if(byStatus[j.status]!==undefined) byStatus[j.status]++;});
+    var appliedTotal=APPLIED_STATUSES.reduce(function(a,s){return a+(byStatus[s]||0);},0);
+    var rejected=byStatus.Rejected||0;
+    var noResponse=byStatus["No response"]||0;
+    var interviewed=byStatus.Interview||0;
+    var offered=byStatus.Offer||0;
+    var stillApplied=byStatus.Applied||0;
+    var closed=rejected+noResponse;
+    var responded=appliedTotal-noResponse; // anyone who replied, positively or negatively
+    var responseRate=appliedTotal>0?Math.round((responded/appliedTotal)*100):0;
+    var interviewRate=appliedTotal>0?Math.round((interviewed+offered+rejected*0)/appliedTotal*100):0; // count anyone who progressed to interview
+    // Funnel summary for the model
+    var funnel=
+      "FUNNEL STATS (computed from current data, use these verbatim if you cite numbers):\n"+
+      "• Total active in pipeline: "+active.length+"\n"+
+      "• Applications sent (all-time, including closed): "+appliedTotal+"\n"+
+      "• Still awaiting response (Applied status): "+stillApplied+"\n"+
+      "• Progressed to Interview stage: "+(interviewed+offered+rejected)+" (currently Interview: "+interviewed+", Offer: "+offered+", Rejected after applying: "+rejected+")\n"+
+      "• Closed - No response (ghosted): "+noResponse+"\n"+
+      "• Response rate (any reply, positive or negative): "+responseRate+"%\n"+
+      "• Breakdown by status: "+STATUSES.map(function(s){return s+"="+(byStatus[s]||0);}).join(", ");
+    var summary=active.map(function(j){return j.title+" at "+j.company+" ("+j.status+", match: "+j.score+"%, source: "+j.source+")";}).join("\n");
+    try{
+      var prompt="Generate a \""+type+"\" report for a job seeker.\n\n"+
+        funnel+"\n\n"+
+        "JOBS LIST:\n"+summary+"\n\n"+
+        "Write a clear, friendly report with key insights and practical recommendations. "+
+        "Where relevant to the report type, use the funnel stats above — especially response rate and the breakdown between closed outcomes (Rejected vs No response). "+
+        "For status reports, explicitly comment on how many applications are closed vs still active, and whether the user should follow up on silent applications. "+
+        "Use plain text, no markdown.";
+      var text=await callClaude({apiKey:anthropicKey,prompt:prompt,maxTokens:1500});
+      setReport(text);
+    }catch(e){setError(e.message||"Error connecting to Claude. Please try again.");}
+    setLoading(false);
+  }
+  var emailSubject=type+" — "+new Date().toISOString().slice(0,10);
+  return <div style={{display:"flex",flexDirection:"column",gap:16}}>
+    <Card>
+      <SectionTitle>Generate a report</SectionTitle>
+      <div style={{fontSize:13,color:C.textHint,marginBottom:16}}>Claude will analyse your job pipeline and write a summary with insights and recommendations.</div>
+      <div style={{marginBottom:14}}><Label hint="Choose what kind of report you'd like.">Report type</Label><Sel value={type} onChange={function(e){setType(e.target.value);}}>{["Weekly digest","Top 10 matches","Application status report","Monthly summary"].map(function(t){return <option key={t}>{t}</option>;})}</Sel></div>
+      <Btn variant="primary" onClick={generate} disabled={loading||jobs.length===0||!anthropicKey} style={{padding:"12px 28px"}}>{loading?"Writing your report...":"Generate report ↗"}</Btn>
+      {!anthropicKey&&<Alert type="warning">Add your Anthropic API key in Search Profiles → API keys to use this feature.</Alert>}
+      {jobs.length===0&&<Alert type="warning">No jobs in your pipeline yet. Add some jobs first.</Alert>}
+      {error&&<Alert type="error">{error}</Alert>}
+    </Card>
+    {report&&<Card>
+      <SectionTitle>Your report</SectionTitle>
+      <div style={{fontSize:14,lineHeight:1.8,whiteSpace:"pre-wrap",color:C.textPrimary,background:C.surfaceAlt,borderRadius:12,padding:"20px",marginBottom:14}}>{report}</div>
+      <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+        <Btn variant="primary" onClick={function(){setShowEmail(true);}}>✉ Send via email</Btn>
+        <Btn onClick={function(){navigator.clipboard.writeText(report);}}>Copy to clipboard</Btn>
+        <Btn onClick={function(){var b=new Blob([report],{type:"text/plain"});var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="report.txt";a.click();}}>Export as text file</Btn>
+      </div>
+      {showEmail&&<EmailDialog recipients={(cv&&cv.recipients)||[]} subject={emailSubject} body={report} onClose={function(){setShowEmail(false);}} />}
+    </Card>}
+  </div>;
+}
+
+// ─── Profile Assistant ────────────────────────────────────────────────────────
+// Chat UI. Holds a message history (role: user|assistant, content: string).
+// Renders assistant replies as text + any saveable profile cards the model emitted.
+function ProfileAssistant({cv,profiles,setProfiles,anthropicKey,conversation,setConversation,setActiveTab,setPendingProfileRun,jobs}){
+  var [input,setInput]=useState("");
+  var [loading,setLoading]=useState(false);
+  var [error,setError]=useState("");
+  var [justSavedId,setJustSavedId]=useState(null);
+  var scrollRef=useRef(null);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(function(){
+    if(scrollRef.current){ scrollRef.current.scrollTop=scrollRef.current.scrollHeight; }
+  },[conversation,loading]);
+
+  var starters=getStarterPrompts(cv,jobs);
+
+  async function send(userText){
+    var text=(userText||input).trim();
+    if(!text||loading) return;
+    if(!anthropicKey){ setError("Add your Anthropic API key in Search Profiles → API keys first."); return; }
+    setError("");
+    setInput("");
+    var newMsgs=conversation.concat([{role:"user",content:text}]);
+    setConversation(newMsgs);
+    setLoading(true);
+    try{
+      var reply=await callClaudeChat({
+        apiKey:anthropicKey,
+        system:buildAssistantSystem(cv,profiles,jobs),
+        messages:newMsgs,
+        maxTokens:1200,
+      });
+      setConversation(newMsgs.concat([{role:"assistant",content:reply}]));
+    }catch(e){
+      setError(e.message||"Failed to reach Claude.");
+      // Roll back the user message so they can retry without duplicating it
+      setConversation(conversation);
+      setInput(text);
+    }
+    setLoading(false);
+  }
+
+  function clearConversation(){
+    if(!confirm("Clear this conversation? This cannot be undone.")) return;
+    setConversation([]);
+    setError("");
+    setInput("");
+  }
+
+  function saveProfile(prof){
+    var newProfile={id:Date.now(),name:prof.name,query:prof.query,limit:prof.limit,sources:prof.sources,active:true};
+    setProfiles(function(prev){return prev.concat([newProfile]);});
+    setJustSavedId(newProfile.id);
+  }
+  function runNow(profileId){
+    // Switch to Search Profiles tab and mark this profile ID to auto-fetch
+    setPendingProfileRun(profileId);
+    setActiveTab("profiles");
+  }
+
+  // Render one assistant reply as a mix of text paragraphs and profile cards
+  function renderAssistantMessage(reply,msgIdx){
+    var parsed=extractProfiles(reply);
+    var blocks=[];
+    // Interleave: textParts and profiles in order of appearance
+    var re=/<<<PROFILE>>>[\s\S]*?<<<\/PROFILE>>>/g;
+    var order=[]; // [{type:'text',value}|{type:'profile',value}]
+    var lastIndex=0;
+    var m;
+    var pIdx=0;
+    while((m=re.exec(reply))!==null){
+      var before=reply.slice(lastIndex,m.index).trim();
+      if(before) order.push({type:"text",value:before});
+      if(parsed.profiles[pIdx]) order.push({type:"profile",value:parsed.profiles[pIdx]});
+      pIdx++;
+      lastIndex=re.lastIndex;
+    }
+    var tail=reply.slice(lastIndex).trim();
+    if(tail) order.push({type:"text",value:tail});
+    if(!order.length) order.push({type:"text",value:reply.trim()});
+
+    return order.map(function(item,i){
+      if(item.type==="text"){
+        return <div key={i} style={{whiteSpace:"pre-wrap",lineHeight:1.55,fontSize:14,color:C.textPrimary}}>{item.value}</div>;
+      }
+      var p=item.value;
+      // Check if already saved (match by name+query for simplicity)
+      var alreadySaved=profiles.some(function(sp){return sp.name===p.name&&sp.query===p.query;});
+      return <ProfileCard key={i} profile={p} alreadySaved={alreadySaved} justSaved={justSavedId&&profiles.find(function(sp){return sp.id===justSavedId;})&&profiles.find(function(sp){return sp.id===justSavedId;}).name===p.name} onSave={function(){saveProfile(p);}} onRun={function(){if(justSavedId) runNow(justSavedId);}} />;
+    });
+  }
+
+  return <div style={{display:"flex",flexDirection:"column",gap:16}}>
+    <Card>
+      <SectionTitle action={conversation.length>0?<Btn onClick={clearConversation} style={{fontSize:12,padding:"6px 12px"}}>Clear conversation</Btn>:null}>Profile Assistant</SectionTitle>
+      <div style={{fontSize:13,color:C.textHint,marginBottom:14}}>A focused chatbot that helps you design high-quality search profiles from your CV. It only discusses this app and search-profile design — not general topics.</div>
+      {!anthropicKey&&<Alert type="warning">Add your Anthropic API key in Search Profiles → API keys to use the assistant.</Alert>}
+      {!hasCv(cv)&&anthropicKey&&<Alert type="info">Tip: Upload or paste your CV in the My CV tab first, so the assistant can tailor suggestions to your background.</Alert>}
+    </Card>
+
+    <Card>
+      <div ref={scrollRef} style={{maxHeight:"60vh",overflowY:"auto",display:"flex",flexDirection:"column",gap:14,paddingRight:4}}>
+        {conversation.length===0&&<div>
+          <div style={{fontSize:14,color:C.textSecondary,marginBottom:12,lineHeight:1.55}}>
+            Hi! I can help you turn your CV into focused search profiles, explain what the connected APIs can do, and walk you through any feature in the app.
+            {starters[0]&&starters[0].indexOf("highest-scoring")>=0&&<span> <span style={{color:C.primary,fontWeight:600}}>You now have enough scored jobs for smart suggestions — try the first starter below.</span></span>}
+          </div>
+          <div style={{fontSize:12,color:C.textHint,fontWeight:600,letterSpacing:"0.5px",marginBottom:8}}>TRY ONE OF THESE:</div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {starters.map(function(s,i){
+              var isSmart=s.indexOf("highest-scoring")>=0;
+              return <button key={i} onClick={function(){send(s);}} disabled={loading||!anthropicKey} style={{textAlign:"left",padding:"12px 14px",borderRadius:10,border:"1.5px solid "+(isSmart?C.primary:C.border),background:isSmart?C.primaryLight:C.surfaceAlt,color:C.textPrimary,fontSize:13,cursor:loading||!anthropicKey?"not-allowed":"pointer",opacity:loading||!anthropicKey?0.5:1,fontWeight:isSmart?600:400}}>{isSmart?"✨":"💬"} {s}</button>;
+            })}
+          </div>
+        </div>}
+        {conversation.map(function(msg,i){
+          if(msg.role==="user"){
+            return <div key={i} style={{alignSelf:"flex-end",maxWidth:"85%",background:C.primary,color:"#fff",padding:"10px 14px",borderRadius:"14px 14px 2px 14px",fontSize:14,lineHeight:1.5,whiteSpace:"pre-wrap"}}>{msg.content}</div>;
+          }
+          return <div key={i} style={{alignSelf:"flex-start",maxWidth:"95%",width:"95%"}}>
+            <div style={{fontSize:11,color:C.textHint,fontWeight:600,letterSpacing:"0.5px",marginBottom:4}}>ASSISTANT</div>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>{renderAssistantMessage(msg.content,i)}</div>
+          </div>;
+        })}
+        {loading&&<div style={{alignSelf:"flex-start",fontSize:13,color:C.textHint,fontStyle:"italic"}}>Thinking…</div>}
+      </div>
+      {error&&<Alert type="error">{error}</Alert>}
+      <div style={{display:"flex",gap:8,marginTop:14}}>
+        <Inp value={input} onChange={function(e){setInput(e.target.value);}} onKeyDown={function(e){if(e.key==="Enter"&&!e.shiftKey&&input.trim()&&!loading&&anthropicKey){e.preventDefault();send();}}} enterKeyHint="send" placeholder="Ask about profiles, APIs, or features…" style={{flex:1}} />
+        <Btn variant="primary" onClick={function(){send();}} disabled={loading||!input.trim()||!anthropicKey} style={{padding:"10px 20px"}}>Send</Btn>
+      </div>
+    </Card>
+  </div>;
+}
+
+// Saveable profile card rendered inline in assistant replies.
+function ProfileCard({profile,alreadySaved,justSaved,onSave,onRun}){
+  var p=profile;
+  var srcLabels=p.sources.map(function(s){return s==="af"?"Arbetsförmedlingen":"JSearch";}).join(" + ");
+  return <div style={{border:"2px solid "+C.primary,borderRadius:12,padding:"14px 16px",background:C.primaryLight}}>
+    <div style={{fontSize:11,fontWeight:700,color:C.primary,letterSpacing:"0.5px",marginBottom:6}}>SUGGESTED PROFILE</div>
+    <div style={{fontSize:15,fontWeight:700,color:C.textPrimary,marginBottom:4}}>{p.name}</div>
+    <div style={{fontSize:13,color:C.textSecondary,marginBottom:8}}>Query: <span style={{fontFamily:"monospace",background:"#fff",padding:"1px 6px",borderRadius:4}}>{p.query}</span></div>
+    <div style={{fontSize:12,color:C.textSecondary,marginBottom:p.reasoning?8:12}}>{srcLabels} · max {p.limit} results</div>
+    {p.reasoning&&<div style={{fontSize:12,color:C.textHint,fontStyle:"italic",marginBottom:12}}>💡 {p.reasoning}</div>}
+    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+      {!alreadySaved&&!justSaved&&<Btn variant="primary" onClick={onSave} style={{fontSize:13,padding:"7px 14px"}}>+ Save this profile</Btn>}
+      {(alreadySaved||justSaved)&&<div style={{fontSize:13,color:C.success,fontWeight:600,padding:"7px 0"}}>✓ Saved</div>}
+      {justSaved&&<Btn onClick={onRun} style={{fontSize:13,padding:"7px 14px"}}>▶ Run now</Btn>}
+    </div>
+  </div>;
+}
+
+// ─── App ──────────────────────────────────────────────────────────────────────
+function App(){
+  // Load persisted state once on first render
+  var saved=loadState();
+  var [activeTab,setActiveTab]=useState(function(){return pick(saved,"activeTab","dashboard");});
+  var [sidebarCollapsed,setSidebarCollapsed]=useState(function(){return pick(saved,"sidebarCollapsed",false);});
+  var [mobileMenuOpen,setMobileMenuOpen]=useState(false); // ephemeral
+  var [jobs,setJobs]=useState(function(){return pick(saved,"jobs",SAMPLE_JOBS);});
+  var [profiles,setProfiles]=useState(function(){return pick(saved,"profiles",SAMPLE_PROFILES);});
+  var [cv,setCv]=useState(function(){return pick(saved,"cv",{text:"",fileName:"",uploaded:false,roles:"",industries:"",locations:"",salary:"",workType:"Any",recipients:[]});});
+  var [afKey,setAfKey]=useState(function(){return pick(saved,"afKey","");});
+  var [jsKey,setJsKey]=useState(function(){return pick(saved,"jsKey","");});
+  var [anthropicKey,setAnthropicKey]=useState(function(){return pick(saved,"anthropicKey","");});
+  var [schedule,setSchedule]=useState(function(){return pick(saved,"schedule",DEFAULT_SCHEDULE);});
+  var [log,setLog]=useState(function(){return pick(saved,"log",[]);});
+  var [sort,setSort]=useState(function(){return pick(saved,"sort","added_desc");});
+  var [assistantConv,setAssistantConv]=useState(function(){return pick(saved,"assistantConv",[]);});
+  // Tombstone list: jobs the user has dismissed or deleted. Stored as an array
+  // of STRING ids (serialisable to JSON). Ingestion checks against this set so
+  // previously-rejected jobs aren't re-added on subsequent fetches from the
+  // same source. Survives reloads and is included in backups.
+  var [dismissedIds,setDismissedIds]=useState(function(){return pick(saved,"dismissedIds",[]);});
+  var [pendingProfileRun,setPendingProfileRun]=useState(null); // ephemeral — not persisted
+  var [scoringStatus,setScoringStatus]=useState({active:false,done:0,total:0});
+  var [scoringError,setScoringError]=useState("");
+  // Toast state for quick-dismiss with undo. Holds the jobs removed within the
+  // current 8-second undo window, so rapid dismissals collapse into one
+  // "N dismissed" toast rather than stacking.
+  var [dismissed,setDismissed]=useState([]); // [{job, removedAt}]
+  var dismissTimerRef=useRef(null);
+  var tickRef=useRef(null);
+  var scoringRef=useRef(false); // guard against concurrent scoring runs
+
+  // Persist state on any change. Batched together in one effect so we make
+  // exactly one write per render that changed any of these.
+  useEffect(function(){
+    saveState({activeTab:activeTab,jobs:jobs,profiles:profiles,cv:cv,afKey:afKey,jsKey:jsKey,anthropicKey:anthropicKey,schedule:schedule,log:log,sort:sort,assistantConv:assistantConv,dismissedIds:dismissedIds,sidebarCollapsed:sidebarCollapsed});
+  },[activeTab,jobs,profiles,cv,afKey,jsKey,anthropicKey,schedule,log,sort,assistantConv,dismissedIds,sidebarCollapsed]);
+
+  // Keyboard shortcut: `[` toggles sidebar collapse. Follows Linear/Notion
+  // convention. Ignored when typing in inputs or textareas so it doesn't
+  // hijack square-bracket characters in forms.
+  useEffect(function(){
+    function onKey(e){
+      if(e.key!=="[") return;
+      var t=e.target;
+      var tag=t&&t.tagName;
+      if(tag==="INPUT"||tag==="TEXTAREA"||t.isContentEditable) return;
+      if(e.metaKey||e.ctrlKey||e.altKey) return;
+      setSidebarCollapsed(function(v){return !v;});
+    }
+    window.addEventListener("keydown",onKey);
+    return function(){ window.removeEventListener("keydown",onKey); };
+  },[]);
+
+  // Remove a single job immediately and show an undo toast. Each call resets
+  // the 8-second timer so rapid-fire dismissals all stay undoable. The job's
+  // id is added to the tombstone list so that if the source (e.g. AF/JSearch)
+  // re-returns it on a later fetch, ingestion will skip it.
+  function dismissJob(jobId){
+    var job=jobs.find(function(j){return j.id===jobId;});
+    if(!job) return;
+    var sid=String(jobId);
+    setJobs(function(prev){return prev.filter(function(j){return j.id!==jobId;});});
+    setDismissedIds(function(prev){return prev.indexOf(sid)>=0?prev:prev.concat([sid]);});
+    setDismissed(function(prev){return prev.concat([{job:job,removedAt:Date.now()}]);});
+    if(dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
+    dismissTimerRef.current=setTimeout(function(){
+      // Window expired — make removal permanent by clearing the toast buffer
+      setDismissed([]);
+      dismissTimerRef.current=null;
+    },8000);
+  }
+  function undoDismiss(){
+    if(dismissTimerRef.current){ clearTimeout(dismissTimerRef.current); dismissTimerRef.current=null; }
+    // Restore every job in the buffer to state AND remove their ids from the
+    // tombstone list (so if the source re-offers them later, they come back).
+    var restoreIds=dismissed.map(function(d){return String(d.job.id);});
+    setJobs(function(prev){
+      var restored=dismissed.map(function(d){return d.job;});
+      return prev.concat(restored);
+    });
+    setDismissedIds(function(prev){return prev.filter(function(id){return restoreIds.indexOf(id)<0;});});
+    setDismissed([]);
+  }
+  // Add many ids to the tombstone list at once (used by bulk Delete).
+  // Deduplicates implicitly via the Set round-trip.
+  function tombstoneIds(ids){
+    if(!ids||!ids.length) return;
+    setDismissedIds(function(prev){
+      var s=new Set(prev);
+      ids.forEach(function(id){s.add(String(id));});
+      return Array.from(s);
+    });
+  }
+
+  // Apply scoring results to jobs in state. Keys are compared as strings to
+  // handle both numeric (manual) and string (AF/JSearch) job IDs.
+  function applyScores(scoreMap){
+    setJobs(function(prev){
+      return prev.map(function(j){
+        var r=scoreMap.get(String(j.id));
+        if(!r) return j;
+        return Object.assign({},j,{score:r.score,rationale:r.rationale,scored:true});
+      });
+    });
+  }
+
+  // Score a specific set of jobs. Used by both auto-scoring and Rescore all.
+  async function runScoring(targetJobs){
+    if(scoringRef.current) return;
+    if(!hasCv(cv)){ addLog("Scoring skipped — no CV set","error"); setScoringError("No CV set. Go to the My CV tab and upload or paste your CV."); return; }
+    if(!anthropicKey){ addLog("Scoring skipped — no Anthropic API key","error"); setScoringError("No Anthropic API key. Go to Search Profiles → API keys and paste your key."); return; }
+    if(!targetJobs.length) return;
+    scoringRef.current=true;
+    setScoringError("");
+    setScoringStatus({active:true,done:0,total:targetJobs.length});
+    var failed=0;
+    var firstError="";
+    try{
+      // Chunk into BATCH_SIZE API calls so the UI can update between each batch
+      for(var i=0;i<targetJobs.length;i+=BATCH_SIZE){
+        var batch=targetJobs.slice(i,i+BATCH_SIZE);
+        try{
+          var scored=await scoreJobBatch(batch,cv,anthropicKey);
+          var resultMap=new Map();
+          scored.forEach(function(s){
+            if(s&&s.id!==undefined&&s.id!==null){
+              var score=Math.max(0,Math.min(100,Math.round(Number(s.score)||0)));
+              resultMap.set(String(s.id),{score:score,rationale:(s.rationale||"").toString().slice(0,120)});
+            }
+          });
+          if(resultMap.size>0) applyScores(resultMap);
+        }catch(err){
+          console.warn("Batch scoring failed:",err);
+          if(!firstError) firstError=err.message||String(err);
+          failed+=batch.length;
+        }
+        setScoringStatus({active:true,done:Math.min(i+batch.length,targetJobs.length),total:targetJobs.length});
+      }
+      var ok=targetJobs.length-failed;
+      if(failed===0){ addLog("Scored "+ok+" job"+(ok!==1?"s":""),"manual"); }
+      else if(ok>0){ addLog("Scored "+ok+" job"+(ok!==1?"s":"")+", "+failed+" failed: "+firstError,"manual"); setScoringError(firstError); }
+      else{ addLog("Scoring failed for all "+failed+" jobs: "+firstError,"error"); setScoringError(firstError); }
+    }finally{
+      scoringRef.current=false;
+      setScoringStatus({active:false,done:0,total:0});
+    }
+  }
+
+  // Auto-score any jobs that haven't been scored yet, whenever jobs or CV change.
+  // Debounced via a short delay so rapid fetches (e.g. Run All) batch together.
+  // Archived jobs are skipped — no point spending API tokens on jobs the user
+  // has decluttered from their active pipeline.
+  useEffect(function(){
+    if(!hasCv(cv)) return;
+    var unscored=jobs.filter(function(j){return j.scored===false&&!j.archived;});
+    if(!unscored.length) return;
+    var t=setTimeout(function(){
+      // Re-read latest unscored to avoid double-scoring after state update
+      runScoring(unscored);
+    },800);
+    return function(){ clearTimeout(t); };
+  // eslint-disable-next-line
+  },[jobs,cv]);
+
+  function rescoreAll(){
+    if(!hasCv(cv)){ alert("Add your CV first — go to the My CV tab."); return; }
+    if(!jobs.length) return;
+    // Mark all NON-ARCHIVED jobs unscored, which triggers the auto-score effect.
+    // Archived jobs keep their existing scores — if you unarchive one later its
+    // score stays intact until you manually rescore.
+    setJobs(function(prev){ return prev.map(function(j){ return j.archived?j:Object.assign({},j,{scored:false}); }); });
+  }
+
+  function resetAllData(){
+    if(!confirm("Reset all data? This will delete your jobs, profiles, CV, API keys, schedule and run log. This cannot be undone.")) return;
+    clearState();
+    setJobs(SAMPLE_JOBS);
+    setProfiles(SAMPLE_PROFILES);
+    setCv({text:"",fileName:"",uploaded:false,roles:"",industries:"",locations:"",salary:"",workType:"Any",recipients:[]});
+    setAfKey("");
+    setJsKey("");
+    setAnthropicKey("");
+    setSchedule(DEFAULT_SCHEDULE);
+    setLog([]);
+    setSort("added_desc");
+    setAssistantConv([]);
+    setDismissedIds([]);
+    setScoringError("");
+    setActiveTab("dashboard");
+  }
+
+  // Backup current state to a downloadable JSON file. schemaVersion lets
+  // future app releases migrate older backups if the shape changes.
+  // When excludeKeys is true, API keys are blanked out so the file is safe
+  // to share (e.g. attaching to a support issue or syncing via email).
+  function exportData(excludeKeys){
+    var payload={
+      schemaVersion:1,
+      exportedAt:new Date().toISOString(),
+      appName:"job-tracker",
+      data:{
+        jobs:jobs,
+        profiles:profiles,
+        cv:cv,
+        afKey:excludeKeys?"":afKey,
+        jsKey:excludeKeys?"":jsKey,
+        anthropicKey:excludeKeys?"":anthropicKey,
+        schedule:schedule,
+        log:log,
+        sort:sort,
+        assistantConv:assistantConv,
+        dismissedIds:dismissedIds,
+      },
+    };
+    var json=JSON.stringify(payload,null,2);
+    var blob=new Blob([json],{type:"application/json"});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a");
+    a.href=url;
+    // ISO date in filename keeps files sortable chronologically in the OS
+    a.download="job-tracker-backup-"+new Date().toISOString().slice(0,10)+(excludeKeys?"-no-keys":"")+".json";
+    a.click();
+    // Let the browser free the blob after a tick
+    setTimeout(function(){ URL.revokeObjectURL(url); },100);
+  }
+
+  // Validate an imported payload. Returns null if valid, else an error string.
+  // Doesn't restore anything; that's the caller's job after confirmation.
+  function validateImport(obj){
+    if(!obj||typeof obj!=="object") return "File is not a valid backup.";
+    if(obj.appName!=="job-tracker") return "This file isn't a job-tracker backup.";
+    if(typeof obj.schemaVersion!=="number") return "Backup is missing a schema version.";
+    if(obj.schemaVersion>1) return "This backup is from a newer version of the app. Update first.";
+    if(!obj.data||typeof obj.data!=="object") return "Backup has no data section.";
+    if(!Array.isArray(obj.data.jobs)) return "Backup's jobs section is invalid.";
+    if(!Array.isArray(obj.data.profiles)) return "Backup's profiles section is invalid.";
+    return null;
+  }
+
+  // Replace all state with the payload. Caller has already validated + confirmed.
+  function importData(obj){
+    var d=obj.data;
+    setJobs(d.jobs||[]);
+    setProfiles(d.profiles||[]);
+    setCv(d.cv||{text:"",fileName:"",uploaded:false,roles:"",industries:"",locations:"",salary:"",workType:"Any",recipients:[]});
+    // Keys from a backup replace current keys — but only overwrite if the
+    // backup provides a non-empty value, so "no-keys" backups don't wipe
+    // the user's current keys on the restoring device.
+    if(d.afKey) setAfKey(d.afKey);
+    if(d.jsKey) setJsKey(d.jsKey);
+    if(d.anthropicKey) setAnthropicKey(d.anthropicKey);
+    setSchedule(d.schedule||DEFAULT_SCHEDULE);
+    setLog(d.log||[]);
+    setSort(d.sort||"added_desc");
+    setAssistantConv(d.assistantConv||[]);
+    // Tombstone list — restore as array of strings. Missing from older backups:
+    // treat that as empty rather than failing.
+    setDismissedIds(Array.isArray(d.dismissedIds)?d.dismissedIds.map(String):[]);
+    setScoringError("");
+  }
+
+  function addLog(msg,type){
+    var now=new Date();
+    var time=now.toLocaleDateString()+" "+String(now.getHours()).padStart(2,"0")+":"+String(now.getMinutes()).padStart(2,"0");
+    setLog(function(l){return l.slice(-49).concat([{time:time,msg:msg,type:type||"scheduled"}]);});
+  }
+
+  var runAllProfiles=useCallback(async function(triggered){
+    var active=profiles.filter(function(p){return p.active;});
+    if(!active.length) return;
+    var totalNew=0;
+    var errors=[];
+    for(var i=0;i<active.length;i++){
+      var p=active[i];
+      var srcs=p.sources||["af"];
+      for(var j=0;j<srcs.length;j++){
+        var src=srcs[j];
+        try{
+          if(src==="af"){
+            var h={"accept":"application/json"};
+            if(afKey) h["api-key"]=afKey;
+            var url="https://jobsearch.api.jobtechdev.se/search?q="+encodeURIComponent(p.query)+"&limit="+p.limit+"&resdet=full";
+            var out=await smartFetch(url,{headers:h});
+            var r=out.response;
+            if(r.ok){var d=await r.json();var ads=d.hits||[];setJobs(function(prev){var ex=new Set(prev.map(function(x){return x.id?x.id.toString():""; }));var nj=ads.filter(function(a){return !ex.has(a.id?a.id.toString():"");}).map(function(a){return mapAfJob(a,p.name);});totalNew+=nj.length;return nj.concat(prev);});}
+            else{errors.push(p.name+" (AF): "+r.status);}
+          }
+          if(src==="jsearch"&&jsKey){
+            var url2="https://jsearch.p.rapidapi.com/search?query="+encodeURIComponent(p.query)+"&num_pages=1&page=1";
+            var out2=await smartFetch(url2,{headers:{"x-rapidapi-key":jsKey,"x-rapidapi-host":"jsearch.p.rapidapi.com"}});
+            var r2=out2.response;
+            if(r2.ok){var d2=await r2.json();var ads2=(d2.data||[]).slice(0,p.limit);setJobs(function(prev){var ex=new Set(prev.map(function(x){return x.id?x.id.toString():""; }));var nj=ads2.filter(function(a){return !ex.has(a.job_id);}).map(function(a){return mapJsJob(a,p.name);});totalNew+=nj.length;return nj.concat(prev);});}
+            else{errors.push(p.name+" (JSearch): "+r2.status);}
+          }
+        }catch(e){errors.push(p.name+": "+e.message);}
+      }
+    }
+    var msg=(triggered==="manual"?"Manual":"Scheduled")+" run — "+active.length+" profile"+(active.length!==1?"s":"")+", "+totalNew+" new job"+(totalNew!==1?"s":"");
+    if(errors.length) msg+=" · errors: "+errors.join("; ");
+    addLog(msg,errors.length?"error":(triggered||"scheduled"));
+  },[profiles,afKey,jsKey]);
+
+  useEffect(function(){
+    if(tickRef.current) clearInterval(tickRef.current);
+    if(!schedule.enabled||!schedule.days.length) return;
+    tickRef.current=setInterval(function(){
+      var now=new Date();
+      var dayName=DAYS[(now.getDay()+6)%7];
+      if(!schedule.days.includes(dayName)) return;
+      var nowMin=now.getHours()*60+now.getMinutes();
+      var sh=parseInt(schedule.startTime.split(":")[0]);
+      var sm=parseInt(schedule.startTime.split(":")[1]);
+      var eh=parseInt(schedule.stopTime.split(":")[0]);
+      var em=parseInt(schedule.stopTime.split(":")[1]);
+      if(nowMin<sh*60+sm||nowMin>=eh*60+em) return;
+      if((nowMin-sh*60-sm)%schedule.intervalMinutes===0) runAllProfiles("scheduled");
+    },60000);
+    return function(){clearInterval(tickRef.current);};
+  },[schedule,runAllProfiles]);
+
+  var content={
+    dashboard:<Dashboard jobs={jobs} schedule={schedule} setActiveTab={setActiveTab} />,
+    jobs:<Jobs jobs={jobs} setJobs={setJobs} rescoreAll={rescoreAll} scoringStatus={scoringStatus} scoringError={scoringError} cv={cv} sort={sort} setSort={setSort} dismissJob={dismissJob} tombstoneIds={tombstoneIds} />,
+    profiles:<SearchProfiles profiles={profiles} setProfiles={setProfiles} setJobs={setJobs} afKey={afKey} setAfKey={setAfKey} jsKey={jsKey} setJsKey={setJsKey} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} pendingProfileRun={pendingProfileRun} setPendingProfileRun={setPendingProfileRun} dismissedIds={dismissedIds} />,
+    assistant:<ProfileAssistant cv={cv} profiles={profiles} setProfiles={setProfiles} anthropicKey={anthropicKey} conversation={assistantConv} setConversation={setAssistantConv} setActiveTab={setActiveTab} setPendingProfileRun={setPendingProfileRun} jobs={jobs} />,
+    scheduler:<Scheduler schedule={schedule} setSchedule={setSchedule} profiles={profiles} log={log} resetAllData={resetAllData} exportData={exportData} importData={importData} validateImport={validateImport} dismissedIds={dismissedIds} clearDismissedIds={function(){setDismissedIds([]);}} />,
+    cv:<CVProfile cv={cv} setCv={setCv} />,
+    covers:<CoverLetters jobs={jobs} cv={cv} anthropicKey={anthropicKey} setActiveTab={setActiveTab} />,
+    reports:<Reports jobs={jobs} cv={cv} anthropicKey={anthropicKey} />,
+  };
+
+  return <div className="jt-app" style={{background:C.bg,fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif",color:C.textPrimary}}>
+    {/* Mobile-only top bar with hamburger. Hidden on desktop via CSS. */}
+    <div className="jt-topbar">
+      <button onClick={function(){setMobileMenuOpen(true);}} aria-label="Open navigation" style={{background:"transparent",border:"none",fontSize:22,cursor:"pointer",padding:"8px 10px",color:C.textPrimary,lineHeight:1}}>☰</button>
+      <div style={{display:"flex",alignItems:"center",gap:10,flex:1,minWidth:0}}>
+        <div style={{width:28,height:28,borderRadius:8,background:C.primary,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,flexShrink:0}}>🌿</div>
+        <div style={{fontSize:14,fontWeight:800,color:C.textPrimary,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{TABS.find(function(t){return t.id===activeTab;}).label}</div>
+      </div>
+    </div>
+    <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} mobileOpen={mobileMenuOpen} setMobileOpen={setMobileMenuOpen} />
+    <div className={"jt-main"+(sidebarCollapsed?" sidebar-collapsed":"")}>
+      <div className="jt-container">
+        <TabErrorBoundary tabKey={activeTab}>
+          {content[activeTab]}
+        </TabErrorBoundary>
+      </div>
+    </div>
+    {dismissed.length>0&&<DismissToast count={dismissed.length} last={dismissed[dismissed.length-1].job} onUndo={undoDismiss} />}
+  </div>;
+}
+
+// Toast shown at the bottom of the viewport after dismissing job(s).
+// Stays visible until the 8-second window expires (managed by App) or the
+// user clicks Undo. Auto-adjusts wording for single vs multiple dismissals.
+function DismissToast({count,last,onUndo}){
+  var label=count===1
+    ?"Dismissed \""+(last.title||"job")+"\" at "+(last.company||"")
+    :"Dismissed "+count+" jobs";
+  return <div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",background:"#2C3E50",color:"#fff",padding:"12px 18px",borderRadius:12,display:"flex",alignItems:"center",gap:16,boxShadow:"0 8px 24px rgba(0,0,0,0.2)",zIndex:1000,maxWidth:"calc(100% - 32px)",fontSize:14}}>
+    <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{label}</span>
+    <button onClick={onUndo} style={{background:"none",border:"none",color:"#85C1A6",fontSize:14,fontWeight:700,cursor:"pointer",padding:"4px 10px",borderRadius:8,flexShrink:0}}>Undo</button>
+  </div>;
+}
+
+ReactDOM.render(<App />, document.getElementById("root"));
+</script>
+</body>
+</html>
