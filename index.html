@@ -89,7 +89,11 @@
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{overscroll-behavior-y:contain} /* Prevent pull-to-refresh on PWA */
-  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#F7F9F7;color:#1A2E26;-webkit-tap-highlight-color:transparent;-webkit-font-smoothing:antialiased}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#F7F9F7;color:#1A2E26;-webkit-tap-highlight-color:transparent;-webkit-font-smoothing:antialiased;transition:background 0.2s ease,color 0.2s ease}
+  /* Dark theme: body background follows the dark palette so the area around
+     the SignInScreen card and any margin uncovered by the app shell are dark. */
+  html[data-theme="dark"] body{background:#0F1714;color:#E8EDEA}
+  html[data-theme="dark"] input,html[data-theme="dark"] textarea,html[data-theme="dark"] select{color-scheme:dark}
   input,select,textarea,button{font-family:inherit;font-size:16px} /* 16px prevents iOS zoom on focus */
   input:focus,select:focus,textarea:focus{outline:2px solid #5C8A7A;outline-offset:1px}
   button{min-height:36px} /* Touch target floor */
@@ -165,7 +169,12 @@ class TabErrorBoundary extends React.Component {
   }
 }
 
-const C = {
+// Theme palettes. Light is the historical default; dark is the new alternative.
+// We keep `C` as a mutable object that always reflects the active theme — this
+// way the hundreds of inline-style references (style={{background:C.surface}})
+// don't need to change. When the user toggles the theme, App calls applyTheme()
+// which replaces C's properties via Object.assign and triggers a re-render.
+const LIGHT = {
   primary:"#5C8A7A", primaryLight:"#EAF2EF", primaryDark:"#3D6B5C",
   bg:"#F7F9F7", surface:"#FFFFFF", surfaceAlt:"#F0F5F2", border:"#D8E4DF",
   textPrimary:"#1A2E26", textSecondary:"#5A7168", textHint:"#8FA89F",
@@ -174,18 +183,88 @@ const C = {
   shadow:"0 1px 3px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04)",
   shadowMd:"0 2px 8px rgba(0,0,0,0.10), 0 4px 16px rgba(0,0,0,0.06)",
 };
-
-const STATUS = {
+// Dark palette: warmer-leaning to match the green-accent identity. Background is
+// not pure black — slightly green-tinted dark grey reads as a continuation of
+// the light theme's character. Text is high-contrast warm white. Status pill
+// backgrounds use higher opacity over the dark surface.
+const DARK = {
+  primary:"#7AAD9C", primaryLight:"#1F3530", primaryDark:"#5C8A7A",
+  bg:"#0F1714", surface:"#1A2420", surfaceAlt:"#222D29", border:"#2E3B36",
+  textPrimary:"#E8EDEA", textSecondary:"#A8B5B0", textHint:"#7A8B85",
+  error:"#E57B6E", errorBg:"#3A1E1A", warning:"#D4A472", warningBg:"#3A2D1A",
+  success:"#7DB89C", successBg:"#1A2E26", info:"#7AABCA", infoBg:"#1A2A3A",
+  shadow:"0 1px 3px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.25)",
+  shadowMd:"0 2px 8px rgba(0,0,0,0.45), 0 4px 16px rgba(0,0,0,0.3)",
+};
+// Status pill colors — overrides for dark theme (light theme uses STATUS_LIGHT).
+const STATUS_LIGHT = {
   New:{bg:"#E3EFF8",color:"#1A5A8A"},
   Reviewing:{bg:"#FEF3E2",color:"#A0692A"},
   Applied:{bg:"#E8F5EE",color:"#2E7D5A"},
   Interview:{bg:"#EAF2EF",color:"#3D6B5C"},
   Offer:{bg:"#F3E8FF",color:"#6B3DAA"},
-  // Terminal/closed outcomes — shown separately from the active pipeline.
-  // Muted tones because these are "done, not actionable" states.
   Rejected:{bg:"#EEE4E0",color:"#6B5B4E"},
   "No response":{bg:"#E4E4E4",color:"#5A5A5A"},
 };
+const STATUS_DARK = {
+  New:{bg:"#1A3550",color:"#9BC8E5"},
+  Reviewing:{bg:"#3A2D1A",color:"#D4A472"},
+  Applied:{bg:"#1A3D2E",color:"#7DB89C"},
+  Interview:{bg:"#1F3530",color:"#9BC9B8"},
+  Offer:{bg:"#2E1F44",color:"#B89BD8"},
+  Rejected:{bg:"#2D2622",color:"#9C8C7E"},
+  "No response":{bg:"#2A2A2A",color:"#9A9A9A"},
+};
+const SOURCES_LIGHT = {
+  af:{label:"Arbetsförmedlingen",bg:"#EAF2EF",color:"#3D6B5C"},
+  jsearch:{label:"JSearch",bg:"#E3EFF8",color:"#1A5A8A"},
+  manual:{label:"Manual",bg:"#F0F0F0",color:"#5A5A5A"},
+};
+const SOURCES_DARK = {
+  af:{label:"Arbetsförmedlingen",bg:"#1F3530",color:"#9BC9B8"},
+  jsearch:{label:"JSearch",bg:"#1A3550",color:"#9BC8E5"},
+  manual:{label:"Manual",bg:"#2A2A2A",color:"#9A9A9A"},
+};
+
+// Active palette. Mutated in place by applyTheme() so existing
+// `style={{background:C.bg}}` references don't need to change.
+const C = Object.assign({},LIGHT);
+const STATUS = Object.assign({},STATUS_LIGHT);
+const SOURCES = Object.assign({},SOURCES_LIGHT);
+
+// Replace the active palette's keys with the values for the chosen theme.
+// Called from App on mount and whenever the theme toggle flips.
+function applyTheme(theme){
+  var pal = theme==="dark" ? DARK : LIGHT;
+  var statusPal = theme==="dark" ? STATUS_DARK : STATUS_LIGHT;
+  var srcPal = theme==="dark" ? SOURCES_DARK : SOURCES_LIGHT;
+  // Object.assign mutates C's keys without replacing the reference, so any
+  // imports/closures that captured C still see the new values on next render.
+  Object.keys(pal).forEach(function(k){ C[k]=pal[k]; });
+  Object.keys(statusPal).forEach(function(k){ STATUS[k]=statusPal[k]; });
+  Object.keys(srcPal).forEach(function(k){ SOURCES[k]=srcPal[k]; });
+  // Also set a body-level data attribute so global CSS rules (sidebar bg,
+  // input/textarea defaults, etc.) can theme themselves via [data-theme="dark"].
+  if(document&&document.documentElement){
+    document.documentElement.setAttribute("data-theme",theme);
+  }
+}
+
+// Apply the saved theme as early as possible — before React mounts — so the
+// initial paint already reflects the user's choice. Theme is device-local
+// (localStorage only, not synced to Firestore) since users often want
+// different themes on different devices.
+const THEME_KEY = "jobTracker.theme";
+function getSavedTheme(){
+  try{
+    var t=localStorage.getItem(THEME_KEY);
+    if(t==="dark"||t==="light") return t;
+  }catch(e){}
+  // Honour OS preference on first run
+  if(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
+  return "light";
+}
+applyTheme(getSavedTheme());
 const STATUSES = Object.keys(STATUS);
 // Active pipeline = jobs in flight. Closed = terminal outcomes. Consumers that
 // care about "active work" (Dashboard pipeline strip, applications-sent counts)
@@ -196,12 +275,6 @@ const CLOSED_STATUSES = ["Rejected","No response"];
 // — used for the applications-sent total. Rejected and No response count here
 // because they represent past applications, even though they're now closed.
 const APPLIED_STATUSES = ["Applied","Interview","Offer","Rejected","No response"];
-
-const SOURCES = {
-  af:{label:"Arbetsförmedlingen",bg:"#EAF2EF",color:"#3D6B5C"},
-  jsearch:{label:"JSearch",bg:"#E3EFF8",color:"#1A5A8A"},
-  manual:{label:"Manual",bg:"#F0F5F2",color:"#5A7168"},
-};
 
 // Tab icons chosen for clarity when seen at glyph-only size (collapsed sidebar):
 // each is semantically distinct at a glance. Emoji keeps the single-file spirit
@@ -969,7 +1042,7 @@ function Card({children,style}){ return <div className="jt-card" style={{backgro
 //   setCollapsed — toggle collapsed mode
 //   mobileOpen — is the mobile drawer currently open
 //   setMobileOpen — open/close the mobile drawer
-function Sidebar({activeTab,setActiveTab,collapsed,setCollapsed,mobileOpen,setMobileOpen,user,onSignOut}){
+function Sidebar({activeTab,setActiveTab,collapsed,setCollapsed,mobileOpen,setMobileOpen,user,onSignOut,theme,setTheme}){
   function pickTab(id){
     setActiveTab(id);
     // On mobile, selecting an item closes the drawer; on desktop this is a no-op
@@ -1028,8 +1101,12 @@ function Sidebar({activeTab,setActiveTab,collapsed,setCollapsed,mobileOpen,setMo
         </button>
       </div>}
 
-      {/* Collapse toggle at the bottom (desktop only — hidden on mobile via CSS) */}
+      {/* Theme toggle + Collapse at the bottom (desktop only — collapse hidden on mobile via CSS) */}
       <div style={{borderTop:"1px solid "+C.border,padding:"8px"}}>
+        {setTheme&&<button onClick={function(){setTheme(theme==="dark"?"light":"dark");}} title={collapsed?(theme==="dark"?"Switch to light":"Switch to dark"):""} style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"8px 10px",border:"none",borderRadius:8,background:"transparent",color:C.textHint,cursor:"pointer",justifyContent:collapsed?"center":"flex-start",fontSize:13,marginBottom:2}}>
+          <span style={{fontSize:14,lineHeight:1,flexShrink:0,width:24,textAlign:"center"}}>{theme==="dark"?"☀️":"🌙"}</span>
+          {!collapsed&&<span>{theme==="dark"?"Light mode":"Dark mode"}</span>}
+        </button>}
         <button onClick={function(){setCollapsed(function(v){return !v;});}} title={collapsed?"Expand sidebar":"Collapse sidebar"} style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"8px 10px",border:"none",borderRadius:8,background:"transparent",color:C.textHint,cursor:"pointer",justifyContent:collapsed?"center":"flex-start",fontSize:13}}>
           <span style={{fontSize:16,lineHeight:1,flexShrink:0,width:24,textAlign:"center"}}>{collapsed?"»":"«"}</span>
           {!collapsed&&<span>Collapse</span>}
@@ -2573,6 +2650,16 @@ function AppShell({user,onSignOut}){
   var saved=loadState();
   var [activeTab,setActiveTab]=useState(function(){return pick(saved,"activeTab","dashboard");});
   var [sidebarCollapsed,setSidebarCollapsed]=useState(function(){return pick(saved,"sidebarCollapsed",false);});
+  // Theme is device-local (not synced) — initialised from localStorage at
+  // module load. The state here just lets us trigger re-renders when the user
+  // toggles, since `applyTheme` mutates the C/STATUS/SOURCES module-level
+  // objects directly.
+  var [theme,setThemeState]=useState(function(){return getSavedTheme();});
+  function setTheme(next){
+    applyTheme(next);
+    try{ localStorage.setItem(THEME_KEY,next); }catch(e){}
+    setThemeState(next);
+  }
   var [mobileMenuOpen,setMobileMenuOpen]=useState(false); // ephemeral
   var [jobs,setJobs]=useState(function(){return pick(saved,"jobs",SAMPLE_JOBS);});
   var [profiles,setProfiles]=useState(function(){return pick(saved,"profiles",SAMPLE_PROFILES);});
@@ -3014,7 +3101,7 @@ function AppShell({user,onSignOut}){
         <div style={{fontSize:14,fontWeight:800,color:C.textPrimary,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{TABS.find(function(t){return t.id===activeTab;}).label}</div>
       </div>
     </div>
-    <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} mobileOpen={mobileMenuOpen} setMobileOpen={setMobileMenuOpen} user={user} onSignOut={onSignOut} />
+    <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} mobileOpen={mobileMenuOpen} setMobileOpen={setMobileMenuOpen} user={user} onSignOut={onSignOut} theme={theme} setTheme={setTheme} />
     <div className={"jt-main"+(sidebarCollapsed?" sidebar-collapsed":"")}>
       <div className="jt-container">
         <TabErrorBoundary tabKey={activeTab}>
