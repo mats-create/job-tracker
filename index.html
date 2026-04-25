@@ -2676,18 +2676,30 @@ function App(){
     return unsub;
   },[fbReadyTick]);
 
+  // signingIn tracks the window between clicking "Sign in" and onAuthStateChanged
+  // resolving. During this window user is still null but we don't want to show
+  // the button as clickable — that's exactly what caused the double-click bug.
+  var [signingIn,setSigningIn]=useState(false);
+
   function handleSignIn(){
-    if(!fbReady()) return;
+    if(!fbReady()||signingIn) return;
     setAuthError("");
+    setSigningIn(true);
     var sdk=window.firebaseSdk;
     var provider=new sdk.GoogleAuthProvider();
     sdk.signInWithPopup(sdk.auth,provider).catch(function(err){
       // Surface a helpful message. The user-cancelled case is silent.
-      if(err.code==="auth/popup-closed-by-user"||err.code==="auth/cancelled-popup-request") return;
+      if(err.code==="auth/popup-closed-by-user"||err.code==="auth/cancelled-popup-request"){
+        setSigningIn(false); return;
+      }
       if(err.code==="auth/popup-blocked") setAuthError("Your browser blocked the sign-in popup. Allow popups for this site and try again.");
       else if(err.code==="auth/unauthorized-domain") setAuthError("This domain isn't authorised in Firebase. Add it to Authentication → Settings → Authorised domains.");
       else setAuthError(err.message||"Sign-in failed. Try again.");
+      setSigningIn(false);
     });
+    // Note: on success we don't need to setSigningIn(false) — onAuthStateChanged
+    // fires, sets user to non-null, and the component switches to AppShell.
+    // The SignInScreen unmounts so state cleanup is irrelevant.
   }
 
   function handleSignOut(){
@@ -2706,7 +2718,7 @@ function App(){
 
   // Gate the app behind sign-in.
   if(!fbReadyTick||authLoading) return <AuthSplash />;
-  if(!user) return <SignInScreen onSignIn={handleSignIn} error={authError} loading={false} />;
+  if(!user) return <SignInScreen onSignIn={handleSignIn} error={authError} loading={signingIn} />;
 
   // Past this point, `user` is non-null. Everything below assumes signed-in state.
   return <AppShell user={user} onSignOut={handleSignOut} />;
