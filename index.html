@@ -1050,7 +1050,7 @@ function Inp({value,onChange,placeholder,type,style,inputMode,autoComplete,enter
     placeholder={placeholder||""}
     style={{width:"100%",fontSize:14,padding:"10px 12px",borderRadius:10,border:"1.5px solid "+C.border,background:C.surface,color:C.textPrimary,boxSizing:"border-box",...(style||{})}} />;
 }
-function Txta({value,onChange,placeholder,rows}){ return <textarea value={value} onChange={onChange} placeholder={placeholder||""} rows={rows||4} style={{width:"100%",fontSize:14,padding:"10px 12px",borderRadius:10,border:"1.5px solid "+C.border,background:C.surface,color:C.textPrimary,boxSizing:"border-box",resize:"vertical",fontFamily:"inherit"}} />; }
+function Txta({value,onChange,onBlur,placeholder,rows}){ return <textarea value={value} onChange={onChange} onBlur={onBlur} placeholder={placeholder||""} rows={rows||4} style={{width:"100%",fontSize:14,padding:"10px 12px",borderRadius:10,border:"1.5px solid "+C.border,background:C.surface,color:C.textPrimary,boxSizing:"border-box",resize:"vertical",fontFamily:"inherit"}} />; }
 function Sel({value,onChange,children,style}){ return <select value={value} onChange={onChange} style={{width:"100%",fontSize:14,padding:"10px 12px",borderRadius:10,border:"1.5px solid "+C.border,background:C.surface,color:C.textPrimary,boxSizing:"border-box",...(style||{})}}>{children}</select>; }
 function Btn({children,onClick,variant,disabled,style}){
   var base={fontSize:14,fontWeight:600,padding:"10px 20px",borderRadius:10,cursor:disabled?"not-allowed":"pointer",border:"none",opacity:disabled?0.5:1,...(style||{})};
@@ -1230,7 +1230,7 @@ function Dashboard({jobs,schedule,setActiveTab}){
 }
 
 // ─── Job Row (with expandable details) ───────────────────────────────────────
-function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,onNotesChange,onArchiveToggle,onDismiss}){
+function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,onNotesChange,onArchiveToggle,onDismiss,onWriteCoverLetter}){
   var src=SOURCES[j.sourceType]||SOURCES.manual;
   // Notes are always editable, so the row is always expandable — description,
   // deadline, links, etc. are now just extra content inside the expansion.
@@ -1295,6 +1295,7 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
         <Sel value={j.status} onChange={onStatusChange} style={{width:"auto",fontSize:13,padding:"7px 10px",background:STATUS[j.status].bg,color:STATUS[j.status].color,fontWeight:700,border:"none"}}>
           {STATUSES.map(function(s){return <option key={s}>{s}</option>;})}
         </Sel></div>
+        {onWriteCoverLetter&&!isArchived&&["New","Reviewing","Applied"].includes(j.status)&&<button onClick={function(){onWriteCoverLetter(j.id);}} title="Generate a cover letter for this job" style={{fontSize:11,color:C.primary,background:"none",border:"none",cursor:"pointer",padding:"2px 6px",fontWeight:700}}>✉ Cover letter</button>}
         {onArchiveToggle&&<button onClick={onArchiveToggle} style={{fontSize:11,color:C.textHint,background:"none",border:"none",cursor:"pointer",padding:"2px 6px",fontWeight:600}}>{isArchived?"↩ Unarchive":"📦 Archive"}</button>}
         {onDismiss&&!isArchived&&<button onClick={onDismiss} title="Dismiss — not interested" style={{fontSize:11,color:C.textHint,background:"none",border:"none",cursor:"pointer",padding:"2px 6px",fontWeight:600}}>🗑 Dismiss</button>}
       </div>
@@ -1324,7 +1325,7 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
 }
 
 // ─── Jobs ─────────────────────────────────────────────────────────────────────
-function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSort,dismissJob,tombstoneIds}){
+function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSort,dismissJob,tombstoneIds,startCoverLetter}){
   var [filter,setFilter]=useState("All");
   var [sourceFilter,setSourceFilter]=useState("all");
   var [scoreFilter,setScoreFilter]=useState(0);
@@ -1599,6 +1600,7 @@ function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSor
               onNotesChange={function(val){setJobs(function(prev){return prev.map(function(x){return x.id===j.id?Object.assign({},x,{notes:val}):x;});});}}
               onArchiveToggle={function(){toggleArchive(j.id);}}
               onDismiss={dismissJob?function(){dismissJob(j.id);}:null}
+              onWriteCoverLetter={startCoverLetter?function(){startCoverLetter(j.id);}:null}
             />;
           })}
         </div>}
@@ -1615,6 +1617,11 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
   var [showForm,setShowForm]=useState(false);
   var [form,setForm]=useState({name:"",query:"",limit:10,sources:["af"]});
   var [runStatus,setRunStatus]=useState({});
+  // Ref on the edit form so clicking Edit on a profile far down the list
+  // can scroll the form into view. Without this, profiles 4+ "looked broken"
+  // because the form appears above the list and the user couldn't see it
+  // change.
+  var formRef=useRef(null);
 
   function toggleSource(src){setForm(function(f){var srcs=f.sources.includes(src)?f.sources.filter(function(s){return s!==src;}):f.sources.concat([src]);return Object.assign({},f,{sources:srcs});});}
   function saveProfile(){
@@ -1623,7 +1630,16 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
     else{setProfiles(function(prev){return prev.concat([Object.assign({id:Date.now()},form,{limit:Number(form.limit),active:true})]);});}
     setForm({name:"",query:"",limit:10,sources:["af"]});setShowForm(false);
   }
-  function startEdit(p){setForm({name:p.name,query:p.query,limit:p.limit,sources:p.sources||["af"]});setEditId(p.id);setShowForm(true);}
+  function startEdit(p){
+    setForm({name:p.name,query:p.query,limit:p.limit,sources:p.sources||["af"]});
+    setEditId(p.id);
+    setShowForm(true);
+    // Scroll the form into view after React renders it. setTimeout(0) defers
+    // until the next tick so the form node exists in the DOM by then.
+    setTimeout(function(){
+      if(formRef.current){ formRef.current.scrollIntoView({behavior:"smooth",block:"center"}); }
+    },0);
+  }
 
   async function fetchAF(p){
     try{
@@ -1722,27 +1738,9 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
 
   return <div style={{display:"flex",flexDirection:"column",gap:16}}>
     <Card>
-      <SectionTitle>API keys</SectionTitle>
-      <div style={{display:"flex",flexDirection:"column",gap:16}}>
-        <div>
-          <Label hint="The Arbetsförmedlingen API is free and open — no key needed. Leave blank to use it without authentication.">Arbetsförmedlingen API key (optional)</Label>
-          <div style={{display:"flex",gap:8}}><Inp type={showAfKey?"text":"password"} value={afKey} onChange={function(e){var v=e.target.value;setAfKey(v);}} placeholder="Leave blank — no key needed" style={{fontFamily:"monospace"}} /><Btn onClick={function(){setShowAfKey(function(v){return !v;});}} style={{whiteSpace:"nowrap",padding:"10px 16px"}}>{showAfKey?"Hide":"Show"}</Btn></div>
-        </div>
-        <div>
-          <Label hint="Sign up free at rapidapi.com, search for JSearch by OpenWeb Ninja, subscribe to the free plan, and paste your key here.">JSearch API key (for Indeed, LinkedIn, Glassdoor)</Label>
-          <div style={{display:"flex",gap:8}}><Inp type={showJsKey?"text":"password"} value={jsKey} onChange={function(e){var v=e.target.value;setJsKey(v);}} placeholder="Paste your RapidAPI key here" style={{fontFamily:"monospace"}} /><Btn onClick={function(){setShowJsKey(function(v){return !v;});}} style={{whiteSpace:"nowrap",padding:"10px 16px"}}>{showJsKey?"Hide":"Show"}</Btn></div>
-        </div>
-        <div>
-          <Label hint="Required for AI match scoring, cover letters, and reports. Get a key at console.anthropic.com and paste it here. Starts with 'sk-ant-'.">Anthropic API key (for AI features)</Label>
-          <div style={{display:"flex",gap:8}}><Inp type={showAnthropicKey?"text":"password"} value={anthropicKey} onChange={function(e){var v=e.target.value;setAnthropicKey(v);}} placeholder="sk-ant-..." style={{fontFamily:"monospace"}} /><Btn onClick={function(){setShowAnthropicKey(function(v){return !v;});}} style={{whiteSpace:"nowrap",padding:"10px 16px"}}>{showAnthropicKey?"Hide":"Show"}</Btn></div>
-        </div>
-        <Alert type="info">🔒 Keys are stored in your browser's memory only and are never saved to a server or shared with anyone.</Alert>
-      </div>
-    </Card>
-    <Card>
       <SectionTitle action={<div style={{display:"flex",gap:8}}><Btn onClick={runAll} style={{fontSize:13,padding:"8px 14px"}}>▶ Run all active</Btn><Btn variant="primary" onClick={function(){setEditId(null);setForm({name:"",query:"",limit:10,sources:["af"]});setShowForm(function(v){return !v;});}} style={{fontSize:13,padding:"8px 14px"}}>+ New profile</Btn></div>}>Search profiles</SectionTitle>
       <Alert type="info">A search profile is a saved search query. When you click Fetch or run the scheduler, each active profile searches its sources and adds new matching jobs to your list automatically.</Alert>
-      {showForm&&<div style={{background:C.surfaceAlt,borderRadius:14,padding:"20px",margin:"16px 0",border:"1.5px solid "+C.border}}>
+      {showForm&&<div ref={formRef} style={{background:C.surfaceAlt,borderRadius:14,padding:"20px",margin:"16px 0",border:"1.5px solid "+C.border}}>
         <div style={{fontSize:15,fontWeight:700,color:C.textPrimary,marginBottom:16}}>{editId?"Edit profile":"New search profile"}</div>
         <div className="jt-grid-2" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:14,marginBottom:14}}>
           <div><Label hint="A name to help you identify this search">Profile name</Label><Inp value={form.name} onChange={function(e){var v=e.target.value;setForm(function(f){return Object.assign({},f,{name:v});});}} placeholder="e.g. UX Design Sweden" /></div>
@@ -1788,6 +1786,24 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
           })}
         </div>}
     </Card>
+    <Card>
+      <SectionTitle>API keys</SectionTitle>
+      <div style={{display:"flex",flexDirection:"column",gap:16}}>
+        <div>
+          <Label hint="The Arbetsförmedlingen API is free and open — no key needed. Leave blank to use it without authentication.">Arbetsförmedlingen API key (optional)</Label>
+          <div style={{display:"flex",gap:8}}><Inp type={showAfKey?"text":"password"} value={afKey} onChange={function(e){var v=e.target.value;setAfKey(v);}} placeholder="Leave blank — no key needed" style={{fontFamily:"monospace"}} /><Btn onClick={function(){setShowAfKey(function(v){return !v;});}} style={{whiteSpace:"nowrap",padding:"10px 16px"}}>{showAfKey?"Hide":"Show"}</Btn></div>
+        </div>
+        <div>
+          <Label hint="Sign up free at rapidapi.com, search for JSearch by OpenWeb Ninja, subscribe to the free plan, and paste your key here.">JSearch API key (for Indeed, LinkedIn, Glassdoor)</Label>
+          <div style={{display:"flex",gap:8}}><Inp type={showJsKey?"text":"password"} value={jsKey} onChange={function(e){var v=e.target.value;setJsKey(v);}} placeholder="Paste your RapidAPI key here" style={{fontFamily:"monospace"}} /><Btn onClick={function(){setShowJsKey(function(v){return !v;});}} style={{whiteSpace:"nowrap",padding:"10px 16px"}}>{showJsKey?"Hide":"Show"}</Btn></div>
+        </div>
+        <div>
+          <Label hint="Required for AI match scoring, cover letters, and reports. Get a key at console.anthropic.com and paste it here. Starts with 'sk-ant-'.">Anthropic API key (for AI features)</Label>
+          <div style={{display:"flex",gap:8}}><Inp type={showAnthropicKey?"text":"password"} value={anthropicKey} onChange={function(e){var v=e.target.value;setAnthropicKey(v);}} placeholder="sk-ant-..." style={{fontFamily:"monospace"}} /><Btn onClick={function(){setShowAnthropicKey(function(v){return !v;});}} style={{whiteSpace:"nowrap",padding:"10px 16px"}}>{showAnthropicKey?"Hide":"Show"}</Btn></div>
+        </div>
+        <Alert type="info">🔒 Keys are stored in your browser's memory only and are never saved to a server or shared with anyone.</Alert>
+      </div>
+    </Card>
   </div>;
 }
 
@@ -1797,6 +1813,7 @@ function Scheduler({schedule,setSchedule,profiles,log,resetAllData,exportData,im
   var [dirty,setDirty]=useState(false);
   var [excludeKeys,setExcludeKeys]=useState(false); // for export
   var [importPreview,setImportPreview]=useState(null); // {payload,stats} or null
+  var [showAllLog,setShowAllLog]=useState(false); // expand to full log when truthy
   var [importError,setImportError]=useState("");
   var fileInputRef=useRef(null);
   function update(patch){setDraft(function(d){return Object.assign({},d,patch);});setDirty(true);}
@@ -1885,12 +1902,18 @@ function Scheduler({schedule,setSchedule,profiles,log,resetAllData,exportData,im
       <span style={{fontSize:13,color:C.textHint}}>{activeCount} active profile{activeCount!==1?"s":""} will run on this schedule.</span>
     </div>
     <Card>
-      <SectionTitle>Run log</SectionTitle>
-      <div style={{fontSize:13,color:C.textHint,marginBottom:12}}>A record of every time the scheduler ran and what it found.</div>
+      <SectionTitle action={log.length>10?<Btn onClick={function(){setShowAllLog(function(v){return !v;});}} style={{fontSize:12,padding:"6px 12px"}}>{showAllLog?"Show last 10":"Show all ("+log.length+")"}</Btn>:null}>Run log</SectionTitle>
+      <div style={{fontSize:13,color:C.textHint,marginBottom:12}}>A record of every time the scheduler ran and what it found. Entries older than 30 days are removed automatically.</div>
       {log.length===0
         ?<EmptyState icon="📋" title="No runs logged yet" body="Enable the scheduler and save your settings to start." />
         :<div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {log.slice().reverse().map(function(e,i){return <div key={i} style={{display:"flex",gap:12,padding:"10px 14px",background:C.surfaceAlt,borderRadius:10,fontSize:13}}><span style={{color:C.textHint,whiteSpace:"nowrap",fontFamily:"monospace",fontSize:12}}>{e.time}</span><span style={{color:e.type==="error"?C.error:e.type==="manual"?C.info:C.success}}>{e.msg}</span></div>;})}
+          {(function(){
+            // Newest first; limit to 10 unless expanded
+            var ordered=log.slice().reverse();
+            var visible=showAllLog?ordered:ordered.slice(0,10);
+            return visible.map(function(e,i){return <div key={i} style={{display:"flex",gap:12,padding:"10px 14px",background:C.surfaceAlt,borderRadius:10,fontSize:13}}><span style={{color:C.textHint,whiteSpace:"nowrap",fontFamily:"monospace",fontSize:12}}>{e.time}</span><span style={{color:e.type==="error"?C.error:e.type==="manual"?C.info:C.success}}>{e.msg}</span></div>;});
+          })()}
+          {!showAllLog&&log.length>10&&<div style={{fontSize:12,color:C.textHint,textAlign:"center",padding:"4px"}}>… {log.length-10} more entr{log.length-10===1?"y":"ies"} hidden</div>}
         </div>}
     </Card>
     <Card>
@@ -2061,7 +2084,7 @@ function CVProfile({cv,setCv}){
 }
 
 // ─── Cover Letters ────────────────────────────────────────────────────────────
-function CoverLetters({jobs,cv,anthropicKey,setActiveTab}){
+function CoverLetters({jobs,cv,anthropicKey,setActiveTab,pendingCoverLetterJob,setPendingCoverLetterJob}){
   // Default to only showing Reviewing (non-archived) jobs — that's the "I'm
   // about to apply, draft me a letter" window. Archived and already-applied
   // jobs aren't useful targets. User can flip the toggle for edge cases like
@@ -2083,6 +2106,22 @@ function CoverLetters({jobs,cv,anthropicKey,setActiveTab}){
     }
   // eslint-disable-next-line
   },[eligibleJobs.length,showAllStatuses]);
+  // When the user lands here via "✉ Cover letter" on a job row, pre-select
+  // that job. If the job isn't in the current pool (e.g. status promotion to
+  // Reviewing hasn't propagated yet, or it's outside the filter), turn on
+  // "Show all statuses" so it becomes selectable. Then clear the pending state
+  // so subsequent navigation to this tab doesn't re-trigger the selection.
+  useEffect(function(){
+    if(!pendingCoverLetterJob) return;
+    var target=jobs.find(function(j){return j.id===pendingCoverLetterJob;});
+    if(target){
+      var inPool=eligibleJobs.some(function(j){return j.id===target.id;});
+      if(!inPool) setShowAllStatuses(true);
+      setSelectedJob(target.id);
+    }
+    if(setPendingCoverLetterJob) setPendingCoverLetterJob(null);
+  // eslint-disable-next-line
+  },[pendingCoverLetterJob]);
   var [tone,setTone]=useState("Professional");
   var [letter,setLetter]=useState("");
   var [error,setError]=useState("");
@@ -2551,6 +2590,7 @@ function AppShell({user,onSignOut}){
   // same source. Survives reloads and is included in backups.
   var [dismissedIds,setDismissedIds]=useState(function(){return pick(saved,"dismissedIds",[]);});
   var [pendingProfileRun,setPendingProfileRun]=useState(null); // ephemeral — not persisted
+  var [pendingCoverLetterJob,setPendingCoverLetterJob]=useState(null); // ephemeral — Job ID handed off from Jobs to CoverLetters when "✉ Cover letter" clicked
   var [scoringStatus,setScoringStatus]=useState({active:false,done:0,total:0});
   var [scoringError,setScoringError]=useState("");
   // Toast state for quick-dismiss with undo. Holds the jobs removed within the
@@ -2863,8 +2903,21 @@ function AppShell({user,onSignOut}){
   function addLog(msg,type){
     var now=new Date();
     var time=now.toLocaleDateString()+" "+String(now.getHours()).padStart(2,"0")+":"+String(now.getMinutes()).padStart(2,"0");
-    setLog(function(l){return l.slice(-49).concat([{time:time,msg:msg,type:type||"scheduled"}]);});
+    // Store numeric ts alongside formatted time so retention can prune by age
+    setLog(function(l){return l.slice(-99).concat([{time:time,ts:now.getTime(),msg:msg,type:type||"scheduled"}]);});
   }
+
+  // Prune log entries older than 30 days. Runs once on app startup. Entries
+  // without a ts field (from older builds) are kept to avoid wiping legitimate
+  // recent activity from users upgrading.
+  useEffect(function(){
+    var cutoff=Date.now()-30*24*60*60*1000;
+    setLog(function(l){
+      var pruned=l.filter(function(e){return !e.ts||e.ts>=cutoff;});
+      return pruned.length===l.length?l:pruned;
+    });
+  // eslint-disable-next-line
+  },[]);
 
   var runAllProfiles=useCallback(async function(triggered){
     var active=profiles.filter(function(p){return p.active;});
@@ -2919,14 +2972,36 @@ function AppShell({user,onSignOut}){
     return function(){clearInterval(tickRef.current);};
   },[schedule,runAllProfiles]);
 
+  // Click handler for the per-row "✉ Cover letter" button. Smart: auto-bumps
+  // a "New" job to "Reviewing" since starting to draft a letter clearly means
+  // you're considering the role. Then hands off to the Cover Letters tab via
+  // pendingCoverLetterJob state.
+  function startCoverLetter(jobId){
+    var j=jobs.find(function(x){return x.id===jobId;});
+    if(!j) return;
+    if(j.status==="New"){
+      var nowIso=new Date().toISOString();
+      setJobs(function(prev){return prev.map(function(x){
+        if(x.id!==jobId) return x;
+        // If the user later changes back to New and re-clicks, we don't want
+        // to overwrite an earlier appliedAt — but a job in "New" shouldn't
+        // have appliedAt anyway, so this is just defensive.
+        var patch={status:"Reviewing"};
+        return Object.assign({},x,patch);
+      });});
+    }
+    setPendingCoverLetterJob(jobId);
+    setActiveTab("covers");
+  }
+
   var content={
     dashboard:<Dashboard jobs={jobs} schedule={schedule} setActiveTab={setActiveTab} />,
-    jobs:<Jobs jobs={jobs} setJobs={setJobs} rescoreAll={rescoreAll} scoringStatus={scoringStatus} scoringError={scoringError} cv={cv} sort={sort} setSort={setSort} dismissJob={dismissJob} tombstoneIds={tombstoneIds} />,
+    jobs:<Jobs jobs={jobs} setJobs={setJobs} rescoreAll={rescoreAll} scoringStatus={scoringStatus} scoringError={scoringError} cv={cv} sort={sort} setSort={setSort} dismissJob={dismissJob} tombstoneIds={tombstoneIds} startCoverLetter={startCoverLetter} />,
     profiles:<SearchProfiles profiles={profiles} setProfiles={setProfiles} setJobs={setJobs} afKey={afKey} setAfKey={setAfKey} jsKey={jsKey} setJsKey={setJsKey} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} pendingProfileRun={pendingProfileRun} setPendingProfileRun={setPendingProfileRun} dismissedIds={dismissedIds} />,
     assistant:<ProfileAssistant cv={cv} profiles={profiles} setProfiles={setProfiles} anthropicKey={anthropicKey} conversation={assistantConv} setConversation={setAssistantConv} setActiveTab={setActiveTab} setPendingProfileRun={setPendingProfileRun} jobs={jobs} />,
     scheduler:<Scheduler schedule={schedule} setSchedule={setSchedule} profiles={profiles} log={log} resetAllData={resetAllData} exportData={exportData} importData={importData} validateImport={validateImport} dismissedIds={dismissedIds} clearDismissedIds={function(){setDismissedIds([]);}} />,
     cv:<CVProfile cv={cv} setCv={setCv} />,
-    covers:<CoverLetters jobs={jobs} cv={cv} anthropicKey={anthropicKey} setActiveTab={setActiveTab} />,
+    covers:<CoverLetters jobs={jobs} cv={cv} anthropicKey={anthropicKey} setActiveTab={setActiveTab} pendingCoverLetterJob={pendingCoverLetterJob} setPendingCoverLetterJob={setPendingCoverLetterJob} />,
     reports:<Reports jobs={jobs} cv={cv} anthropicKey={anthropicKey} />,
   };
 
