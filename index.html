@@ -105,7 +105,7 @@
      Sidebar is fixed-position on desktop so it doesn't scroll with content.
      Main area pads itself to make room (via CSS var --sidebar-w set inline). */
   .jt-app{min-height:100vh}
-  .jt-sidebar{position:fixed;top:0;left:0;bottom:0;width:220px;background:#FFFFFF;border-right:1px solid #D9E3DE;display:flex;flex-direction:column;z-index:200;transition:width 0.18s ease,transform 0.22s ease;overflow:hidden}
+  .jt-sidebar{position:fixed;top:0;left:0;bottom:0;width:220px;background:#FFFFFF;border-right:1px solid #D9E3DE;display:flex;flex-direction:column;z-index:200;transition:width 0.18s ease,transform 0.22s ease,background 0.2s ease,border-color 0.2s ease;overflow:hidden}
   .jt-sidebar.collapsed{width:64px}
   .jt-sidebar-scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:8px 0}
   .jt-main{margin-left:220px;transition:margin-left 0.18s ease}
@@ -117,6 +117,15 @@
   /* Sidebar item hover state (desktop only) */
   .jt-sb-item:hover{background:#F0F5F2}
   .jt-sb-item.active{background:#D4E5DB;color:#5C8A7A}
+
+  /* Dark-theme overrides for chrome elements styled via CSS classes (rather
+     than inline C.* references). Inline-styled elements pick up dark colors
+     automatically because applyTheme mutates the C object — but plain CSS
+     rules need explicit overrides. */
+  html[data-theme="dark"] .jt-sidebar{background:#1A2420;border-right-color:#2E3B36}
+  html[data-theme="dark"] .jt-topbar{background:#1A2420!important;border-bottom-color:#2E3B36!important}
+  html[data-theme="dark"] .jt-sb-item:hover{background:#222D29}
+  html[data-theme="dark"] .jt-sb-item.active{background:#1F3530;color:#7AAD9C}
 
   /* Mobile: sidebar becomes a slide-out drawer. Top bar with hamburger appears. */
   @media (max-width:767px){
