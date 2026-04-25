@@ -1218,7 +1218,7 @@ function EmailDialog({recipients,subject,body,onClose,onCopy}){
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
-function Dashboard({jobs,schedule,setActiveTab}){
+function Dashboard({jobs,schedule,setActiveTab,navigateToJobs}){
   // All Dashboard stats reflect the ACTIVE pipeline — archived jobs are excluded
   // so they don't inflate counts or compete for the "Best match" highlight.
   var active=jobs.filter(function(j){return !j.archived;});
@@ -1240,12 +1240,24 @@ function Dashboard({jobs,schedule,setActiveTab}){
       <div style={{fontSize:22,fontWeight:700,marginBottom:6}}>Good to see you! 👋</div>
       <div style={{fontSize:14,opacity:0.85,marginBottom:20}}>Here's your job search summary for today.</div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12}}>
-        {[["Jobs tracked",total,"total in pipeline"],["New to review",newCount,"waiting for you"],["Applications sent",applied,"in progress"],["Best match",topMatch?topMatch.score+"%":"—",topMatch?topMatch.company:"no jobs yet"]].map(function(s){
-          return <div key={s[0]} style={{background:"rgba(255,255,255,0.15)",borderRadius:12,padding:"14px 16px"}}>
-            <div style={{fontSize:24,fontWeight:700,marginBottom:2}}>{s[1]}</div>
-            <div style={{fontSize:12,fontWeight:600,opacity:0.9}}>{s[0]}</div>
-            <div style={{fontSize:11,opacity:0.65,marginTop:2}}>{s[2]}</div>
-          </div>;
+        {[
+          // Each tile defines its own deep-link payload (or null to be non-clickable).
+          // Clicking takes you to My Jobs filtered to whatever's relevant.
+          {label:"Jobs tracked",value:total,sub:"total in pipeline",nav:total>0?{}:null},
+          {label:"New to review",value:newCount,sub:"waiting for you",nav:newCount>0?{status:"New"}:null},
+          {label:"Applications sent",value:applied,sub:"in progress",nav:applied>0?{statusGroup:"applied"}:null},
+          {label:"Best match",value:topMatch?topMatch.score+"%":"—",sub:topMatch?topMatch.company:"no jobs yet",nav:topMatch?{expandId:topMatch.id}:null},
+        ].map(function(s){
+          var clickable=!!(s.nav&&navigateToJobs);
+          var content=<React.Fragment>
+            <div style={{fontSize:24,fontWeight:700,marginBottom:2}}>{s.value}</div>
+            <div style={{fontSize:12,fontWeight:600,opacity:0.9}}>{s.label}</div>
+            <div style={{fontSize:11,opacity:0.65,marginTop:2}}>{s.sub}</div>
+          </React.Fragment>;
+          if(!clickable){
+            return <div key={s.label} style={{background:"rgba(255,255,255,0.15)",borderRadius:12,padding:"14px 16px"}}>{content}</div>;
+          }
+          return <button key={s.label} onClick={function(){navigateToJobs(s.nav);}} style={{background:"rgba(255,255,255,0.15)",borderRadius:12,padding:"14px 16px",border:"none",color:"inherit",cursor:"pointer",textAlign:"left",fontFamily:"inherit",transition:"background 0.15s ease, transform 0.1s ease"}} onMouseEnter={function(e){e.currentTarget.style.background="rgba(255,255,255,0.25)";}} onMouseLeave={function(e){e.currentTarget.style.background="rgba(255,255,255,0.15)";}}>{content}</button>;
         })}
       </div>
     </div>
@@ -1262,16 +1274,25 @@ function Dashboard({jobs,schedule,setActiveTab}){
       <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
         {ACTIVE_STATUSES.map(function(s){
           var count=active.filter(function(j){return j.status===s;}).length;
-          return <div key={s} style={{flex:"1 1 100px",minWidth:90,background:STATUS[s].bg,borderRadius:12,padding:"14px 10px",textAlign:"center"}}>
+          var clickable=count>0&&navigateToJobs;
+          var inner=<React.Fragment>
             <div style={{fontSize:22,fontWeight:700,color:STATUS[s].color}}>{count}</div>
             <div style={{fontSize:11,fontWeight:600,color:STATUS[s].color,marginTop:4,opacity:0.8}}>{s}</div>
-          </div>;
+          </React.Fragment>;
+          if(!clickable){
+            return <div key={s} style={{flex:"1 1 100px",minWidth:90,background:STATUS[s].bg,borderRadius:12,padding:"14px 10px",textAlign:"center"}}>{inner}</div>;
+          }
+          return <button key={s} onClick={function(){navigateToJobs({status:s});}} style={{flex:"1 1 100px",minWidth:90,background:STATUS[s].bg,borderRadius:12,padding:"14px 10px",textAlign:"center",border:"none",cursor:"pointer",fontFamily:"inherit",transition:"transform 0.1s ease, box-shadow 0.15s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,0.08)";}} onMouseLeave={function(e){e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";}}>{inner}</button>;
         })}
       </div>
       {closedTotal>0&&<div style={{marginTop:14,paddingTop:14,borderTop:"1px solid "+C.border,display:"flex",alignItems:"center",gap:16,flexWrap:"wrap",fontSize:12,color:C.textSecondary}}>
         <span style={{fontWeight:700,textTransform:"uppercase",letterSpacing:"0.5px",color:C.textHint,fontSize:11}}>Closed</span>
-        {rejectedCount>0&&<span><b style={{color:STATUS.Rejected.color}}>{rejectedCount}</b> rejected</span>}
-        {noResponseCount>0&&<span><b style={{color:STATUS["No response"].color}}>{noResponseCount}</b> no response</span>}
+        {rejectedCount>0&&(navigateToJobs
+          ?<button onClick={function(){navigateToJobs({status:"Rejected"});}} style={{background:"none",border:"none",cursor:"pointer",color:C.textSecondary,fontFamily:"inherit",fontSize:12,padding:0,textDecoration:"underline",textDecorationColor:"transparent",textUnderlineOffset:3,transition:"text-decoration-color 0.15s"}} onMouseEnter={function(e){e.currentTarget.style.textDecorationColor=STATUS.Rejected.color;}} onMouseLeave={function(e){e.currentTarget.style.textDecorationColor="transparent";}}><b style={{color:STATUS.Rejected.color}}>{rejectedCount}</b> rejected</button>
+          :<span><b style={{color:STATUS.Rejected.color}}>{rejectedCount}</b> rejected</span>)}
+        {noResponseCount>0&&(navigateToJobs
+          ?<button onClick={function(){navigateToJobs({status:"No response"});}} style={{background:"none",border:"none",cursor:"pointer",color:C.textSecondary,fontFamily:"inherit",fontSize:12,padding:0,textDecoration:"underline",textDecorationColor:"transparent",textUnderlineOffset:3,transition:"text-decoration-color 0.15s"}} onMouseEnter={function(e){e.currentTarget.style.textDecorationColor=STATUS["No response"].color;}} onMouseLeave={function(e){e.currentTarget.style.textDecorationColor="transparent";}}><b style={{color:STATUS["No response"].color}}>{noResponseCount}</b> no response</button>
+          :<span><b style={{color:STATUS["No response"].color}}>{noResponseCount}</b> no response</span>)}
         <span style={{color:C.textHint,marginLeft:"auto"}}>Total closed: {closedTotal}</span>
       </div>}
       {(function(){
@@ -1301,14 +1322,18 @@ function Dashboard({jobs,schedule,setActiveTab}){
         ?<EmptyState icon="🔍" title="No jobs yet" body="Go to Search Profiles to fetch jobs automatically." />
         :<div style={{display:"flex",flexDirection:"column",gap:10}}>
           {active.slice(0,5).map(function(j){
-            return <div key={j.id} style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",background:C.surfaceAlt,borderRadius:12}}>
+            var inner=<React.Fragment>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:14,fontWeight:700,color:C.textPrimary,marginBottom:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{j.title}</div>
                 <div style={{fontSize:12,color:C.textSecondary}}>{j.company} · {j.location}</div>
               </div>
               <ScorePill score={j.score} rationale={j.rationale} scored={j.scored!==false} />
               <Chip label={j.status} bg={STATUS[j.status].bg} color={STATUS[j.status].color} />
-            </div>;
+            </React.Fragment>;
+            if(!navigateToJobs){
+              return <div key={j.id} style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",background:C.surfaceAlt,borderRadius:12}}>{inner}</div>;
+            }
+            return <button key={j.id} onClick={function(){navigateToJobs({expandId:j.id});}} style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",background:C.surfaceAlt,borderRadius:12,border:"none",cursor:"pointer",fontFamily:"inherit",textAlign:"left",width:"100%",transition:"background 0.15s ease"}} onMouseEnter={function(e){e.currentTarget.style.background=C.primaryLight;}} onMouseLeave={function(e){e.currentTarget.style.background=C.surfaceAlt;}}>{inner}</button>;
           })}
         </div>}
     </Card>
@@ -1411,8 +1436,13 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
 }
 
 // ─── Jobs ─────────────────────────────────────────────────────────────────────
-function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSort,dismissJob,tombstoneIds,startCoverLetter}){
+function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSort,dismissJob,tombstoneIds,startCoverLetter,pendingJobsView,setPendingJobsView}){
   var [filter,setFilter]=useState("All");
+  // Optional multi-status filter (overlays on top of `filter`). Used by Dashboard
+  // deep-links like "Applications sent" → applied/interview/offer/rejected/no-response.
+  // When set, the filter chip shows a removable badge so the user knows why their
+  // view is constrained and can clear it.
+  var [statusGroupFilter,setStatusGroupFilter]=useState(null); // null | "applied" | (extensible)
   var [sourceFilter,setSourceFilter]=useState("all");
   var [scoreFilter,setScoreFilter]=useState(0);
   var [search,setSearch]=useState("");
@@ -1423,12 +1453,40 @@ function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSor
   // how we handle ID types elsewhere (numeric manual jobs vs string API jobs).
   var [selectedIds,setSelectedIds]=useState(new Set());
   var [form,setForm]=useState({title:"",company:"",location:"",tags:"",applyUrl:"",salary:"",employmentType:"",description:""});
+
+  // Apply Dashboard deep-link payload on mount (or when it changes). After
+  // applying, clear the pending state so navigating away & back doesn't re-apply.
+  useEffect(function(){
+    if(!pendingJobsView) return;
+    var p=pendingJobsView;
+    if(p.status&&typeof p.status==="string"){ setFilter(p.status); setStatusGroupFilter(null); }
+    else if(p.statusGroup){ setStatusGroupFilter(p.statusGroup); setFilter("All"); }
+    else if(Object.keys(p).length===0||p.expandId){ /* clear filters for unfiltered view */ setFilter("All"); setStatusGroupFilter(null); }
+    if(typeof p.archived==="boolean") setShowArchived(p.archived);
+    // Clear other filters that might confuse the deep-link target
+    setSourceFilter("all"); setScoreFilter(0); setSearch("");
+    if(p.expandId){
+      // Coerce to whatever ID type the job uses; jobs may have numeric or string IDs
+      var match=jobs.find(function(j){return String(j.id)===String(p.expandId);});
+      if(match) setExpandedId(match.id);
+    }
+    if(setPendingJobsView) setPendingJobsView(null);
+    // Smooth-scroll to top so the user lands at the filter card, not mid-list
+    setTimeout(function(){ window.scrollTo({top:0,behavior:"smooth"}); },0);
+  // eslint-disable-next-line
+  },[pendingJobsView]);
+
   // Archive filter: by default, archived jobs are hidden everywhere. User can
   // flip the toggle to see them (greyed + 📦 in the row). Applied first so
   // status / source / score / search counts reflect only visible jobs.
   var filtered=jobs
     .filter(function(j){return showArchived?true:!j.archived;})
     .filter(function(j){return filter==="All"||j.status===filter;})
+    .filter(function(j){
+      if(!statusGroupFilter) return true;
+      if(statusGroupFilter==="applied") return APPLIED_STATUSES.includes(j.status);
+      return true;
+    })
     .filter(function(j){return sourceFilter==="all"||j.sourceType===sourceFilter;})
     .filter(function(j){
       if(scoreFilter===0) return true;
@@ -1557,13 +1615,17 @@ function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSor
         </Sel>
       </div>
       <div style={{fontSize:12,color:C.textHint,marginBottom:8,fontWeight:600,letterSpacing:"0.5px"}}>FILTER BY STATUS</div>
+      {statusGroupFilter==="applied"&&<div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"6px 12px",borderRadius:20,background:C.primaryLight,border:"1.5px dashed "+C.primary,color:C.primary,fontSize:12,fontWeight:600,marginBottom:10}}>
+        Showing all applied jobs (Applied, Interview, Offer, Rejected, No response)
+        <button onClick={function(){setStatusGroupFilter(null);}} style={{background:"none",border:"none",cursor:"pointer",color:C.primary,fontSize:14,fontWeight:700,padding:0,lineHeight:1}}>×</button>
+      </div>}
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14}}>
         {["All"].concat(STATUSES).map(function(s){
-          var on=filter===s;
+          var on=filter===s&&!statusGroupFilter;
           // Count only jobs visible under current archive setting — otherwise
           // the chip promises results the filter chain will then hide.
           var cnt=s!=="All"?"("+jobs.filter(function(j){return j.status===s&&(showArchived||!j.archived);}).length+")":"";
-          return <button key={s} onClick={function(){setFilter(s);}} style={{fontSize:13,fontWeight:on?700:500,padding:"7px 16px",borderRadius:20,border:"1.5px solid "+(on?STATUS[s]?STATUS[s].color:C.primary:C.border),background:on?(STATUS[s]?STATUS[s].bg:C.primaryLight):"transparent",color:on?(STATUS[s]?STATUS[s].color:C.primary):C.textSecondary,cursor:"pointer"}}>{s} {cnt}</button>;
+          return <button key={s} onClick={function(){setFilter(s);setStatusGroupFilter(null);}} style={{fontSize:13,fontWeight:on?700:500,padding:"7px 16px",borderRadius:20,border:"1.5px solid "+(on?STATUS[s]?STATUS[s].color:C.primary:C.border),background:on?(STATUS[s]?STATUS[s].bg:C.primaryLight):"transparent",color:on?(STATUS[s]?STATUS[s].color:C.primary):C.textSecondary,cursor:"pointer"}}>{s} {cnt}</button>;
         })}
       </div>
       <div style={{fontSize:12,color:C.textHint,marginBottom:8,fontWeight:600,letterSpacing:"0.5px"}}>FILTER BY SOURCE</div>
@@ -2687,6 +2749,19 @@ function AppShell({user,onSignOut}){
   var [dismissedIds,setDismissedIds]=useState(function(){return pick(saved,"dismissedIds",[]);});
   var [pendingProfileRun,setPendingProfileRun]=useState(null); // ephemeral — not persisted
   var [pendingCoverLetterJob,setPendingCoverLetterJob]=useState(null); // ephemeral — Job ID handed off from Jobs to CoverLetters when "✉ Cover letter" clicked
+  // Deep-link payload from Dashboard → Jobs. Shape: {filter: {...}, expandId: <jobId>}.
+  // Jobs reads this on mount, applies the filter / expansion, then clears it.
+  // Examples:
+  //   navigateToJobs({status: "Applied"})           → My Jobs filtered to Applied
+  //   navigateToJobs({statusGroup: "applied"})      → filtered to APPLIED_STATUSES (any post-application state)
+  //   navigateToJobs({status: "Rejected"})          → just rejected jobs
+  //   navigateToJobs({expandId: 1234567})           → no filter change, just expand that job
+  //   navigateToJobs({})                            → unfiltered Jobs view
+  var [pendingJobsView,setPendingJobsView]=useState(null);
+  function navigateToJobs(payload){
+    setPendingJobsView(payload||{});
+    setActiveTab("jobs");
+  }
   var [scoringStatus,setScoringStatus]=useState({active:false,done:0,total:0});
   var [scoringError,setScoringError]=useState("");
   // Toast state for quick-dismiss with undo. Holds the jobs removed within the
@@ -3091,8 +3166,8 @@ function AppShell({user,onSignOut}){
   }
 
   var content={
-    dashboard:<Dashboard jobs={jobs} schedule={schedule} setActiveTab={setActiveTab} />,
-    jobs:<Jobs jobs={jobs} setJobs={setJobs} rescoreAll={rescoreAll} scoringStatus={scoringStatus} scoringError={scoringError} cv={cv} sort={sort} setSort={setSort} dismissJob={dismissJob} tombstoneIds={tombstoneIds} startCoverLetter={startCoverLetter} />,
+    dashboard:<Dashboard jobs={jobs} schedule={schedule} setActiveTab={setActiveTab} navigateToJobs={navigateToJobs} />,
+    jobs:<Jobs jobs={jobs} setJobs={setJobs} rescoreAll={rescoreAll} scoringStatus={scoringStatus} scoringError={scoringError} cv={cv} sort={sort} setSort={setSort} dismissJob={dismissJob} tombstoneIds={tombstoneIds} startCoverLetter={startCoverLetter} pendingJobsView={pendingJobsView} setPendingJobsView={setPendingJobsView} />,
     profiles:<SearchProfiles profiles={profiles} setProfiles={setProfiles} setJobs={setJobs} afKey={afKey} setAfKey={setAfKey} jsKey={jsKey} setJsKey={setJsKey} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} pendingProfileRun={pendingProfileRun} setPendingProfileRun={setPendingProfileRun} dismissedIds={dismissedIds} />,
     assistant:<ProfileAssistant cv={cv} profiles={profiles} setProfiles={setProfiles} anthropicKey={anthropicKey} conversation={assistantConv} setConversation={setAssistantConv} setActiveTab={setActiveTab} setPendingProfileRun={setPendingProfileRun} jobs={jobs} />,
     scheduler:<Scheduler schedule={schedule} setSchedule={setSchedule} profiles={profiles} log={log} resetAllData={resetAllData} exportData={exportData} importData={importData} validateImport={validateImport} dismissedIds={dismissedIds} clearDismissedIds={function(){setDismissedIds([]);}} />,
