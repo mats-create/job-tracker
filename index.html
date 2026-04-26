@@ -2272,6 +2272,8 @@ function InlineListEditor({items,onChange,fields,addLabel,sortFields,defaultSort
     })}
   </div>;
 
+  var isMobile=typeof window!=="undefined"&&window.innerWidth<600;
+
   return <div>
     {items.length>1&&sortControls}
     {/* Saved rows */}
@@ -2280,7 +2282,8 @@ function InlineListEditor({items,onChange,fields,addLabel,sortFields,defaultSort
         if(editId===item.id){
           return <div key={item.id} style={{display:"flex",gap:8,alignItems:"flex-start",padding:"6px 8px",background:C.primaryLight,borderRadius:8,marginBottom:4}}>
             {fields.map(function(f){
-              return <div key={f.key} style={{flex:f.flex||1,minWidth:f.minWidth||0}}>
+              if(isMobile&&f.mobileHide) return null;
+              return <div key={f.key} style={{flex:f.flex||1,minWidth:isMobile?0:(f.minWidth||0)}}>
                 {renderCell(f,draft[f.key],function(v){ setField(f.key,v); })}
               </div>;
             })}
@@ -2292,9 +2295,10 @@ function InlineListEditor({items,onChange,fields,addLabel,sortFields,defaultSort
         }
         return <div key={item.id} style={{display:"flex",gap:8,alignItems:"flex-start",padding:"7px 8px",borderRadius:8,marginBottom:3,background:C.surfaceAlt}}>
           {fields.map(function(f){
+            if(isMobile&&f.mobileHide) return null;
             var val=item[f.key];
             var display=f.type==="number"&&val?val+" yr"+(val!==1?"s":""):val;
-            return <div key={f.key} style={{flex:f.flex||1,minWidth:f.minWidth||0,fontSize:13,color:C.textPrimary,whiteSpace:f.multiline?"pre-wrap":"nowrap",overflow:f.multiline?"visible":"hidden",textOverflow:f.multiline?"unset":"ellipsis",wordBreak:f.multiline?"break-word":"normal",lineHeight:1.45}}>
+            return <div key={f.key} style={{flex:f.flex||1,minWidth:isMobile?0:(f.minWidth||0),fontSize:13,color:C.textPrimary,whiteSpace:f.multiline?"pre-wrap":"nowrap",overflow:f.multiline?"visible":"hidden",textOverflow:f.multiline?"unset":"ellipsis",wordBreak:f.multiline?"break-word":"normal",lineHeight:1.45}}>
               {display||<span style={{color:C.textHint}}>—</span>}
             </div>;
           })}
@@ -2308,7 +2312,8 @@ function InlineListEditor({items,onChange,fields,addLabel,sortFields,defaultSort
     {/* Add row */}
     {adding&&<div style={{display:"flex",gap:8,alignItems:"flex-start",padding:"6px 8px",background:C.primaryLight,borderRadius:8,marginBottom:8}}>
       {fields.map(function(f){
-        return <div key={f.key} style={{flex:f.flex||1,minWidth:f.minWidth||0}}>
+        if(isMobile&&f.mobileHide) return null;
+        return <div key={f.key} style={{flex:f.flex||1,minWidth:isMobile?0:(f.minWidth||0)}}>
           {renderCell(f,draft[f.key],function(v){ setField(f.key,v); })}
         </div>;
       })}
@@ -2520,12 +2525,7 @@ function CVProfile({cv,setCv}){
           {key:"name",label:"Tool / Software",placeholder:"e.g. Figma",flex:2,minWidth:100},
           {key:"years",label:"Years",type:"number",flex:0,minWidth:60},
           {key:"level",label:"Level",type:"select",options:PROFICIENCY,flex:1,minWidth:90},
-          {key:"employers",label:"Employer(s)",placeholder:"e.g. Spotify, IKEA",flex:2,minWidth:100},
-        ]}
-      />
-    </Card>
-    <Card>
-      <SectionTitle>Skills & competencies <span style={{fontSize:11,fontWeight:400,color:C.textHint,marginLeft:6}}>optional</span></SectionTitle>
+          {key:"employers",label:"Employer(s)",placeholder:"e.g. Spotify, IKEA",flex:2,minWidth:100,mobileHide:true}, <span style={{fontSize:11,fontWeight:400,color:C.textHint,marginLeft:6}}>optional</span></SectionTitle>
       <div style={{fontSize:13,color:C.textHint,marginBottom:14}}>List your professional skills and areas of expertise. Separate from tools — these are capabilities like "Design systems", "User research", "Stakeholder management".</div>
       <InlineListEditor
         items={cv.skills||[]}
@@ -2537,7 +2537,7 @@ function CVProfile({cv,setCv}){
           {key:"name",label:"Skill / Competency",placeholder:"e.g. Design systems",flex:2,minWidth:120},
           {key:"years",label:"Years",type:"number",flex:0,minWidth:60},
           {key:"level",label:"Level",type:"select",options:PROFICIENCY,flex:1,minWidth:90},
-          {key:"employers",label:"Employer(s)",placeholder:"e.g. Spotify, IKEA",flex:2,minWidth:100},
+          {key:"employers",label:"Employer(s)",placeholder:"e.g. Spotify, IKEA",flex:2,minWidth:100,mobileHide:true},
         ]}
       />
     </Card>
@@ -2552,7 +2552,7 @@ function CVProfile({cv,setCv}){
         sortFields={[{key:"year",label:"Year"},{key:"employer",label:"Employer"}]}
         fields={[
           {key:"description",label:"Achievement",placeholder:"e.g. Reduced onboarding time by 40%",flex:4,minWidth:180,multiline:true},
-          {key:"employer",label:"Employer",placeholder:"e.g. Spotify",flex:1,minWidth:80},
+          {key:"employer",label:"Employer",placeholder:"e.g. Spotify",flex:1,minWidth:80,mobileHide:true},
           {key:"year",label:"Year",placeholder:"2022",flex:0,minWidth:60},
         ]}
       />
