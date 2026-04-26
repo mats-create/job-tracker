@@ -3175,10 +3175,13 @@ function AppShell({user,onSignOut}){
   // local writes to the cloud until we've heard back from it once — otherwise
   // the local default state would overwrite cloud state on first load.
   var [cloudReady,setCloudReady]=useState(false);
-  var cloudReadyRef=useRef(false); // ref copy so persistence effect doesn't re-fire on cloudReady flip
-  // Track the most recent cloud doc revision so we can ignore echoes from our
-  // own writes. Without this, every cloud save triggers a snapshot which would
-  // cause unnecessary local re-renders.
+  var cloudReadyRef=useRef(false);
+  // After the initial cloud snapshot is applied, we suppress Firestore writes
+  // for 2 seconds. This gives React time to settle ALL the setCv/setJobs/etc
+  // state updates from hydration before the persistence effect can fire and
+  // write stale pre-hydration state (e.g. tools:[]) back to Firestore.
+  // setTimeout(0) was not enough — React batches updates across ticks.
+  var suppressWriteUntilRef=useRef(0);
   var lastCloudWriteRef=useRef(0);
 
   // Persist state on any change. Writes to localStorage immediately (sync,
@@ -3192,7 +3195,7 @@ function AppShell({user,onSignOut}){
   useEffect(function(){
     var data={activeTab:activeTab,jobs:jobs,profiles:profiles,cv:cv,afKey:afKey,jsKey:jsKey,anthropicKey:anthropicKey,schedule:schedule,log:log,sort:sort,assistantConv:assistantConv,dismissedIds:dismissedIds,sidebarCollapsed:sidebarCollapsed};
     saveState(data);
-    if(cloudReadyRef.current&&user&&user.uid){
+    if(cloudReadyRef.current&&user&&user.uid&&Date.now()>suppressWriteUntilRef.current){
       console.log("[CloudSync] Writing to Firestore. cv.tools:", cv.tools&&cv.tools.length, "cv.skills:", cv.skills&&cv.skills.length, "cv.achievements:", cv.achievements&&cv.achievements.length);
       lastCloudWriteRef.current=Date.now();
       cloudSave(user.uid,data);
@@ -3227,19 +3230,14 @@ function AppShell({user,onSignOut}){
           if(typeof cloudData.sort==="string") setSort(cloudData.sort);
           if(Array.isArray(cloudData.assistantConv)) setAssistantConv(cloudData.assistantConv);
           if(Array.isArray(cloudData.dismissedIds)) setDismissedIds(cloudData.dismissedIds);
-          // Don't sync sidebarCollapsed or activeTab — those are device-local
-          // UI preferences that shouldn't follow you across devices.
         }
-        // Cloud is now hydrated. Defer enabling cloud writes by one tick so
-        // all the setCv/setJobs/etc calls above have settled into React state
-        // before the persistence effect can fire and write to Firestore.
-        // Without this defer, the persistence effect sees pre-hydration state
-        // and writes empty defaults (tools:[], skills:[], etc.) to Firestore,
-        // clobbering the data we just read from it.
-        setTimeout(function(){
-          cloudReadyRef.current=true;
-          setCloudReady(true);
-        },0);
+        // Suppress Firestore writes for 2 seconds after hydration so React has
+        // time to settle all state updates before the persistence effect fires.
+        // This prevents writing stale pre-hydration state (e.g. tools:[]) back
+        // to Firestore and clobbering the data we just read from it.
+        suppressWriteUntilRef.current=Date.now()+2000;
+        cloudReadyRef.current=true;
+        setCloudReady(true);
       }else if(cloudData){
         // Subsequent snapshots = changes from another device. Ignore if it
         // looks like our own echo (within 2s of our last write).
