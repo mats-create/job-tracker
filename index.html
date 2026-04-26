@@ -652,10 +652,33 @@ function cvSummaryText(cv){
   if(cv.locations) parts.push("Preferred locations: "+cv.locations);
   if(cv.workType&&cv.workType!=="Any") parts.push("Work type preference: "+cv.workType);
   if(cv.salary) parts.push("Salary expectation: "+cv.salary);
+  // Structured sections — each provides high-precision signal for scoring,
+  // cover letter generation, and profile assistant. These are more reliable
+  // than inferring the same data from unstructured CV prose.
+  if(cv.tools&&cv.tools.length){
+    parts.push("TOOLS & SOFTWARE:\n"+cv.tools.map(function(t){
+      var base="- "+t.name+" ("+t.years+" yr"+(t.years!==1?"s":"")+", "+t.level+")";
+      return t.employers?base+" — "+t.employers:base;
+    }).join("\n"));
+  }
+  if(cv.skills&&cv.skills.length){
+    parts.push("SKILLS & COMPETENCIES:\n"+cv.skills.map(function(s){
+      var base="- "+s.name+" ("+s.years+" yr"+(s.years!==1?"s":"")+", "+s.level+")";
+      return s.employers?base+" — "+s.employers:base;
+    }).join("\n"));
+  }
+  if(cv.achievements&&cv.achievements.length){
+    parts.push("KEY ACHIEVEMENTS:\n"+cv.achievements.map(function(a){
+      var line="- "+a.description;
+      if(a.employer) line+=" @ "+a.employer;
+      if(a.year) line+=" ("+a.year+")";
+      return line;
+    }).join("\n"));
+  }
   return parts.join("\n\n");
 }
 
-function hasCv(cv){ return !!(cv&&(cv.text||cv.roles||cv.industries||cv.locations)); }
+function hasCv(cv){ return !!(cv&&(cv.text||cv.roles||cv.industries||cv.locations||(cv.tools&&cv.tools.length)||(cv.skills&&cv.skills.length)||(cv.achievements&&cv.achievements.length))); }
 
 // ─── PDF export (cover letters) ───────────────────────────────────────────────
 // Uses the browser's built-in print-to-PDF so we don't add any library.
@@ -2118,6 +2141,125 @@ function Scheduler({schedule,setSchedule,profiles,log,resetAllData,exportData,im
 }
 
 // ─── CV & Profile ─────────────────────────────────────────────────────────────
+// ─── InlineListEditor ─────────────────────────────────────────────────────────
+// Reusable spreadsheet-style list editor. Used for Tools, Skills, Achievements.
+// `fields` defines column specs: [{key, label, placeholder, type, width}]
+// `items` is the current array; `onChange` is called with the updated array.
+// `type` can be "text" | "number" | "select"; select needs `options` array.
+const PROFICIENCY = ["Beginner","Intermediate","Advanced","Expert"];
+
+function InlineListEditor({items,onChange,fields,addLabel}){
+  var [editId,setEditId]=useState(null);
+  var [draft,setDraft]=useState({});
+  var [adding,setAdding]=useState(false);
+
+  function emptyDraft(){
+    var d={};
+    fields.forEach(function(f){ d[f.key]=f.type==="number"?0:""; });
+    return d;
+  }
+  function startAdd(){
+    setDraft(emptyDraft());
+    setAdding(true);
+    setEditId(null);
+  }
+  function startEdit(item){
+    setDraft(Object.assign({},item));
+    setEditId(item.id);
+    setAdding(false);
+  }
+  function cancel(){
+    setAdding(false);
+    setEditId(null);
+    setDraft({});
+  }
+  function save(){
+    // Require at least the first field to be non-empty
+    var firstKey=fields[0].key;
+    if(!String(draft[firstKey]||"").trim()) return;
+    if(adding){
+      onChange(items.concat([Object.assign({id:Date.now()},draft)]));
+    } else {
+      onChange(items.map(function(x){ return x.id===editId?Object.assign({},x,draft):x; }));
+    }
+    cancel();
+  }
+  function remove(id){
+    onChange(items.filter(function(x){ return x.id!==id; }));
+  }
+  function setField(key,val){
+    setDraft(function(d){ return Object.assign({},d,{[key]:val}); });
+  }
+
+  function renderCell(f,val,onChange){
+    var baseStyle={fontSize:13,padding:"6px 8px",borderRadius:7,border:"1.5px solid "+C.border,background:C.surface,color:C.textPrimary,fontFamily:"inherit",width:"100%",boxSizing:"border-box"};
+    if(f.type==="select"){
+      return <select value={val||""} onChange={function(e){onChange(e.target.value);}} style={baseStyle}>
+        {(f.options||[]).map(function(o){ return <option key={o}>{o}</option>; })}
+      </select>;
+    }
+    if(f.type==="number"){
+      return <input type="number" min={0} max={50} value={val||""} onChange={function(e){onChange(Number(e.target.value));}} style={Object.assign({},baseStyle,{width:60})} />;
+    }
+    return <input type="text" value={val||""} onChange={function(e){onChange(e.target.value);}} placeholder={f.placeholder||""} style={baseStyle} />;
+  }
+
+  var isEditing=adding||editId!==null;
+  return <div>
+    {/* Saved rows */}
+    {items.length>0&&<div style={{marginBottom:8}}>
+      {/* Header */}
+      <div style={{display:"flex",gap:8,alignItems:"center",padding:"4px 8px",marginBottom:4}}>
+        {fields.map(function(f){
+          return <div key={f.key} style={{flex:f.flex||1,fontSize:11,fontWeight:700,color:C.textHint,textTransform:"uppercase",letterSpacing:"0.5px",minWidth:f.minWidth||0}}>{f.label}</div>;
+        })}
+        <div style={{width:56}}></div>
+      </div>
+      {items.map(function(item){
+        if(editId===item.id){
+          // Inline edit row
+          return <div key={item.id} style={{display:"flex",gap:8,alignItems:"center",padding:"6px 8px",background:C.primaryLight,borderRadius:8,marginBottom:4}}>
+            {fields.map(function(f){
+              return <div key={f.key} style={{flex:f.flex||1,minWidth:f.minWidth||0}}>
+                {renderCell(f,draft[f.key],function(v){ setField(f.key,v); })}
+              </div>;
+            })}
+            <div style={{display:"flex",gap:4,width:56,flexShrink:0}}>
+              <button onClick={save} title="Save" style={{flex:1,background:C.primary,color:"#fff",border:"none",borderRadius:6,padding:"5px 0",cursor:"pointer",fontSize:13}}>✓</button>
+              <button onClick={cancel} title="Cancel" style={{flex:1,background:C.border,color:C.textPrimary,border:"none",borderRadius:6,padding:"5px 0",cursor:"pointer",fontSize:13}}>✗</button>
+            </div>
+          </div>;
+        }
+        // Display row
+        return <div key={item.id} style={{display:"flex",gap:8,alignItems:"center",padding:"7px 8px",borderRadius:8,marginBottom:3,background:C.surfaceAlt}}>
+          {fields.map(function(f){
+            return <div key={f.key} style={{flex:f.flex||1,minWidth:f.minWidth||0,fontSize:13,color:C.textPrimary,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+              {f.type==="number"&&item[f.key]?item[f.key]+" yr"+(item[f.key]!==1?"s":""):item[f.key]||<span style={{color:C.textHint}}>—</span>}
+            </div>;
+          })}
+          <div style={{display:"flex",gap:4,width:56,flexShrink:0}}>
+            <button onClick={function(){ startEdit(item); }} disabled={isEditing} title="Edit" style={{flex:1,background:"none",border:"1px solid "+C.border,borderRadius:6,padding:"4px 0",cursor:isEditing?"not-allowed":"pointer",fontSize:12,color:C.textSecondary}}>✏</button>
+            <button onClick={function(){ remove(item.id); }} disabled={isEditing} title="Delete" style={{flex:1,background:"none",border:"1px solid "+C.border,borderRadius:6,padding:"4px 0",cursor:isEditing?"not-allowed":"pointer",fontSize:12,color:C.error}}>🗑</button>
+          </div>
+        </div>;
+      })}
+    </div>}
+    {/* Add row */}
+    {adding&&<div style={{display:"flex",gap:8,alignItems:"center",padding:"6px 8px",background:C.primaryLight,borderRadius:8,marginBottom:8}}>
+      {fields.map(function(f){
+        return <div key={f.key} style={{flex:f.flex||1,minWidth:f.minWidth||0}}>
+          {renderCell(f,draft[f.key],function(v){ setField(f.key,v); })}
+        </div>;
+      })}
+      <div style={{display:"flex",gap:4,width:56,flexShrink:0}}>
+        <button onClick={save} title="Save" style={{flex:1,background:C.primary,color:"#fff",border:"none",borderRadius:6,padding:"5px 0",cursor:"pointer",fontSize:13}}>✓</button>
+        <button onClick={cancel} title="Cancel" style={{flex:1,background:C.border,color:C.textPrimary,border:"none",borderRadius:6,padding:"5px 0",cursor:"pointer",fontSize:13}}>✗</button>
+      </div>
+    </div>}
+    {!isEditing&&<button onClick={startAdd} style={{fontSize:13,color:C.primary,background:"none",border:"1.5px dashed "+C.primary,borderRadius:8,padding:"7px 14px",cursor:"pointer",fontWeight:600,width:"100%",marginTop:items.length?4:0}}>+ {addLabel||"Add entry"}</button>}
+  </div>;
+}
+
 function CVProfile({cv,setCv}){
   // Default to upload tab if a file has been uploaded previously, otherwise paste
   var [tab,setTab]=useState(cv.uploaded?"upload":"paste");
@@ -2207,6 +2349,50 @@ function CVProfile({cv,setCv}){
         <div><Label hint="Remote, hybrid, or in the office?">Work type preference</Label><Sel value={cv.workType||"Any"} onChange={function(e){var v=e.target.value;setCv(function(c){return Object.assign({},c,{workType:v});}); }}>{["Any","Remote","Hybrid","On-site"].map(function(o){return <option key={o}>{o}</option>;})}</Sel></div>
       </div>
       <div style={{marginTop:16}}><Btn variant="primary" onClick={function(){alert("Profile saved!");}}>Save profile</Btn></div>
+    </Card>
+    <Card>
+      <SectionTitle>Tools & software <span style={{fontSize:11,fontWeight:400,color:C.textHint,marginLeft:6}}>optional</span></SectionTitle>
+      <div style={{fontSize:13,color:C.textHint,marginBottom:14}}>List the tools and software you've used professionally. This feeds the AI matching and cover letter generation with precise, verifiable signal.</div>
+      <InlineListEditor
+        items={cv.tools||[]}
+        onChange={function(v){setCv(function(c){return Object.assign({},c,{tools:v});});}}
+        addLabel="Add tool"
+        fields={[
+          {key:"name",label:"Tool / Software",placeholder:"e.g. Figma",flex:2,minWidth:100},
+          {key:"years",label:"Years",type:"number",flex:0,minWidth:60},
+          {key:"level",label:"Level",type:"select",options:PROFICIENCY,flex:1,minWidth:90},
+          {key:"employers",label:"Employer(s)",placeholder:"e.g. Spotify, IKEA",flex:2,minWidth:100},
+        ]}
+      />
+    </Card>
+    <Card>
+      <SectionTitle>Skills & competencies <span style={{fontSize:11,fontWeight:400,color:C.textHint,marginLeft:6}}>optional</span></SectionTitle>
+      <div style={{fontSize:13,color:C.textHint,marginBottom:14}}>List your professional skills and areas of expertise. Separate from tools — these are capabilities like "Design systems", "User research", "Stakeholder management".</div>
+      <InlineListEditor
+        items={cv.skills||[]}
+        onChange={function(v){setCv(function(c){return Object.assign({},c,{skills:v});});}}
+        addLabel="Add skill"
+        fields={[
+          {key:"name",label:"Skill / Competency",placeholder:"e.g. Design systems",flex:2,minWidth:120},
+          {key:"years",label:"Years",type:"number",flex:0,minWidth:60},
+          {key:"level",label:"Level",type:"select",options:PROFICIENCY,flex:1,minWidth:90},
+          {key:"employers",label:"Employer(s)",placeholder:"e.g. Spotify, IKEA",flex:2,minWidth:100},
+        ]}
+      />
+    </Card>
+    <Card>
+      <SectionTitle>Achievements & highlights <span style={{fontSize:11,fontWeight:400,color:C.textHint,marginLeft:6}}>optional</span></SectionTitle>
+      <div style={{fontSize:13,color:C.textHint,marginBottom:14}}>Specific, measurable things you've accomplished. These are the facts Claude uses when writing cover letters — the more concrete the better ("Reduced onboarding time by 40%", not "Improved processes").</div>
+      <InlineListEditor
+        items={cv.achievements||[]}
+        onChange={function(v){setCv(function(c){return Object.assign({},c,{achievements:v});});}}
+        addLabel="Add achievement"
+        fields={[
+          {key:"description",label:"Achievement",placeholder:"e.g. Reduced onboarding time by 40%",flex:4,minWidth:180},
+          {key:"employer",label:"Employer",placeholder:"e.g. Spotify",flex:1,minWidth:80},
+          {key:"year",label:"Year",placeholder:"2022",flex:0,minWidth:60},
+        ]}
+      />
     </Card>
     <Card>
       <SectionTitle>Email recipients</SectionTitle>
@@ -2310,7 +2496,7 @@ function CoverLetters({jobs,cv,anthropicKey,setActiveTab,pendingCoverLetterJob,s
         "7. If the CV is sparse on something the job needs, it is better to write a shorter letter that highlights what IS a fit, than to pad with generic claims.\n"+
         "8. Start directly with the salutation. No preamble, no meta-commentary, no \"Here is your cover letter\".\n\n"+
         "═══ JOB ═══\n"+jobBrief+"\n\n"+
-        "═══ CV (ONLY source of truth about the applicant) ═══\n"+cv.text+"\n\n"+
+        "═══ CV & PROFILE (ONLY source of truth about the applicant) ═══\n"+cvSummaryText(cv)+"\n\n"+
         "Write the cover letter now, following every rule above.";
       var text=await callClaude({apiKey:anthropicKey,prompt:prompt,maxTokens:1500});
       setLetter(text);
@@ -3000,7 +3186,7 @@ function AppShell({user,onSignOut}){
     if(user&&user.uid) cloudDelete(user.uid);
     setJobs(SAMPLE_JOBS);
     setProfiles(SAMPLE_PROFILES);
-    setCv({text:"",fileName:"",uploaded:false,roles:"",industries:"",locations:"",salary:"",workType:"Any",recipients:[]});
+    setCv({text:"",fileName:"",uploaded:false,roles:"",industries:"",locations:"",salary:"",workType:"Any",recipients:[],tools:[],skills:[],achievements:[]});
     setAfKey("");
     setJsKey("");
     setAnthropicKey("");
