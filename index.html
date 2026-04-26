@@ -2268,6 +2268,94 @@ function CVProfile({cv,setCv}){
   var recipients=cv.recipients||[];
   var [newRec,setNewRec]=useState({name:"",email:""});
 
+  // ─── One-click CV import ──────────────────────────────────────────────────
+  // Pre-extracted and structured from Mats's uploaded CV (Jan 2026).
+  // Shown only when tools/skills/achievements are all empty so it doesn't
+  // overwrite existing work. Disappears once any structured data exists.
+  var CV_IMPORT = {
+    roles:"Product Manager, Senior Product Manager, Product Operations Manager, Chief Product Officer, Product Owner, Agile Development Manager",
+    industries:"SaaS, B2B Tech, E-commerce, Digital Services, Fintech",
+    locations:"Malmö, Stockholm, Remote, Hybrid",
+    workType:"Hybrid",
+    tools:[
+      {id:1,name:"Jira",years:10,level:"Expert",employers:"Clas Ohlson, Inriver"},
+      {id:2,name:"Azure DevOps",years:5,level:"Advanced",employers:"Inriver"},
+      {id:3,name:"Aha Roadmaps",years:3,level:"Expert",employers:"Inriver"},
+      {id:4,name:"Aha Ideas",years:2,level:"Expert",employers:"Inriver"},
+      {id:5,name:"Pendo",years:3,level:"Advanced",employers:"Inriver, Cool Company"},
+      {id:6,name:"Confluence",years:8,level:"Advanced",employers:"Inriver, Clas Ohlson"},
+      {id:7,name:"Figma",years:4,level:"Intermediate",employers:"Clas Ohlson, Inriver"},
+      {id:8,name:"Miro",years:5,level:"Advanced",employers:"Clas Ohlson, Inriver, Cool Company"},
+      {id:9,name:"Trello",years:6,level:"Advanced",employers:"Cool Company, Hultgren+Saksi"},
+      {id:10,name:"Product Board",years:2,level:"Intermediate",employers:"Inriver"},
+      {id:11,name:"InVision",years:3,level:"Intermediate",employers:"Cool Company"},
+      {id:12,name:"Balsamiq",years:3,level:"Intermediate",employers:"Cool Company"},
+      {id:13,name:"Contentful CMS",years:2,level:"Advanced",employers:"Clas Ohlson"},
+      {id:14,name:"Adobe Campaign",years:3,level:"Advanced",employers:"Clas Ohlson"},
+      {id:15,name:"Google Analytics",years:8,level:"Advanced",employers:"Cool Company, Clas Ohlson"},
+      {id:16,name:"Hotjar",years:3,level:"Intermediate",employers:"Cool Company, Clas Ohlson"},
+      {id:17,name:"Slack",years:8,level:"Expert",employers:"Inriver, Clas Ohlson, Cool Company"},
+      {id:18,name:"Office 365",years:10,level:"Expert",employers:"Inriver, Clas Ohlson"},
+      {id:19,name:"Wordpress",years:4,level:"Intermediate",employers:"Cool Company, Hultgren+Saksi"},
+      {id:20,name:"Searchmetrics",years:2,level:"Intermediate",employers:"Cool Company"},
+      {id:21,name:"Mailchimp",years:3,level:"Intermediate",employers:"Cool Company"},
+      {id:22,name:"inriver PIM",years:3,level:"Advanced",employers:"Clas Ohlson, Inriver"},
+    ],
+    skills:[
+      {id:101,name:"Product Management",years:15,level:"Expert",employers:"Inriver, Clas Ohlson, Cool Company"},
+      {id:102,name:"Product Operations",years:3,level:"Expert",employers:"Inriver"},
+      {id:103,name:"Agile / Scrum",years:12,level:"Expert",employers:"Inriver, Clas Ohlson, Cool Company"},
+      {id:104,name:"SAFe",years:5,level:"Advanced",employers:"Inriver, Clas Ohlson"},
+      {id:105,name:"Kanban",years:10,level:"Advanced",employers:"Inriver, Cool Company, Hultgren+Saksi"},
+      {id:106,name:"Product Roadmapping",years:12,level:"Expert",employers:"Inriver, Clas Ohlson, Cool Company"},
+      {id:107,name:"Backlog Management",years:12,level:"Expert",employers:"Inriver, Clas Ohlson, Cool Company"},
+      {id:108,name:"Stakeholder Management",years:15,level:"Expert",employers:"Inriver, Clas Ohlson, Cool Company"},
+      {id:109,name:"OKR / KPI frameworks",years:8,level:"Advanced",employers:"Inriver, Cool Company"},
+      {id:110,name:"User Story Mapping",years:8,level:"Advanced",employers:"Inriver, Clas Ohlson"},
+      {id:111,name:"Jobs To Be Done (JTBD)",years:5,level:"Advanced",employers:"Inriver, Clas Ohlson"},
+      {id:112,name:"Workshop Facilitation",years:10,level:"Expert",employers:"Inriver, Clas Ohlson, Cool Company"},
+      {id:113,name:"Team Leadership & Coaching",years:15,level:"Expert",employers:"Inriver, Clas Ohlson, Cool Company"},
+      {id:114,name:"Digital Strategy",years:15,level:"Expert",employers:"Cool Company, Svensk Byggtjänst"},
+      {id:115,name:"SaaS Product Development",years:12,level:"Expert",employers:"Inriver, Cool Company, Svensk Byggtjänst"},
+      {id:116,name:"E-commerce",years:8,level:"Advanced",employers:"Clas Ohlson, Svensk Byggtjänst"},
+      {id:117,name:"Content Strategy",years:12,level:"Advanced",employers:"Cool Company, Svensk Byggtjänst, IDG"},
+      {id:118,name:"Communications & Marketing",years:10,level:"Advanced",employers:"Cool Company, Mediaministeriet"},
+      {id:119,name:"Recruitment",years:12,level:"Advanced",employers:"Inriver, Clas Ohlson, Cool Company"},
+      {id:120,name:"Change Management",years:10,level:"Advanced",employers:"Inriver, Cool Company, Hultgren+Saksi"},
+    ],
+    achievements:[
+      {id:201,description:"Led implementation of Aha Roadmaps and Aha Ideas as PM tools across product org, becoming Certified Aha Professional",employer:"Inriver",year:"2024"},
+      {id:202,description:"Deployed Pendo for user guidance and product usage tracking across the iPMC platform",employer:"Inriver",year:"2024"},
+      {id:203,description:"Implemented Voice-of-the-Customer process for product feedback across customer and partner base",employer:"Inriver",year:"2024"},
+      {id:204,description:"Product Owner for Global Identity Service — authentication/authorization and access control for entire platform",employer:"Inriver",year:"2023"},
+      {id:205,description:"Led development of next-gen headless e-commerce platform covering Search, CMS, PIM and DAM",employer:"Clas Ohlson",year:"2022"},
+      {id:206,description:"Built and operated omni-channel loyalty/CRM platform on Adobe Campaign serving personalised newsletters, SMS and event triggers",employer:"Clas Ohlson",year:"2021"},
+      {id:207,description:"Built and scaled SaaS product portfolio from startup to international markets as CPO",employer:"Cool Company",year:"2019"},
+      {id:208,description:"Recruited and managed distributed cross-functional dev teams including offshore team in Lviv, Ukraine",employer:"Cool Company",year:"2018"},
+      {id:209,description:"Developed Match by Cool Company MVP — freelancer/assignment matching app on iOS, Android and browser",employer:"Cool Company",year:"2017"},
+      {id:210,description:"Repositioned Svensk Byggtjänst product portfolio from print to subscription-based SaaS as CTO",employer:"Svensk Byggtjänst",year:"2013"},
+      {id:211,description:"Established idg.se as Sweden's primary digital hub for IT and tech — communities, e-commerce, recruiting, stock trading",employer:"IDG",year:"2001"},
+    ],
+  };
+
+  var hasStructuredData=(cv.tools&&cv.tools.length)||(cv.skills&&cv.skills.length)||(cv.achievements&&cv.achievements.length);
+
+  function importCvData(){
+    if(!confirm("This will populate Tools, Skills, Achievements and profile fields from your CV analysis. Any existing entries in those sections will be replaced. Continue?")) return;
+    setCv(function(c){
+      return Object.assign({},c,{
+        // Only fill profile fields if they're currently blank
+        roles:c.roles||CV_IMPORT.roles,
+        industries:c.industries||CV_IMPORT.industries,
+        locations:c.locations||CV_IMPORT.locations,
+        workType:(c.workType&&c.workType!=="Any")?c.workType:CV_IMPORT.workType,
+        tools:CV_IMPORT.tools,
+        skills:CV_IMPORT.skills,
+        achievements:CV_IMPORT.achievements,
+      });
+    });
+  }
+
   async function handleFile(f){
     if(!f) return;
     setUploadState({status:"loading",msg:"Extracting text from "+f.name+"..."});
@@ -2311,6 +2399,15 @@ function CVProfile({cv,setCv}){
   var cvCharCount=hasText?cv.text.length:0;
 
   return <div style={{display:"flex",flexDirection:"column",gap:16}}>
+    {!hasStructuredData&&<Card style={{border:"2px solid "+C.primary,background:C.primaryLight}}>
+      <div style={{display:"flex",alignItems:"flex-start",gap:16,flexWrap:"wrap"}}>
+        <div style={{flex:1,minWidth:200}}>
+          <div style={{fontSize:14,fontWeight:700,color:C.primary,marginBottom:4}}>✨ CV analysis ready to import</div>
+          <div style={{fontSize:13,color:C.textSecondary,lineHeight:1.5}}>Your CV has been analysed and structured into <b>22 tools</b>, <b>20 skills</b> and <b>11 achievements</b>. Click to populate all three sections instantly. You can edit any entry after importing.</div>
+        </div>
+        <Btn variant="primary" onClick={importCvData} style={{flexShrink:0,alignSelf:"center"}}>Import CV data →</Btn>
+      </div>
+    </Card>}
     <Card>
       <SectionTitle>Your CV</SectionTitle>
       <div style={{fontSize:13,color:C.textHint,marginBottom:14}}>Your CV is used to generate personalised cover letters and AI match scoring. The more detail you add, the better the results.</div>
