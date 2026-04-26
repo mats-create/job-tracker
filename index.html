@@ -37,7 +37,8 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
   import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
     from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
-  import { getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, enableIndexedDbPersistence }
+  import { getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot,
+           initializeFirestore, persistentLocalCache, persistentMultipleTabManager }
     from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -51,13 +52,19 @@
 
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
-  const db = getFirestore(app);
-
-  // Enable offline persistence so the app keeps working when there's no network.
-  // Failures here are non-fatal — app still works, just without offline cache.
-  enableIndexedDbPersistence(db).catch(function(err){
-    console.warn("Firestore offline persistence not enabled:", err.code);
-  });
+  // Use the modern persistent cache API instead of the deprecated
+  // enableIndexedDbPersistence(). This works correctly on Safari/iOS and
+  // supports multiple tabs. Falls back gracefully if IndexedDB is unavailable.
+  let db;
+  try {
+    db = initializeFirestore(app, {
+      cache: persistentLocalCache({tabManager: persistentMultipleTabManager()})
+    });
+  } catch(e) {
+    // Fallback: plain Firestore without offline cache (still works, just no offline)
+    db = getFirestore(app);
+    console.warn("Firestore offline cache not available:", e.message);
+  }
 
   // Expose what the main app needs. Setting __firebaseReady = true tells the
   // app to stop showing the splash and start initialising auth.
@@ -399,19 +406,28 @@ function cloudSave(uid,data,opts){
   if(!fbReady()||!uid) return;
   _cloudSavePending=data;
   if(_cloudSaveTimer) clearTimeout(_cloudSaveTimer);
-  // Allow callers to flush immediately (e.g. on sign-out)
   var delay=(opts&&opts.immediate)?0:600;
   _cloudSaveTimer=setTimeout(function(){
     var sdk=window.firebaseSdk;
     var ref=sdk.doc(sdk.db,"users",uid);
     var payload={data:_cloudSavePending,updatedAt:Date.now(),schemaVersion:STORAGE_VERSION};
-    sdk.setDoc(ref,payload).catch(function(err){
-      // Network/auth errors are surfaced via console only; data still safe in
-      // localStorage and Firestore's own offline queue will retry.
-      console.warn("Cloud save failed:",err);
-    });
+    var dataToWrite=_cloudSavePending;
     _cloudSaveTimer=null;
     _cloudSavePending=null;
+    // Write with retry — network errors (like ERR_QUIC_PROTOCOL_ERROR seen in
+    // logs) silently drop writes without retry. We retry up to 3 times with
+    // exponential backoff so transient network issues don't lose data.
+    function attempt(retriesLeft){
+      sdk.setDoc(ref,payload).then(function(){
+        console.log("[CloudSync] Write confirmed. cv.tools:", dataToWrite.cv&&dataToWrite.cv.tools&&dataToWrite.cv.tools.length);
+      }).catch(function(err){
+        console.warn("Cloud save failed (retries left: "+retriesLeft+"):",err.message||err.code);
+        if(retriesLeft>0){
+          setTimeout(function(){ attempt(retriesLeft-1); }, 1500);
+        }
+      });
+    }
+    attempt(3);
   },delay);
 }
 
