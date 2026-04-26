@@ -3193,6 +3193,7 @@ function AppShell({user,onSignOut}){
     var data={activeTab:activeTab,jobs:jobs,profiles:profiles,cv:cv,afKey:afKey,jsKey:jsKey,anthropicKey:anthropicKey,schedule:schedule,log:log,sort:sort,assistantConv:assistantConv,dismissedIds:dismissedIds,sidebarCollapsed:sidebarCollapsed};
     saveState(data);
     if(cloudReadyRef.current&&user&&user.uid){
+      console.log("[CloudSync] Writing to Firestore. cv.tools:", cv.tools&&cv.tools.length, "cv.skills:", cv.skills&&cv.skills.length, "cv.achievements:", cv.achievements&&cv.achievements.length);
       lastCloudWriteRef.current=Date.now();
       cloudSave(user.uid,data);
     }
@@ -3209,6 +3210,8 @@ function AppShell({user,onSignOut}){
       if(firstSnap){
         firstSnap=false;
         if(cloudData){
+          // DIAGNOSTIC: log what Firestore returned so we can verify tools/skills/achievements
+          console.log("[CloudSync] First snapshot received. cv.tools:", cloudData.cv&&cloudData.cv.tools&&cloudData.cv.tools.length,"cv.skills:", cloudData.cv&&cloudData.cv.skills&&cloudData.cv.skills.length,"cv.achievements:", cloudData.cv&&cloudData.cv.achievements&&cloudData.cv.achievements.length);
           // Cloud has data — adopt it. Each piece updates only if it differs
           // from current local state, to avoid pointless re-renders.
           if(Array.isArray(cloudData.jobs)) setJobs(cloudData.jobs);
