@@ -3175,6 +3175,7 @@ function AppShell({user,onSignOut}){
   // local writes to the cloud until we've heard back from it once — otherwise
   // the local default state would overwrite cloud state on first load.
   var [cloudReady,setCloudReady]=useState(false);
+  var cloudReadyRef=useRef(false); // ref copy so persistence effect doesn't re-fire on cloudReady flip
   // Track the most recent cloud doc revision so we can ignore echoes from our
   // own writes. Without this, every cloud save triggers a snapshot which would
   // cause unnecessary local re-renders.
@@ -3182,17 +3183,20 @@ function AppShell({user,onSignOut}){
 
   // Persist state on any change. Writes to localStorage immediately (sync,
   // never fails) and to Firestore via debounced cloudSave (async, may fail
-  // offline but Firestore queues retries). Skips cloud write until we've
-  // received the initial cloud snapshot, to avoid clobbering remote data
-  // with local defaults on first sign-in.
+  // offline but Firestore queues retries). Uses cloudReadyRef (not cloudReady
+  // state) so flipping cloudReady to true never itself triggers a write — the
+  // cloud subscription sets both the ref and the state, and by the time any
+  // data-change effect fires, the ref is already true. This prevents the race
+  // where cloudReady flips before setCv(cloudData) settles, causing a write
+  // of empty defaults that clobbers Firestore.
   useEffect(function(){
     var data={activeTab:activeTab,jobs:jobs,profiles:profiles,cv:cv,afKey:afKey,jsKey:jsKey,anthropicKey:anthropicKey,schedule:schedule,log:log,sort:sort,assistantConv:assistantConv,dismissedIds:dismissedIds,sidebarCollapsed:sidebarCollapsed};
     saveState(data);
-    if(cloudReady&&user&&user.uid){
+    if(cloudReadyRef.current&&user&&user.uid){
       lastCloudWriteRef.current=Date.now();
       cloudSave(user.uid,data);
     }
-  },[activeTab,jobs,profiles,cv,afKey,jsKey,anthropicKey,schedule,log,sort,assistantConv,dismissedIds,sidebarCollapsed,cloudReady,user]);
+  },[activeTab,jobs,profiles,cv,afKey,jsKey,anthropicKey,schedule,log,sort,assistantConv,dismissedIds,sidebarCollapsed,user]);
 
   // Subscribe to the user's cloud document. On the first snapshot we either
   // hydrate local state from the cloud (existing user) or push our local state
@@ -3223,8 +3227,16 @@ function AppShell({user,onSignOut}){
           // Don't sync sidebarCollapsed or activeTab — those are device-local
           // UI preferences that shouldn't follow you across devices.
         }
-        // Cloud is now hydrated. Local writes from here on can push to cloud.
-        setCloudReady(true);
+        // Cloud is now hydrated. Defer enabling cloud writes by one tick so
+        // all the setCv/setJobs/etc calls above have settled into React state
+        // before the persistence effect can fire and write to Firestore.
+        // Without this defer, the persistence effect sees pre-hydration state
+        // and writes empty defaults (tools:[], skills:[], etc.) to Firestore,
+        // clobbering the data we just read from it.
+        setTimeout(function(){
+          cloudReadyRef.current=true;
+          setCloudReady(true);
+        },0);
       }else if(cloudData){
         // Subsequent snapshots = changes from another device. Ignore if it
         // looks like our own echo (within 2s of our last write).
