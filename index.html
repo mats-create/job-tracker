@@ -2143,15 +2143,17 @@ function Scheduler({schedule,setSchedule,profiles,log,resetAllData,exportData,im
 // ─── CV & Profile ─────────────────────────────────────────────────────────────
 // ─── InlineListEditor ─────────────────────────────────────────────────────────
 // Reusable spreadsheet-style list editor. Used for Tools, Skills, Achievements.
-// `fields` defines column specs: [{key, label, placeholder, type, width}]
-// `items` is the current array; `onChange` is called with the updated array.
-// `type` can be "text" | "number" | "select"; select needs `options` array.
+// `fields` defines column specs: [{key, label, placeholder, type, flex, minWidth, multiline}]
+// `sortFields` defines which columns are sortable: [{key, label}]
+// `defaultSort` sets the initial sort: {key, dir} where dir is "asc"|"desc"
 const PROFICIENCY = ["Beginner","Intermediate","Advanced","Expert"];
+const PROF_ORDER = {Beginner:0,Intermediate:1,Advanced:2,Expert:3};
 
-function InlineListEditor({items,onChange,fields,addLabel}){
+function InlineListEditor({items,onChange,fields,addLabel,sortFields,defaultSort}){
   var [editId,setEditId]=useState(null);
   var [draft,setDraft]=useState({});
   var [adding,setAdding]=useState(false);
+  var [sort,setSort]=useState(defaultSort||{key:null,dir:"asc"});
 
   function emptyDraft(){
     var d={};
@@ -2174,7 +2176,6 @@ function InlineListEditor({items,onChange,fields,addLabel}){
     setDraft({});
   }
   function save(){
-    // Require at least the first field to be non-empty
     var firstKey=fields[0].key;
     if(!String(draft[firstKey]||"").trim()) return;
     if(adding){
@@ -2190,54 +2191,98 @@ function InlineListEditor({items,onChange,fields,addLabel}){
   function setField(key,val){
     setDraft(function(d){ return Object.assign({},d,{[key]:val}); });
   }
+  function toggleSort(key){
+    setSort(function(s){
+      if(s.key===key) return {key:key,dir:s.dir==="asc"?"desc":"asc"};
+      // Default direction per field type
+      var f=fields.find(function(f){return f.key===key;});
+      var defaultDir=(f&&(f.type==="number"||key==="year"))?"desc":"asc";
+      return {key:key,dir:defaultDir};
+    });
+  }
 
-  function renderCell(f,val,onChange){
+  // Apply sort to display list (never mutates the source array)
+  var displayed=items.slice();
+  if(sort.key){
+    var sk=sort.key;
+    var sd=sort.dir;
+    displayed.sort(function(a,b){
+      var av=a[sk],bv=b[sk];
+      // Level uses proficiency order
+      if(sk==="level"){
+        av=PROF_ORDER[av]||0;
+        bv=PROF_ORDER[bv]||0;
+        return sd==="asc"?av-bv:bv-av;
+      }
+      if(typeof av==="number"&&typeof bv==="number"){
+        return sd==="asc"?av-bv:bv-av;
+      }
+      // String / year
+      av=String(av||"").toLowerCase();
+      bv=String(bv||"").toLowerCase();
+      if(av<bv) return sd==="asc"?-1:1;
+      if(av>bv) return sd==="asc"?1:-1;
+      return 0;
+    });
+  }
+
+  function renderCell(f,val,onChangeFn){
     var baseStyle={fontSize:13,padding:"6px 8px",borderRadius:7,border:"1.5px solid "+C.border,background:C.surface,color:C.textPrimary,fontFamily:"inherit",width:"100%",boxSizing:"border-box"};
     if(f.type==="select"){
-      return <select value={val||""} onChange={function(e){onChange(e.target.value);}} style={baseStyle}>
+      return <select value={val||""} onChange={function(e){onChangeFn(e.target.value);}} style={baseStyle}>
         {(f.options||[]).map(function(o){ return <option key={o}>{o}</option>; })}
       </select>;
     }
     if(f.type==="number"){
-      return <input type="number" min={0} max={50} value={val||""} onChange={function(e){onChange(Number(e.target.value));}} style={Object.assign({},baseStyle,{width:60})} />;
+      return <input type="number" min={0} max={50} value={val||""} onChange={function(e){onChangeFn(Number(e.target.value));}} style={Object.assign({},baseStyle,{width:60})} />;
     }
-    return <input type="text" value={val||""} onChange={function(e){onChange(e.target.value);}} placeholder={f.placeholder||""} style={baseStyle} />;
+    if(f.multiline){
+      return <textarea value={val||""} onChange={function(e){onChangeFn(e.target.value);}} placeholder={f.placeholder||""} rows={2} style={Object.assign({},baseStyle,{resize:"vertical",lineHeight:1.4})} />;
+    }
+    return <input type="text" value={val||""} onChange={function(e){onChangeFn(e.target.value);}} placeholder={f.placeholder||""} style={baseStyle} />;
   }
 
   var isEditing=adding||editId!==null;
+
+  // Sort controls
+  var sortControls=sortFields&&sortFields.length>0&&<div style={{display:"flex",gap:6,alignItems:"center",marginBottom:8,flexWrap:"wrap"}}>
+    <span style={{fontSize:11,color:C.textHint,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px",marginRight:2}}>Sort:</span>
+    {sortFields.map(function(sf){
+      var active=sort.key===sf.key;
+      var arrow=active?(sort.dir==="asc"?" ↑":" ↓"):"";
+      return <button key={sf.key} onClick={function(){toggleSort(sf.key);}} style={{fontSize:12,padding:"3px 10px",borderRadius:6,border:"1.5px solid "+(active?C.primary:C.border),background:active?C.primaryLight:"transparent",color:active?C.primary:C.textSecondary,cursor:"pointer",fontWeight:active?700:400}}>
+        {sf.label}{arrow}
+      </button>;
+    })}
+  </div>;
+
   return <div>
+    {items.length>1&&sortControls}
     {/* Saved rows */}
-    {items.length>0&&<div style={{marginBottom:8}}>
-      {/* Header */}
-      <div style={{display:"flex",gap:8,alignItems:"center",padding:"4px 8px",marginBottom:4}}>
-        {fields.map(function(f){
-          return <div key={f.key} style={{flex:f.flex||1,fontSize:11,fontWeight:700,color:C.textHint,textTransform:"uppercase",letterSpacing:"0.5px",minWidth:f.minWidth||0}}>{f.label}</div>;
-        })}
-        <div style={{width:56}}></div>
-      </div>
-      {items.map(function(item){
+    {displayed.length>0&&<div style={{marginBottom:8}}>
+      {displayed.map(function(item){
         if(editId===item.id){
-          // Inline edit row
-          return <div key={item.id} style={{display:"flex",gap:8,alignItems:"center",padding:"6px 8px",background:C.primaryLight,borderRadius:8,marginBottom:4}}>
+          return <div key={item.id} style={{display:"flex",gap:8,alignItems:"flex-start",padding:"6px 8px",background:C.primaryLight,borderRadius:8,marginBottom:4}}>
             {fields.map(function(f){
               return <div key={f.key} style={{flex:f.flex||1,minWidth:f.minWidth||0}}>
                 {renderCell(f,draft[f.key],function(v){ setField(f.key,v); })}
               </div>;
             })}
-            <div style={{display:"flex",gap:4,width:56,flexShrink:0}}>
+            <div style={{display:"flex",gap:4,width:56,flexShrink:0,paddingTop:2}}>
               <button onClick={save} title="Save" style={{flex:1,background:C.primary,color:"#fff",border:"none",borderRadius:6,padding:"5px 0",cursor:"pointer",fontSize:13}}>✓</button>
               <button onClick={cancel} title="Cancel" style={{flex:1,background:C.border,color:C.textPrimary,border:"none",borderRadius:6,padding:"5px 0",cursor:"pointer",fontSize:13}}>✗</button>
             </div>
           </div>;
         }
-        // Display row
-        return <div key={item.id} style={{display:"flex",gap:8,alignItems:"center",padding:"7px 8px",borderRadius:8,marginBottom:3,background:C.surfaceAlt}}>
+        return <div key={item.id} style={{display:"flex",gap:8,alignItems:"flex-start",padding:"7px 8px",borderRadius:8,marginBottom:3,background:C.surfaceAlt}}>
           {fields.map(function(f){
-            return <div key={f.key} style={{flex:f.flex||1,minWidth:f.minWidth||0,fontSize:13,color:C.textPrimary,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-              {f.type==="number"&&item[f.key]?item[f.key]+" yr"+(item[f.key]!==1?"s":""):item[f.key]||<span style={{color:C.textHint}}>—</span>}
+            var val=item[f.key];
+            var display=f.type==="number"&&val?val+" yr"+(val!==1?"s":""):val;
+            return <div key={f.key} style={{flex:f.flex||1,minWidth:f.minWidth||0,fontSize:13,color:C.textPrimary,whiteSpace:f.multiline?"pre-wrap":"nowrap",overflow:f.multiline?"visible":"hidden",textOverflow:f.multiline?"unset":"ellipsis",wordBreak:f.multiline?"break-word":"normal",lineHeight:1.45}}>
+              {display||<span style={{color:C.textHint}}>—</span>}
             </div>;
           })}
-          <div style={{display:"flex",gap:4,width:56,flexShrink:0}}>
+          <div style={{display:"flex",gap:4,width:56,flexShrink:0,paddingTop:2}}>
             <button onClick={function(){ startEdit(item); }} disabled={isEditing} title="Edit" style={{flex:1,background:"none",border:"1px solid "+C.border,borderRadius:6,padding:"4px 0",cursor:isEditing?"not-allowed":"pointer",fontSize:12,color:C.textSecondary}}>✏</button>
             <button onClick={function(){ remove(item.id); }} disabled={isEditing} title="Delete" style={{flex:1,background:"none",border:"1px solid "+C.border,borderRadius:6,padding:"4px 0",cursor:isEditing?"not-allowed":"pointer",fontSize:12,color:C.error}}>🗑</button>
           </div>
@@ -2245,18 +2290,18 @@ function InlineListEditor({items,onChange,fields,addLabel}){
       })}
     </div>}
     {/* Add row */}
-    {adding&&<div style={{display:"flex",gap:8,alignItems:"center",padding:"6px 8px",background:C.primaryLight,borderRadius:8,marginBottom:8}}>
+    {adding&&<div style={{display:"flex",gap:8,alignItems:"flex-start",padding:"6px 8px",background:C.primaryLight,borderRadius:8,marginBottom:8}}>
       {fields.map(function(f){
         return <div key={f.key} style={{flex:f.flex||1,minWidth:f.minWidth||0}}>
           {renderCell(f,draft[f.key],function(v){ setField(f.key,v); })}
         </div>;
       })}
-      <div style={{display:"flex",gap:4,width:56,flexShrink:0}}>
+      <div style={{display:"flex",gap:4,width:56,flexShrink:0,paddingTop:2}}>
         <button onClick={save} title="Save" style={{flex:1,background:C.primary,color:"#fff",border:"none",borderRadius:6,padding:"5px 0",cursor:"pointer",fontSize:13}}>✓</button>
         <button onClick={cancel} title="Cancel" style={{flex:1,background:C.border,color:C.textPrimary,border:"none",borderRadius:6,padding:"5px 0",cursor:"pointer",fontSize:13}}>✗</button>
       </div>
     </div>}
-    {!isEditing&&<button onClick={startAdd} style={{fontSize:13,color:C.primary,background:"none",border:"1.5px dashed "+C.primary,borderRadius:8,padding:"7px 14px",cursor:"pointer",fontWeight:600,width:"100%",marginTop:items.length?4:0}}>+ {addLabel||"Add entry"}</button>}
+    {!isEditing&&<button onClick={startAdd} style={{fontSize:13,color:C.primary,background:"none",border:"1.5px dashed "+C.primary,borderRadius:8,padding:"7px 14px",cursor:"pointer",fontWeight:600,width:"100%",marginTop:displayed.length?4:0}}>+ {addLabel||"Add entry"}</button>}
   </div>;
 }
 
@@ -2338,13 +2383,12 @@ function CVProfile({cv,setCv}){
     ],
   };
 
-  var hasStructuredData=(cv.tools&&cv.tools.length)||(cv.skills&&cv.skills.length)||(cv.achievements&&cv.achievements.length);
+  var hasStructuredData=!!(( cv.tools&&cv.tools.length)||(cv.skills&&cv.skills.length)||(cv.achievements&&cv.achievements.length));
 
   function importCvData(){
     if(!confirm("This will populate Tools, Skills, Achievements and profile fields from your CV analysis. Any existing entries in those sections will be replaced. Continue?")) return;
     setCv(function(c){
       return Object.assign({},c,{
-        // Only fill profile fields if they're currently blank
         roles:c.roles||CV_IMPORT.roles,
         industries:c.industries||CV_IMPORT.industries,
         locations:c.locations||CV_IMPORT.locations,
@@ -2454,6 +2498,8 @@ function CVProfile({cv,setCv}){
         items={cv.tools||[]}
         onChange={function(v){setCv(function(c){return Object.assign({},c,{tools:v});});}}
         addLabel="Add tool"
+        defaultSort={{key:"name",dir:"asc"}}
+        sortFields={[{key:"name",label:"Name"},{key:"years",label:"Years"},{key:"level",label:"Level"}]}
         fields={[
           {key:"name",label:"Tool / Software",placeholder:"e.g. Figma",flex:2,minWidth:100},
           {key:"years",label:"Years",type:"number",flex:0,minWidth:60},
@@ -2469,6 +2515,8 @@ function CVProfile({cv,setCv}){
         items={cv.skills||[]}
         onChange={function(v){setCv(function(c){return Object.assign({},c,{skills:v});});}}
         addLabel="Add skill"
+        defaultSort={{key:"name",dir:"asc"}}
+        sortFields={[{key:"name",label:"Name"},{key:"years",label:"Years"},{key:"level",label:"Level"}]}
         fields={[
           {key:"name",label:"Skill / Competency",placeholder:"e.g. Design systems",flex:2,minWidth:120},
           {key:"years",label:"Years",type:"number",flex:0,minWidth:60},
@@ -2484,8 +2532,10 @@ function CVProfile({cv,setCv}){
         items={cv.achievements||[]}
         onChange={function(v){setCv(function(c){return Object.assign({},c,{achievements:v});});}}
         addLabel="Add achievement"
+        defaultSort={{key:"year",dir:"desc"}}
+        sortFields={[{key:"year",label:"Year"},{key:"employer",label:"Employer"}]}
         fields={[
-          {key:"description",label:"Achievement",placeholder:"e.g. Reduced onboarding time by 40%",flex:4,minWidth:180},
+          {key:"description",label:"Achievement",placeholder:"e.g. Reduced onboarding time by 40%",flex:4,minWidth:180,multiline:true},
           {key:"employer",label:"Employer",placeholder:"e.g. Spotify",flex:1,minWidth:80},
           {key:"year",label:"Year",placeholder:"2022",flex:0,minWidth:60},
         ]}
