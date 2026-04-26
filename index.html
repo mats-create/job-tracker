@@ -2512,7 +2512,12 @@ function CVProfile({cv,setCv}){
           {key:"name",label:"Tool / Software",placeholder:"e.g. Figma",flex:2,minWidth:100},
           {key:"years",label:"Years",type:"number",flex:0,minWidth:60},
           {key:"level",label:"Level",type:"select",options:PROFICIENCY,flex:1,minWidth:90},
-          {key:"employers",label:"Employer(s)",placeholder:"e.g. Spotify, IKEA",flex:2,minWidth:100,mobileHide:true}, <span style={{fontSize:11,fontWeight:400,color:C.textHint,marginLeft:6}}>optional</span></SectionTitle>
+          {key:"employers",label:"Employer(s)",placeholder:"e.g. Spotify, IKEA",flex:2,minWidth:100,mobileHide:true},
+        ]}
+      />
+    </Card>
+    <Card>
+      <SectionTitle>Skills & competencies <span style={{fontSize:11,fontWeight:400,color:C.textHint,marginLeft:6}}>optional</span></SectionTitle>
       <div style={{fontSize:13,color:C.textHint,marginBottom:14}}>List your professional skills and areas of expertise. Separate from tools — these are capabilities like "Design systems", "User research", "Stakeholder management".</div>
       <InlineListEditor
         items={cv.skills||[]}
