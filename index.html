@@ -2879,8 +2879,10 @@ function ProfileAssistant({cv,profiles,setProfiles,anthropicKey,conversation,set
   // Returns an array of React nodes (strings and spans).
   function inlineFormat(str){
     var result=[];
-    // Pattern matches **bold**, *italic*, `code` in order
-    var re=/\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`/g;
+    // Pattern matches **bold**, *italic*, `code` in order — backtick uses \x60
+    // to avoid confusing the Babel JSX parser which counts backticks as template
+    // literal delimiters even inside regex literals.
+    var re=/\*\*(.+?)\*\*|\*(.+?)\*|\x60([^\x60]+)\x60/g;
     var last=0;
     var m;
     while((m=re.exec(str))!==null){
