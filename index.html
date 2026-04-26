@@ -3127,7 +3127,13 @@ function AppShell({user,onSignOut}){
   var [mobileMenuOpen,setMobileMenuOpen]=useState(false); // ephemeral
   var [jobs,setJobs]=useState(function(){return pick(saved,"jobs",SAMPLE_JOBS);});
   var [profiles,setProfiles]=useState(function(){return pick(saved,"profiles",SAMPLE_PROFILES);});
-  var [cv,setCv]=useState(function(){return pick(saved,"cv",{text:"",fileName:"",uploaded:false,roles:"",industries:"",locations:"",salary:"",workType:"Any",recipients:[]});});
+  var [cv,setCv]=useState(function(){
+    var saved_cv=pick(saved,"cv",null);
+    var defaults={text:"",fileName:"",uploaded:false,roles:"",industries:"",locations:"",salary:"",workType:"Any",recipients:[],tools:[],skills:[],achievements:[]};
+    // Merge saved CV over defaults so new fields (tools/skills/achievements)
+    // are always present even if the saved snapshot predates them.
+    return saved_cv?Object.assign({},defaults,saved_cv):defaults;
+  });
   var [afKey,setAfKey]=useState(function(){return pick(saved,"afKey","");});
   var [jsKey,setJsKey]=useState(function(){return pick(saved,"jsKey","");});
   var [anthropicKey,setAnthropicKey]=useState(function(){return pick(saved,"anthropicKey","");});
@@ -3203,7 +3209,9 @@ function AppShell({user,onSignOut}){
           // from current local state, to avoid pointless re-renders.
           if(Array.isArray(cloudData.jobs)) setJobs(cloudData.jobs);
           if(Array.isArray(cloudData.profiles)) setProfiles(cloudData.profiles);
-          if(cloudData.cv) setCv(cloudData.cv);
+          // Merge cloud cv over local defaults so new fields (tools/skills/
+          // achievements) are always present regardless of snapshot age.
+          if(cloudData.cv) setCv(function(local){ return Object.assign({},local,cloudData.cv); });
           if(typeof cloudData.afKey==="string") setAfKey(cloudData.afKey);
           if(typeof cloudData.jsKey==="string") setJsKey(cloudData.jsKey);
           if(typeof cloudData.anthropicKey==="string") setAnthropicKey(cloudData.anthropicKey);
@@ -3223,7 +3231,7 @@ function AppShell({user,onSignOut}){
         if(Date.now()-lastCloudWriteRef.current<2000) return;
         if(Array.isArray(cloudData.jobs)) setJobs(cloudData.jobs);
         if(Array.isArray(cloudData.profiles)) setProfiles(cloudData.profiles);
-        if(cloudData.cv) setCv(cloudData.cv);
+        if(cloudData.cv) setCv(function(local){ return Object.assign({},local,cloudData.cv); });
         if(typeof cloudData.afKey==="string") setAfKey(cloudData.afKey);
         if(typeof cloudData.jsKey==="string") setJsKey(cloudData.jsKey);
         if(typeof cloudData.anthropicKey==="string") setAnthropicKey(cloudData.anthropicKey);
