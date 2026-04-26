@@ -2745,11 +2745,14 @@ function Reports({jobs,cv,anthropicKey}){
       "• Breakdown by status: "+STATUSES.map(function(s){return s+"="+(byStatus[s]||0);}).join(", ");
     var summary=active.map(function(j){return j.title+" at "+j.company+" ("+j.status+", match: "+j.score+"%, source: "+j.source+")";}).join("\n");
     try{
+      var cvContext=cv&&hasCv(cv)?"CANDIDATE PROFILE:\n"+cvSummaryText(cv)+"\n\n":"";
       var prompt="Generate a \""+type+"\" report for a job seeker.\n\n"+
+        cvContext+
         funnel+"\n\n"+
         "JOBS LIST:\n"+summary+"\n\n"+
         "Write a clear, friendly report with key insights and practical recommendations. "+
         "Where relevant to the report type, use the funnel stats above — especially response rate and the breakdown between closed outcomes (Rejected vs No response). "+
+        "Where the candidate profile is provided, use it to comment on skill/tool alignment patterns across the pipeline and whether the types of jobs being tracked match the candidate's background. "+
         "For status reports, explicitly comment on how many applications are closed vs still active, and whether the user should follow up on silent applications. "+
         "Use plain text, no markdown.";
       var text=await callClaude({apiKey:anthropicKey,prompt:prompt,maxTokens:1500});
@@ -2843,6 +2846,51 @@ function ProfileAssistant({cv,profiles,setProfiles,anthropicKey,conversation,set
   }
 
   // Render one assistant reply as a mix of text paragraphs and profile cards
+  // Lightweight markdown renderer for assistant replies. Handles the subset
+  // Claude actually uses: **bold**, *italic*, `code`, bullet lists (- item),
+  // and paragraph breaks. Full library would be overkill for this scope.
+  function renderMarkdown(text){
+    if(!text) return null;
+    // Split into paragraphs on double newlines; single newlines preserved within
+    var paragraphs=text.split(/\n{2,}/);
+    return paragraphs.map(function(para,pi){
+      var lines=para.split("\n");
+      // Detect bullet list block: lines starting with "- " or "• "
+      var isList=lines.every(function(l){return !l.trim()||/^[-•*]\s/.test(l.trim());});
+      if(isList){
+        var items=lines.filter(function(l){return l.trim();}).map(function(l){
+          return l.trim().replace(/^[-•*]\s+/,"");
+        });
+        return <ul key={pi} style={{margin:"4px 0 4px 18px",padding:0,listStyleType:"disc"}}>
+          {items.map(function(item,ii){
+            return <li key={ii} style={{fontSize:14,lineHeight:1.6,color:C.textPrimary,marginBottom:2}}>{inlineFormat(item)}</li>;
+          })}
+        </ul>;
+      }
+      // Regular paragraph
+      return <p key={pi} style={{margin:"0 0 6px 0",fontSize:14,lineHeight:1.6,color:C.textPrimary}}>{inlineFormat(para)}</p>;
+    });
+  }
+
+  // Parse inline formatting: **bold**, *italic*, `code` within a string.
+  // Returns an array of React nodes (strings and spans).
+  function inlineFormat(str){
+    var result=[];
+    // Pattern matches **bold**, *italic*, `code` in order
+    var re=/\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`/g;
+    var last=0;
+    var m;
+    while((m=re.exec(str))!==null){
+      if(m.index>last) result.push(str.slice(last,m.index));
+      if(m[1]!==undefined) result.push(<strong key={m.index} style={{fontWeight:700}}>{m[1]}</strong>);
+      else if(m[2]!==undefined) result.push(<em key={m.index} style={{fontStyle:"italic"}}>{m[2]}</em>);
+      else if(m[3]!==undefined) result.push(<code key={m.index} style={{fontFamily:"monospace",fontSize:13,background:C.surfaceAlt,padding:"1px 5px",borderRadius:4,color:C.textPrimary}}>{m[3]}</code>);
+      last=m.index+m[0].length;
+    }
+    if(last<str.length) result.push(str.slice(last));
+    return result;
+  }
+
   function renderAssistantMessage(reply,msgIdx){
     var parsed=extractProfiles(reply);
     var blocks=[];
@@ -2865,7 +2913,7 @@ function ProfileAssistant({cv,profiles,setProfiles,anthropicKey,conversation,set
 
     return order.map(function(item,i){
       if(item.type==="text"){
-        return <div key={i} style={{whiteSpace:"pre-wrap",lineHeight:1.55,fontSize:14,color:C.textPrimary}}>{item.value}</div>;
+        return <div key={i} style={{lineHeight:1.55,fontSize:14,color:C.textPrimary}}>{renderMarkdown(item.value)}</div>;
       }
       var p=item.value;
       // Check if already saved (match by name+query for simplicity)
