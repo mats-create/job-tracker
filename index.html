@@ -37,8 +37,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
   import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
     from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
-  import { getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot,
-           initializeFirestore, persistentLocalCache, persistentMultipleTabManager }
+  import { getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot }
     from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -52,19 +51,7 @@
 
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
-  // Use the modern persistent cache API instead of the deprecated
-  // enableIndexedDbPersistence(). This works correctly on Safari/iOS and
-  // supports multiple tabs. Falls back gracefully if IndexedDB is unavailable.
-  let db;
-  try {
-    db = initializeFirestore(app, {
-      cache: persistentLocalCache({tabManager: persistentMultipleTabManager()})
-    });
-  } catch(e) {
-    // Fallback: plain Firestore without offline cache (still works, just no offline)
-    db = getFirestore(app);
-    console.warn("Firestore offline cache not available:", e.message);
-  }
+  const db = getFirestore(app);
 
   // Expose what the main app needs. Setting __firebaseReady = true tells the
   // app to stop showing the splash and start initialising auth.
