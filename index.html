@@ -123,6 +123,54 @@
   /* Query pill tooltip — shown on hover via pure CSS */
   .jt-query-pill:hover .jt-query-tooltip{display:block!important}
 
+  /* ── Mobile bottom tab bar ───────────────────────────────────────────────
+     Replaces the hamburger + slide-out drawer on narrow screens.
+     The sidebar is hidden entirely on mobile; bottom bar takes over routing. */
+  .jt-bottom-nav{display:none}
+  @media (max-width:767px){
+    .jt-bottom-nav{
+      display:flex;
+      position:fixed;bottom:0;left:0;right:0;
+      height:60px;
+      background:#FFFFFF;
+      border-top:1px solid #D9E3DE;
+      z-index:200;
+      box-shadow:0 -2px 8px rgba(0,0,0,0.06);
+      padding-bottom:env(safe-area-inset-bottom); /* iPhone home indicator */
+    }
+    html[data-theme="dark"] .jt-bottom-nav{background:#1A2420;border-top-color:#2E3B36}
+    .jt-bottom-nav-item{
+      flex:1;display:flex;flex-direction:column;align-items:center;
+      justify-content:center;gap:2px;
+      border:none;background:transparent;cursor:pointer;
+      padding:6px 0;font-family:inherit;
+      color:#8FA89F;font-size:10px;font-weight:500;
+      -webkit-tap-highlight-color:transparent;
+    }
+    .jt-bottom-nav-item.active{color:#5C8A7A;font-weight:700}
+    html[data-theme="dark"] .jt-bottom-nav-item{color:#7A8B85}
+    html[data-theme="dark"] .jt-bottom-nav-item.active{color:#7AAD9C}
+    .jt-bottom-nav-icon{font-size:20px;line-height:1}
+    /* Push main content above the bottom bar */
+    .jt-main{margin-left:0!important;padding-top:56px;padding-bottom:72px}
+    /* Hide the hamburger topbar — bottom nav replaces it */
+    .jt-topbar{display:none!important}
+    /* Hide sidebar on mobile entirely */
+    .jt-sidebar{display:none!important}
+    /* More sheet overlay */
+    .jt-more-sheet-overlay{
+      position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:300;
+    }
+    .jt-more-sheet{
+      position:fixed;bottom:60px;left:0;right:0;
+      background:#FFFFFF;border-radius:16px 16px 0 0;
+      border-top:1px solid #D9E3DE;
+      padding:16px 0 8px;z-index:301;
+      box-shadow:0 -4px 24px rgba(0,0,0,0.12);
+    }
+    html[data-theme="dark"] .jt-more-sheet{background:#1A2420;border-top-color:#2E3B36}
+  }
+
   /* Mobile: sidebar becomes a slide-out drawer. Top bar with hamburger appears. */
   @media (max-width:767px){
     .jt-sidebar{transform:translateX(-100%);width:260px;box-shadow:4px 0 24px rgba(0,0,0,0.18)}
@@ -1197,6 +1245,21 @@ function Alert({type,children}){
   return <div style={{fontSize:13,padding:"10px 14px",borderRadius:10,background:bg,color:col,marginTop:10}}>{children}</div>;
 }
 
+// InfoTip — a small ⓘ icon that toggles an instruction block on click.
+// Replaces always-visible helper text throughout the app to reduce visual
+// noise. Once dismissed per-section it stays hidden until clicked again.
+// Usage: <InfoTip>Your help text here</InfoTip>
+// Optional: label="What's this?" to show text next to the icon.
+function InfoTip({children,label}){
+  var [open,setOpen]=useState(false);
+  return <span style={{display:"inline-block",verticalAlign:"middle"}}>
+    <button onClick={function(){setOpen(function(v){return !v;});}} title={open?"Hide info":"Show info"} style={{background:"none",border:"none",cursor:"pointer",color:open?C.info:C.textHint,fontSize:14,padding:"0 4px",lineHeight:1,verticalAlign:"middle",fontWeight:open?700:400}}>
+      {label&&<span style={{fontSize:11,marginRight:3,verticalAlign:"middle"}}>{label}</span>}ⓘ
+    </button>
+    {open&&<div style={{fontSize:12,color:C.textSecondary,background:C.infoBg,border:"1px solid "+C.info,borderRadius:8,padding:"10px 14px",marginTop:6,lineHeight:1.6,display:"block"}}>{children}</div>}
+  </span>;
+}
+
 // Inline email composer. Not a modal — it expands in place so users can see
 // the content they're about to send. Uses mailto: to hand off to the user's
 // own mail client (native Mail app on mobile, Gmail/Outlook/etc. on desktop).
@@ -1915,9 +1978,7 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
 
   return <div style={{display:"flex",flexDirection:"column",gap:16}}>
     <Card>
-      <SectionTitle action={<div style={{display:"flex",gap:8}}><Btn onClick={runAll} style={{fontSize:13,padding:"8px 14px"}}>▶ Run all active</Btn><Btn variant="primary" onClick={function(){setEditId(null);setForm({name:"",query:"",limit:10,sources:["af"]});setShowForm(function(v){return !v;});}} style={{fontSize:13,padding:"8px 14px"}}>+ New profile</Btn></div>}>Search profiles</SectionTitle>
-      <Alert type="info">A search profile is a saved search query. When you click Fetch or run the scheduler, each active profile searches its sources and adds new matching jobs to your list automatically.</Alert>
-      <Alert type="warning" style={{marginTop:8}}>Queries use simple keyword matching — no AND, OR, or boolean operators. To search for multiple roles or locations, create separate profiles (e.g. one for "Product Manager Stockholm", another for "Product Owner Stockholm").</Alert>
+      <SectionTitle action={<div style={{display:"flex",gap:8,alignItems:"center"}}><InfoTip label="How it works">A search profile is a saved query that runs against job boards automatically. Each active profile searches its sources on schedule or when you click Fetch, adding new matching jobs to your list. Queries use simple keyword matching — no AND/OR operators. To search for multiple roles or locations, create separate profiles (e.g. "Product Manager Stockholm", "Product Owner Stockholm").</InfoTip><Btn onClick={runAll} style={{fontSize:13,padding:"8px 14px"}}>▶ Run all active</Btn><Btn variant="primary" onClick={function(){setEditId(null);setForm({name:"",query:"",limit:10,sources:["af"]});setShowForm(function(v){return !v;});}} style={{fontSize:13,padding:"8px 14px"}}>+ New profile</Btn></div>}>Search profiles</SectionTitle>
       {showForm&&!editId&&<div ref={formRef} style={{background:C.surfaceAlt,borderRadius:14,padding:"20px",margin:"16px 0",border:"1.5px solid "+C.border}}>
         <div style={{fontSize:15,fontWeight:700,color:C.textPrimary,marginBottom:16}}>New search profile</div>
         <div className="jt-grid-2" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:14,marginBottom:14}}>
@@ -2014,7 +2075,7 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
           <Label hint="Required for AI match scoring, cover letters, and reports. Get a key at console.anthropic.com and paste it here. Starts with 'sk-ant-'.">Anthropic API key (for AI features)</Label>
           <div style={{display:"flex",gap:8}}><Inp type={showAnthropicKey?"text":"password"} value={anthropicKey} onChange={function(e){var v=e.target.value;setAnthropicKey(v);}} placeholder="sk-ant-..." style={{fontFamily:"monospace"}} /><Btn onClick={function(){setShowAnthropicKey(function(v){return !v;});}} style={{whiteSpace:"nowrap",padding:"10px 16px"}}>{showAnthropicKey?"Hide":"Show"}</Btn></div>
         </div>
-        <Alert type="info">🔒 Keys are stored in your browser's memory only and are never saved to a server or shared with anyone.</Alert>
+        <Alert type="info">🔒 Keys are stored encrypted in your Firestore account and are never shared with anyone. <InfoTip>Your API keys are only used when you explicitly trigger a fetch or AI action. They are stored in your personal Firestore document, accessible only when signed in as you.</InfoTip></Alert>
       </div>
     </Card>
   </div>;
@@ -2079,14 +2140,12 @@ function Scheduler({schedule,setSchedule,profiles,log,resetAllData,exportData,im
   var timeInvalid=draft.startTime>=draft.stopTime;
   return <div style={{display:"flex",flexDirection:"column",gap:16}}>
     <Card>
-      <SectionTitle>Scheduler status</SectionTitle>
+      <SectionTitle>Scheduler status <InfoTip>Scheduled fetches only run while the app is open in an active browser tab. Closing or minimising pauses it. For always-on fetching, keep the app open in a pinned tab.</InfoTip></SectionTitle>
       <Toggle value={draft.enabled} onChange={function(){update({enabled:!draft.enabled});}} label={draft.enabled?"Scheduler is ON — jobs will be fetched automatically":"Scheduler is OFF — turn on to fetch jobs automatically"} hint={draft.enabled?"Active profiles will be fetched on the days and times set below.":"Enable this to have the app check for new jobs in the background."} />
       {schedule.enabled&&<Alert type="success">Currently running · {activeCount} active profile{activeCount!==1?"s":""} · {schedule.days.join(", ")} · {schedule.startTime}–{schedule.stopTime} · every {schedule.intervalMinutes} min</Alert>}
-      <Alert type="info">ℹ Scheduled fetches only run while the app is open in an active tab. On mobile, minimising the browser or locking the screen pauses scheduling. For true always-on fetching, keep the app open in a pinned tab.</Alert>
     </Card>
     <Card>
       <SectionTitle>Which days should it run?</SectionTitle>
-      <div style={{fontSize:13,color:C.textHint,marginBottom:12}}>Tap a day to toggle it on or off. Green = active.</div>
       <div style={{display:"flex",gap:8,marginBottom:12}}>
         {DAYS.map(function(d){var on=draft.days.includes(d);return <button key={d} onClick={function(){toggleDay(d);}} style={{flex:1,padding:"10px 4px",borderRadius:10,border:"2px solid "+(on?C.primary:C.border),background:on?C.primaryLight:"transparent",color:on?C.primary:C.textSecondary,fontSize:13,fontWeight:on?700:500,cursor:"pointer"}}>{d}</button>;})}
       </div>
@@ -2095,16 +2154,14 @@ function Scheduler({schedule,setSchedule,profiles,log,resetAllData,exportData,im
       </div>
     </Card>
     <Card>
-      <SectionTitle>Active time window</SectionTitle>
-      <div style={{fontSize:13,color:C.textHint,marginBottom:14}}>The scheduler only runs between these times — so it doesn't disturb you outside working hours.</div>
+      <SectionTitle>Active time window <InfoTip>The scheduler only runs between these hours — so it won't disturb you outside working hours.</InfoTip></SectionTitle>
       <div className="jt-grid-2" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:16}}>
         {[["Start fetching at","startTime"],["Stop fetching at","stopTime"]].map(function(item){return <div key={item[1]}><Label>{item[0]}</Label><Inp type="time" value={draft[item[1]]} onChange={function(e){var v=e.target.value;var patch={};patch[item[1]]=v;update(patch);}} /></div>;})}
       </div>
       {timeInvalid&&<Alert type="error">The stop time must be later than the start time.</Alert>}
     </Card>
     <Card>
-      <SectionTitle>How often should it fetch?</SectionTitle>
-      <div style={{fontSize:13,color:C.textHint,marginBottom:14}}>Choose how frequently the app checks for new jobs within your active time window.</div>
+      <SectionTitle>How often should it fetch? <InfoTip>How frequently the app checks for new jobs within your active time window.</InfoTip></SectionTitle>
       <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
         {[15,30,60,120,240,480].map(function(m){var on=draft.intervalMinutes===m;var label=m<60?m+" minutes":(m/60)+" hour"+(m>60?"s":"");return <button key={m} onClick={function(){update({intervalMinutes:m});}} style={{flex:1,minWidth:80,padding:"12px 8px",borderRadius:12,border:"2px solid "+(on?C.primary:C.border),background:on?C.primaryLight:"transparent",color:on?C.primary:C.textSecondary,fontSize:13,fontWeight:on?700:500,cursor:"pointer",textAlign:"center"}}>{label}</button>;})}
       </div>
@@ -2130,8 +2187,7 @@ function Scheduler({schedule,setSchedule,profiles,log,resetAllData,exportData,im
         </div>}
     </Card>
     <Card>
-      <SectionTitle>Backup & restore</SectionTitle>
-      <div style={{fontSize:13,color:C.textHint,marginBottom:14,lineHeight:1.55}}>Download a JSON file containing all your jobs, profiles, CV, schedule, conversations and settings. Keep it safe — this is your only recovery option if your browser data is cleared.</div>
+      <SectionTitle>Backup & restore <InfoTip>Download a JSON file with all your jobs, profiles, CV, schedule and settings. Keep it as a manual backup — Firestore cloud sync is your primary backup, this is the "leave the cloud" escape hatch.</InfoTip></SectionTitle>
       <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:18}}>
         <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:C.textSecondary,cursor:"pointer",userSelect:"none"}}>
           <input type="checkbox" checked={excludeKeys} onChange={function(){setExcludeKeys(function(v){return !v;});}} style={{width:16,height:16,cursor:"pointer",accentColor:C.primary}} />
@@ -2142,7 +2198,6 @@ function Scheduler({schedule,setSchedule,profiles,log,resetAllData,exportData,im
         </div>
       </div>
       <div style={{borderTop:"1px solid "+C.border,paddingTop:16}}>
-        <div style={{fontSize:13,color:C.textHint,marginBottom:14,lineHeight:1.55}}>Restore from a previous backup. Your current data will be fully replaced.</div>
         <input ref={fileInputRef} type="file" accept="application/json,.json" onChange={onFileChosen} style={{display:"none"}} />
         <Btn onClick={startImport}>⬆ Import backup…</Btn>
         {importError&&<Alert type="error">{importError}</Alert>}
@@ -2163,10 +2218,9 @@ function Scheduler({schedule,setSchedule,profiles,log,resetAllData,exportData,im
       </div>
     </Card>
     <Card>
-      <SectionTitle>Dismissed jobs list</SectionTitle>
-      <div style={{fontSize:13,color:C.textHint,marginBottom:14,lineHeight:1.55}}>
-        When you dismiss or delete a job, its ID is remembered so future fetches from Arbetsförmedlingen or JSearch won't re-add it.
-        {(dismissedIds&&dismissedIds.length)?" Currently blocking "+dismissedIds.length+" job ID"+(dismissedIds.length!==1?"s":"")+" from re-ingestion.":" The list is currently empty."}
+      <SectionTitle>Dismissed jobs <InfoTip>When you dismiss or delete a job, its ID is remembered so future fetches won't re-add it. Clear the list if you want previously dismissed jobs to reappear on the next fetch.</InfoTip></SectionTitle>
+      <div style={{fontSize:13,color:C.textHint,marginBottom:14}}>
+        {(dismissedIds&&dismissedIds.length)?"Blocking "+dismissedIds.length+" job ID"+(dismissedIds.length!==1?"s":"")+" from re-ingestion.":"No dismissed jobs — list is empty."}
       </div>
       <Btn onClick={function(){
         if(!dismissedIds||!dismissedIds.length) return;
@@ -2175,8 +2229,7 @@ function Scheduler({schedule,setSchedule,profiles,log,resetAllData,exportData,im
       }} disabled={!dismissedIds||!dismissedIds.length}>Clear dismissed list</Btn>
     </Card>
     <Card>
-      <SectionTitle>Reset</SectionTitle>
-      <div style={{fontSize:13,color:C.textHint,marginBottom:14,lineHeight:1.55}}>Your jobs, profiles, CV, API keys and schedule are saved in this browser only. Nothing is sent anywhere unless you trigger a fetch or AI action yourself.</div>
+      <SectionTitle>Reset <InfoTip>Permanently deletes all your data — jobs, profiles, CV, API keys and schedule — from both this device and the cloud. Cannot be undone.</InfoTip></SectionTitle>
       <Btn variant="danger" onClick={resetAllData}>Reset all data</Btn>
     </Card>
   </div>;
@@ -2500,8 +2553,7 @@ function CVProfile({cv,setCv}){
       </div>
     </Card>}
     <Card>
-      <SectionTitle>Your CV</SectionTitle>
-      <div style={{fontSize:13,color:C.textHint,marginBottom:14}}>Your CV is used to generate personalised cover letters and AI match scoring. The more detail you add, the better the results.</div>
+      <SectionTitle>Your CV <InfoTip>Your CV is used for AI match scoring and personalised cover letters. The more detail you add, the better the results. PDF files only — text-based PDFs work best.</InfoTip></SectionTitle>
       {hasText&&<Alert type="success">CV loaded · {cvCharCount.toLocaleString()} characters{cv.fileName?" · from "+cv.fileName:" · pasted text"}</Alert>}
       <div style={{display:"flex",gap:8,marginBottom:16,marginTop:hasText?14:0}}>
         {["paste","upload"].map(function(t){return <button key={t} onClick={function(){setTab(t);}} style={{padding:"8px 20px",borderRadius:10,border:"2px solid "+(tab===t?C.primary:C.border),background:tab===t?C.primaryLight:"transparent",color:tab===t?C.primary:C.textSecondary,fontSize:13,fontWeight:tab===t?700:500,cursor:"pointer"}}>{t==="paste"?"Paste text":"Upload PDF"}</button>;})}
@@ -2519,7 +2571,7 @@ function CVProfile({cv,setCv}){
                 :cv.uploaded?"✓ "+cv.fileName+" — click to replace"
                 :"Click to upload your CV as a PDF"}
             </div>
-            <div style={{fontSize:13,color:C.textHint}}>PDF files only. Text-based PDFs work best — scanned/image PDFs are not supported.</div>
+            <div style={{fontSize:12,color:C.textHint}}></div>
             <input ref={fileRef} type="file" accept=".pdf,application/pdf" style={{display:"none"}} onChange={function(e){var f=e.target.files[0];handleFile(f);e.target.value="";}} />
           </div>
           {uploadState.status==="success"&&<Alert type="success">{uploadState.msg} You can review it in the "Paste text" tab.</Alert>}
@@ -2527,8 +2579,7 @@ function CVProfile({cv,setCv}){
         </div>}
     </Card>
     <Card>
-      <SectionTitle>Job preferences</SectionTitle>
-      <div style={{fontSize:13,color:C.textHint,marginBottom:16}}>These help personalise your cover letters and future AI scoring.</div>
+      <SectionTitle>Job preferences <InfoTip>These fields personalise your cover letters and AI scoring. Target roles and locations are especially important — they tell Claude what you're looking for.</InfoTip></SectionTitle>
       <div className="jt-grid-2" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:14}}>
         <div><Label hint="e.g. Product Designer, UX Lead">Target job titles</Label><Inp value={cv.roles||""} onChange={function(e){var v=e.target.value;setCv(function(c){return Object.assign({},c,{roles:v});});}} placeholder="e.g. Product Designer, UX Lead" /></div>
         <div><Label hint="e.g. Fintech, SaaS, Healthcare">Preferred industries</Label><Inp value={cv.industries||""} onChange={function(e){var v=e.target.value;setCv(function(c){return Object.assign({},c,{industries:v});});}} placeholder="e.g. Fintech, SaaS" /></div>
@@ -2539,8 +2590,7 @@ function CVProfile({cv,setCv}){
       <div style={{marginTop:16}}><Btn variant="primary" onClick={function(){alert("Profile saved!");}}>Save profile</Btn></div>
     </Card>
     <Card>
-      <SectionTitle>Tools & software <span style={{fontSize:11,fontWeight:400,color:C.textHint,marginLeft:6}}>optional</span></SectionTitle>
-      <div style={{fontSize:13,color:C.textHint,marginBottom:14}}>List the tools and software you've used professionally. This feeds the AI matching and cover letter generation with precise, verifiable signal.</div>
+      <SectionTitle>Tools & software <span style={{fontSize:11,fontWeight:400,color:C.textHint,marginLeft:6}}>optional</span> <InfoTip>Tools and software you've used professionally — with years of experience and proficiency level. This feeds AI matching with precise signal. e.g. Figma · 6 yrs · Expert · Spotify, IKEA</InfoTip></SectionTitle>
       <InlineListEditor
         items={cv.tools||[]}
         onChange={function(v){setCv(function(c){return Object.assign({},c,{tools:v});});}}
@@ -2556,8 +2606,7 @@ function CVProfile({cv,setCv}){
       />
     </Card>
     <Card>
-      <SectionTitle>Skills & competencies <span style={{fontSize:11,fontWeight:400,color:C.textHint,marginLeft:6}}>optional</span></SectionTitle>
-      <div style={{fontSize:13,color:C.textHint,marginBottom:14}}>List your professional skills and areas of expertise. Separate from tools — these are capabilities like "Design systems", "User research", "Stakeholder management".</div>
+      <SectionTitle>Skills & competencies <span style={{fontSize:11,fontWeight:400,color:C.textHint,marginLeft:6}}>optional</span> <InfoTip>Professional capabilities — methodologies, frameworks, soft skills. Separate from tools: "Design systems", "User research", "Stakeholder management" rather than software names.</InfoTip></SectionTitle>
       <InlineListEditor
         items={cv.skills||[]}
         onChange={function(v){setCv(function(c){return Object.assign({},c,{skills:v});});}}
@@ -2573,8 +2622,7 @@ function CVProfile({cv,setCv}){
       />
     </Card>
     <Card>
-      <SectionTitle>Achievements & highlights <span style={{fontSize:11,fontWeight:400,color:C.textHint,marginLeft:6}}>optional</span></SectionTitle>
-      <div style={{fontSize:13,color:C.textHint,marginBottom:14}}>Specific, measurable things you've accomplished. These are the facts Claude uses when writing cover letters — the more concrete the better ("Reduced onboarding time by 40%", not "Improved processes").</div>
+      <SectionTitle>Achievements & highlights <span style={{fontSize:11,fontWeight:400,color:C.textHint,marginLeft:6}}>optional</span> <InfoTip>Specific, measurable accomplishments Claude can cite in cover letters. Be concrete: "Reduced onboarding time by 40%" beats "Improved processes". Numbers and outcomes matter most.</InfoTip></SectionTitle>
       <InlineListEditor
         items={cv.achievements||[]}
         onChange={function(v){setCv(function(c){return Object.assign({},c,{achievements:v});});}}
@@ -2589,8 +2637,7 @@ function CVProfile({cv,setCv}){
       />
     </Card>
     <Card>
-      <SectionTitle>Email recipients</SectionTitle>
-      <div style={{fontSize:13,color:C.textHint,marginBottom:14}}>Save email addresses you use often — your own, recruiters, specific contacts. When you send a cover letter or report, you can pick from this list. The default is pre-selected.</div>
+      <SectionTitle>Email recipients <InfoTip>Save email addresses you use often — your own, recruiters, specific contacts. When sending a cover letter or report, pick from this list. The default address is pre-selected.</InfoTip></SectionTitle>
       {recipients.length>0&&<div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
         {recipients.map(function(r){return <div key={r.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:C.surfaceAlt,borderRadius:10}}>
           <div style={{flex:1,minWidth:0}}>
@@ -2705,8 +2752,7 @@ function CoverLetters({jobs,cv,anthropicKey,setActiveTab,pendingCoverLetterJob,s
   var noJobsAtAll=jobs.filter(function(j){return !j.archived;}).length===0;
   return <div style={{display:"flex",flexDirection:"column",gap:16}}>
     <Card>
-      <SectionTitle>Generate a cover letter</SectionTitle>
-      <div style={{fontSize:13,color:C.textHint,marginBottom:16}}>Claude will write a personalised cover letter based on the job and your CV. You can edit it before sending.</div>
+      <SectionTitle>Generate a cover letter <InfoTip>Claude writes a personalised cover letter based on the job description and your CV. It only references what's explicitly in your CV — no invented skills. Edit the result before sending.</InfoTip></SectionTitle>
       {/* Empty-state branches: no jobs at all vs. no Reviewing jobs.
           The latter nudges the user to go mark a job Reviewing, which is the
           intended workflow. Toggle overrides for the rare speculative case. */}
@@ -2741,7 +2787,7 @@ function CoverLetters({jobs,cv,anthropicKey,setActiveTab,pendingCoverLetterJob,s
     </Card>
     {letter&&<Card>
       <SectionTitle>Your cover letter</SectionTitle>
-      <div style={{fontSize:13,color:C.textHint,marginBottom:12}}>You can edit the letter directly below before copying, exporting, or emailing it.</div>
+      <div style={{fontSize:13,color:C.textHint,marginBottom:12}}></div>
       <Txta value={letter} onChange={function(e){setLetter(e.target.value);}} rows={16} />
       <div style={{display:"flex",gap:10,marginTop:14,flexWrap:"wrap"}}>
         <Btn variant="primary" onClick={function(){setShowEmail(true);}}>✉ Send via email</Btn>
@@ -2821,8 +2867,7 @@ function Reports({jobs,cv,anthropicKey}){
   var emailSubject=type+" — "+new Date().toISOString().slice(0,10);
   return <div style={{display:"flex",flexDirection:"column",gap:16}}>
     <Card>
-      <SectionTitle>Generate a report</SectionTitle>
-      <div style={{fontSize:13,color:C.textHint,marginBottom:16}}>Claude will analyse your job pipeline and write a summary with insights and recommendations.</div>
+      <SectionTitle>Generate a report <InfoTip>Claude analyses your job pipeline and writes a summary with insights and recommendations — response rates, patterns, actionable suggestions. Uses your CV and structured skills data if available.</InfoTip></SectionTitle>
       <div style={{marginBottom:14}}><Label hint="Choose what kind of report you'd like.">Report type</Label><Sel value={type} onChange={function(e){setType(e.target.value);}}>{["Weekly digest","Top 10 matches","Application status report","Monthly summary"].map(function(t){return <option key={t}>{t}</option>;})}</Sel></div>
       <Btn variant="primary" onClick={generate} disabled={loading||jobs.length===0||!anthropicKey} style={{padding:"12px 28px"}}>{loading?"Writing your report...":"Generate report ↗"}</Btn>
       {!anthropicKey&&<Alert type="warning">Add your Anthropic API key in Search Profiles → API keys to use this feature.</Alert>}
@@ -3012,8 +3057,7 @@ function ActivityListings({jobs}){
   var tdHint={fontSize:13,color:C.textHint,padding:"7px 10px",verticalAlign:"top",whiteSpace:"nowrap"};
 
   return <Card>
-    <SectionTitle>Activity listing</SectionTitle>
-    <div style={{fontSize:13,color:C.textHint,marginBottom:16}}>Tabular listing of jobs by period. Includes all statuses and archived jobs. Reference date is the application date for applied jobs, ingestion date otherwise.</div>
+    <SectionTitle>Activity listing <InfoTip>Tabular listing of jobs by period — all statuses including archived. Reference date is the application date for applied jobs, ingestion date otherwise. Export as CSV opens in Excel.</InfoTip></SectionTitle>
 
     {/* Controls */}
     <div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"flex-end",marginBottom:16}}>
@@ -3415,6 +3459,71 @@ function App(){
 // AppShell holds all the actual app logic. Split out so the auth gate (above)
 // stays simple and AppShell can assume user is non-null. user.uid is used to
 // scope all cloud reads/writes.
+// ─── MobileBottomNav ──────────────────────────────────────────────────────────
+// Bottom tab bar for mobile. Replaces the hamburger + slide-out sidebar on
+// screens ≤767px. Primary tabs are always visible; secondary tabs live in a
+// "More" sheet that slides up from the bottom.
+const PRIMARY_TABS = ["dashboard","jobs","profiles","assistant","covers"];
+const SECONDARY_TABS = ["scheduler","reports","cv"];
+
+function MobileBottomNav({activeTab,setActiveTab,user,onSignOut,theme,setTheme}){
+  var [moreOpen,setMoreOpen]=useState(false);
+
+  function go(id){
+    setActiveTab(id);
+    setMoreOpen(false);
+  }
+
+  var primaryTabs=TABS.filter(function(t){return PRIMARY_TABS.includes(t.id);});
+
+  return <React.Fragment>
+    {/* More sheet overlay */}
+    {moreOpen&&<div className="jt-more-sheet-overlay" onClick={function(){setMoreOpen(false);}} />}
+    {/* More sheet */}
+    {moreOpen&&<div className="jt-more-sheet">
+      <div style={{padding:"0 16px 12px",borderBottom:"1px solid "+C.border,marginBottom:8}}>
+        <div style={{fontSize:12,fontWeight:700,color:C.textHint,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:12}}>More</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+          {TABS.filter(function(t){return SECONDARY_TABS.includes(t.id);}).map(function(t){
+            var active=activeTab===t.id;
+            return <button key={t.id} onClick={function(){go(t.id);}} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6,padding:"14px 8px",borderRadius:12,border:"none",background:active?C.primaryLight:"transparent",color:active?C.primary:C.textSecondary,cursor:"pointer",fontFamily:"inherit"}}>
+              <span style={{fontSize:24}}>{t.icon}</span>
+              <span style={{fontSize:11,fontWeight:active?700:500,textAlign:"center",lineHeight:1.3}}>{t.label}</span>
+            </button>;
+          })}
+        </div>
+      </div>
+      {/* User + sign out + theme in the sheet */}
+      {user&&<div style={{padding:"8px 16px",display:"flex",alignItems:"center",gap:12}}>
+        {user.photoURL
+          ?<img src={user.photoURL} alt="" referrerPolicy="no-referrer" style={{width:32,height:32,borderRadius:"50%",flexShrink:0}} />
+          :<div style={{width:32,height:32,borderRadius:"50%",background:C.primary,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,flexShrink:0}}>{(user.displayName||user.email||"?").slice(0,1).toUpperCase()}</div>}
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:13,fontWeight:600,color:C.textPrimary,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.displayName||"Signed in"}</div>
+          <div style={{fontSize:11,color:C.textHint,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.email}</div>
+        </div>
+        <button onClick={function(){setTheme&&setTheme(theme==="dark"?"light":"dark");}} style={{background:"none",border:"1px solid "+C.border,borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:16,color:C.textHint}}>{theme==="dark"?"☀️":"🌙"}</button>
+        <button onClick={function(){setMoreOpen(false);if(onSignOut)onSignOut();}} style={{background:"none",border:"1px solid "+C.border,borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:12,color:C.textHint,fontFamily:"inherit"}}>Sign out</button>
+      </div>}
+    </div>}
+    {/* Bottom bar */}
+    <nav className="jt-bottom-nav">
+      {primaryTabs.map(function(t){
+        var active=activeTab===t.id&&!moreOpen;
+        return <button key={t.id} className={"jt-bottom-nav-item"+(active?" active":"")} onClick={function(){go(t.id);}}>
+          <span className="jt-bottom-nav-icon">{t.icon}</span>
+          <span>{t.label==="Profile Assistant"?"Assistant":t.label==="Cover Letters"?"Letters":t.label}</span>
+        </button>;
+      })}
+      {/* More button */}
+      <button className={"jt-bottom-nav-item"+(moreOpen||(SECONDARY_TABS.includes(activeTab)&&!moreOpen)?" active":"")} onClick={function(){setMoreOpen(function(v){return !v;});}}>
+        <span className="jt-bottom-nav-icon">⋯</span>
+        <span>More</span>
+      </button>
+    </nav>
+  </React.Fragment>;
+}
+
 function AppShell({user,onSignOut}){
   // Load persisted state once on first render — this is the local cache,
   // updated either by user actions or by Firestore snapshots.
@@ -3898,15 +4007,10 @@ function AppShell({user,onSignOut}){
   };
 
   return <div className="jt-app" style={{background:C.bg,fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif",color:C.textPrimary}}>
-    {/* Mobile-only top bar with hamburger. Hidden on desktop via CSS. */}
-    <div className="jt-topbar">
-      <button onClick={function(){setMobileMenuOpen(true);}} aria-label="Open navigation" style={{background:"transparent",border:"none",fontSize:22,cursor:"pointer",padding:"8px 10px",color:C.textPrimary,lineHeight:1}}>☰</button>
-      <div style={{display:"flex",alignItems:"center",gap:10,flex:1,minWidth:0}}>
-        <div style={{width:28,height:28,borderRadius:8,background:C.primary,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,flexShrink:0}}>🌿</div>
-        <div style={{fontSize:14,fontWeight:800,color:C.textPrimary,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{TABS.find(function(t){return t.id===activeTab;}).label}</div>
-      </div>
-    </div>
+    {/* Desktop: left sidebar. Mobile: hidden via CSS, bottom nav takes over. */}
     <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} mobileOpen={mobileMenuOpen} setMobileOpen={setMobileMenuOpen} user={user} onSignOut={onSignOut} theme={theme} setTheme={setTheme} />
+    {/* Mobile bottom tab bar — hidden on desktop via CSS */}
+    <MobileBottomNav activeTab={activeTab} setActiveTab={setActiveTab} user={user} onSignOut={onSignOut} theme={theme} setTheme={setTheme} />
     <div className={"jt-main"+(sidebarCollapsed?" sidebar-collapsed":"")}>
       <div className="jt-container">
         <TabErrorBoundary tabKey={activeTab}>
