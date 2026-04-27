@@ -1949,7 +1949,18 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
                     <Chip label={"max "+p.limit+" results"} />
                   </div>
                   <div style={{fontSize:13,color:C.textSecondary,marginBottom:8,fontFamily:"monospace",background:C.surface,padding:"6px 10px",borderRadius:8,display:"inline-block"}}>"{p.query}"</div>
-                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{(p.sources||["af"]).map(function(src){var s=SOURCES[src];return <Chip key={src} label={s.label} bg={s.bg} color={s.color} />;})}</div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:4}}>{(p.sources||["af"]).map(function(src){var s=SOURCES[src];return <Chip key={src} label={s.label} bg={s.bg} color={s.color} />;})}</div>
+                  {/* Test query links — open the same query in the source's public web UI
+                      so you can validate results before relying on the profile for scoring. */}
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:4}}>
+                    {(p.sources||["af"]).map(function(src){
+                      var url=src==="af"
+                        ?"https://arbetsformedlingen.se/platsbanken/annonser?q="+encodeURIComponent(p.query)
+                        :"https://se.indeed.com/jobs?q="+encodeURIComponent(p.query);
+                      var label=src==="af"?"🔍 Test on Platsbanken":"🔍 Test on Indeed";
+                      return <a key={src} href={url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:C.primary,textDecoration:"none",padding:"3px 8px",border:"1px solid "+C.primary,borderRadius:6,fontWeight:600,display:"inline-flex",alignItems:"center",gap:4}}>{label}</a>;
+                    })}
+                  </div>
                   {st&&<Alert type={st.type==="loading"?"info":st.type}>{st.msg}</Alert>}
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:6}}>
