@@ -1565,6 +1565,7 @@ function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSor
         // transition to Applied, preserving any earlier appliedAt.
         var patch={status:newStatus};
         if(newStatus==="Applied"&&!j.appliedAt) patch.appliedAt=nowIso;
+        if(newStatus==="Rejected"&&!j.rejectedAt) patch.rejectedAt=nowIso;
         return Object.assign({},j,patch);
       });
     });
@@ -1769,6 +1770,7 @@ function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSor
                 // preserve the original application timestamp.
                 var patch={status:val};
                 if(val==="Applied"&&!x.appliedAt) patch.appliedAt=new Date().toISOString();
+                if(val==="Rejected"&&!x.rejectedAt) patch.rejectedAt=new Date().toISOString();
                 return Object.assign({},x,patch);
               });});}}
               onNotesChange={function(val){setJobs(function(prev){return prev.map(function(x){return x.id===j.id?Object.assign({},x,{notes:val}):x;});});}}
@@ -2738,10 +2740,20 @@ function Reports({jobs,cv,anthropicKey}){
     var offered=byStatus.Offer||0;
     var stillApplied=byStatus.Applied||0;
     var closed=rejected+noResponse;
-    var responded=appliedTotal-noResponse; // anyone who replied, positively or negatively
+    var responded=appliedTotal-noResponse;
     var responseRate=appliedTotal>0?Math.round((responded/appliedTotal)*100):0;
-    var interviewRate=appliedTotal>0?Math.round((interviewed+offered+rejected*0)/appliedTotal*100):0; // count anyone who progressed to interview
-    // Funnel summary for the model
+    var interviewRate=appliedTotal>0?Math.round((interviewed+offered+rejected*0)/appliedTotal*100):0;
+    // Time-to-rejection: average days between appliedAt and rejectedAt for
+    // jobs that have both timestamps. Gives a sense of how long companies take
+    // to respond negatively — useful context for the nudge and reports.
+    var rejectedWithDates=active.filter(function(j){return j.status==="Rejected"&&j.appliedAt&&j.rejectedAt;});
+    var avgDaysToRejection=null;
+    if(rejectedWithDates.length>0){
+      var totalDays=rejectedWithDates.reduce(function(sum,j){
+        return sum+(new Date(j.rejectedAt)-new Date(j.appliedAt))/(1000*60*60*24);
+      },0);
+      avgDaysToRejection=Math.round(totalDays/rejectedWithDates.length);
+    }
     var funnel=
       "FUNNEL STATS (computed from current data, use these verbatim if you cite numbers):\n"+
       "• Total active in pipeline: "+active.length+"\n"+
@@ -2750,6 +2762,7 @@ function Reports({jobs,cv,anthropicKey}){
       "• Progressed to Interview stage: "+(interviewed+offered+rejected)+" (currently Interview: "+interviewed+", Offer: "+offered+", Rejected after applying: "+rejected+")\n"+
       "• Closed - No response (ghosted): "+noResponse+"\n"+
       "• Response rate (any reply, positive or negative): "+responseRate+"%\n"+
+      (avgDaysToRejection!==null?"• Average days from application to rejection: "+avgDaysToRejection+" days (based on "+rejectedWithDates.length+" rejections with timestamps)\n":"")+
       "• Breakdown by status: "+STATUSES.map(function(s){return s+"="+(byStatus[s]||0);}).join(", ");
     var summary=active.map(function(j){return j.title+" at "+j.company+" ("+j.status+", match: "+j.score+"%, source: "+j.source+")";}).join("\n");
     try{
@@ -2789,8 +2802,254 @@ function Reports({jobs,cv,anthropicKey}){
       </div>
       {showEmail&&<EmailDialog recipients={(cv&&cv.recipients)||[]} subject={emailSubject} body={report} onClose={function(){setShowEmail(false);}} />}
     </Card>}
+
+    {/* ── Activity Listings ──────────────────────────────────────────────── */}
+    <ActivityListings jobs={jobs} />
   </div>;
 }
+
+// Helper: format a date string or ISO timestamp as YYYY-MM-DD, or "—" if absent.
+function fmtDate(d){ return d?d.slice(0,10):"—"; }
+// Helper: get the ISO week number (Mon-Sun) for a date.
+function isoWeek(dateStr){
+  var d=new Date(dateStr);
+  var jan4=new Date(d.getFullYear(),0,4);
+  var startOfWeek1=new Date(jan4);
+  startOfWeek1.setDate(jan4.getDate()-(jan4.getDay()||7)+1);
+  var diff=d-startOfWeek1;
+  return Math.floor(diff/(7*24*60*60*1000))+1;
+}
+// Helper: Monday of the ISO week containing dateStr.
+function weekStart(dateStr){
+  var d=new Date(dateStr);
+  var day=d.getDay()||7;
+  d.setDate(d.getDate()-day+1);
+  return d.toISOString().slice(0,10);
+}
+// Helper: Sunday of the ISO week.
+function weekEnd(dateStr){
+  var d=new Date(weekStart(dateStr));
+  d.setDate(d.getDate()+6);
+  return d.toISOString().slice(0,10);
+}
+
+function ActivityListings({jobs}){
+  // Default period: current month
+  var now=new Date();
+  var thisMonth=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0");
+  var [startMonth,setStartMonth]=useState(thisMonth);
+  var [endMonth,setEndMonth]=useState(thisMonth);
+  var [groupBy,setGroupBy]=useState("status"); // "status" | "week"
+  var [copied,setCopied]=useState("");
+
+  // Reference date for a job: appliedAt for statuses after applying, date otherwise.
+  function refDate(j){
+    return APPLIED_STATUSES.includes(j.status)&&j.appliedAt?j.appliedAt.slice(0,10):j.date||"";
+  }
+
+  // Filter: jobs whose reference date falls within [startMonth, endMonth].
+  // Include all statuses + archived as specified.
+  var filtered=jobs.filter(function(j){
+    var d=refDate(j);
+    if(!d) return false;
+    var month=d.slice(0,7);
+    return month>=startMonth&&month<=endMonth;
+  }).sort(function(a,b){
+    return (refDate(a)||"").localeCompare(refDate(b)||"");
+  });
+
+  // Row data — short ID is last 4 chars of string representation of job.id
+  function shortId(j){ return String(j.id).slice(-4); }
+
+  function rowData(j){
+    return {
+      id:shortId(j),
+      title:j.title||"",
+      company:j.company||"",
+      status:j.status+(j.archived?" (archived)":""),
+      refDate:refDate(j),
+      appliedAt:fmtDate(j.appliedAt),
+      rejectedAt:fmtDate(j.rejectedAt),
+    };
+  }
+
+  // ── Group by status ──────────────────────────────────────────────────────
+  function buildStatusGroups(){
+    var groups={};
+    // Order: all STATUSES first, then archived-only bucket
+    var allStatuses=STATUSES.slice();
+    filtered.forEach(function(j){
+      var key=j.status+(j.archived?" (archived)":"");
+      if(!groups[key]) groups[key]=[];
+      groups[key].push(rowData(j));
+    });
+    // Sort group keys by STATUSES order
+    var order=STATUSES.map(function(s,i){return {s:s,i:i};});
+    return Object.keys(groups).sort(function(a,b){
+      var ai=order.findIndex(function(x){return a.startsWith(x.s);});
+      var bi=order.findIndex(function(x){return b.startsWith(x.s);});
+      return (ai===-1?99:ai)-(bi===-1?99:bi);
+    }).map(function(key){return {label:key,rows:groups[key]};});
+  }
+
+  // ── Group by week ────────────────────────────────────────────────────────
+  function buildWeekGroups(){
+    var groups={};
+    filtered.forEach(function(j){
+      var d=refDate(j);
+      if(!d) return;
+      var ws=weekStart(d);
+      if(!groups[ws]) groups[ws]=[];
+      groups[ws].push(rowData(j));
+    });
+    return Object.keys(groups).sort().map(function(ws){
+      var we=weekEnd(ws);
+      var wn=isoWeek(ws);
+      var label="Week "+wn+" ("+ws+" – "+we+")";
+      return {label:label,rows:groups[ws],weekStart:ws};
+    });
+  }
+
+  var groups=groupBy==="status"?buildStatusGroups():buildWeekGroups();
+  var totalRows=filtered.length;
+
+  // ── Plain text export ────────────────────────────────────────────────────
+  function buildPlainText(){
+    var lines=["Job Activity Listing","Period: "+startMonth+" to "+endMonth,"Grouped by: "+(groupBy==="status"?"Status":"Week"),"Generated: "+new Date().toISOString().slice(0,10),"Total jobs: "+totalRows,""];
+    groups.forEach(function(g){
+      lines.push("── "+g.label+" ("+g.rows.length+") ──");
+      g.rows.forEach(function(r){
+        lines.push([
+          "#"+r.id,
+          r.company.padEnd(20).slice(0,20),
+          r.title.padEnd(30).slice(0,30),
+          r.status.padEnd(16).slice(0,16),
+          "Applied: "+r.appliedAt,
+          r.rejectedAt!=="—"?"Rejected: "+r.rejectedAt:"",
+        ].filter(Boolean).join("  "));
+      });
+      lines.push("");
+    });
+    return lines.join("\n");
+  }
+
+  // ── CSV export ───────────────────────────────────────────────────────────
+  function buildCsv(){
+    var rows=[["ID","Company","Job Title","Status","Reference Date","Applied Date","Rejected Date","Period","Week"]];
+    groups.forEach(function(g){
+      g.rows.forEach(function(r){
+        rows.push([
+          "#"+r.id,
+          r.company,
+          r.title,
+          r.status,
+          r.refDate,
+          r.appliedAt,
+          r.rejectedAt,
+          startMonth+(startMonth!==endMonth?" to "+endMonth:""),
+          g.weekStart||"",
+        ].map(function(v){ return "\""+String(v).replace(/"/g,"\"\"")+"\""; }).join(","));
+      });
+    });
+    return rows.join("\n");
+  }
+
+  function copyText(){
+    navigator.clipboard.writeText(buildPlainText());
+    setCopied("text"); setTimeout(function(){setCopied("");},2000);
+  }
+  function downloadCsv(){
+    var csv=buildCsv();
+    var bom="\uFEFF"; // UTF-8 BOM so Excel opens it correctly
+    var b=new Blob([bom+csv],{type:"text/csv;charset=utf-8"});
+    var a=document.createElement("a");
+    a.href=URL.createObjectURL(b);
+    a.download="job-activity-"+startMonth+"-to-"+endMonth+".csv";
+    a.click();
+  }
+
+  // ── Table row ────────────────────────────────────────────────────────────
+  var thStyle={fontSize:11,fontWeight:700,color:C.textHint,textTransform:"uppercase",
+    letterSpacing:"0.5px",padding:"6px 10px",textAlign:"left",borderBottom:"2px solid "+C.border,whiteSpace:"nowrap"};
+  var tdStyle={fontSize:13,color:C.textPrimary,padding:"7px 10px",verticalAlign:"top"};
+  var tdHint={fontSize:13,color:C.textHint,padding:"7px 10px",verticalAlign:"top",whiteSpace:"nowrap"};
+
+  return <Card>
+    <SectionTitle>Activity listing</SectionTitle>
+    <div style={{fontSize:13,color:C.textHint,marginBottom:16}}>Tabular listing of jobs by period. Includes all statuses and archived jobs. Reference date is the application date for applied jobs, ingestion date otherwise.</div>
+
+    {/* Controls */}
+    <div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"flex-end",marginBottom:16}}>
+      <div>
+        <Label>From month</Label>
+        <input type="month" value={startMonth} onChange={function(e){setStartMonth(e.target.value);}} style={{fontSize:13,padding:"8px 10px",borderRadius:8,border:"1.5px solid "+C.border,background:C.surface,color:C.textPrimary,fontFamily:"inherit"}} />
+      </div>
+      <div>
+        <Label>To month</Label>
+        <input type="month" value={endMonth} onChange={function(e){
+          var v=e.target.value;
+          setEndMonth(v<startMonth?startMonth:v);
+        }} style={{fontSize:13,padding:"8px 10px",borderRadius:8,border:"1.5px solid "+C.border,background:C.surface,color:C.textPrimary,fontFamily:"inherit"}} />
+      </div>
+      <div>
+        <Label>Group by</Label>
+        <div style={{display:"flex",gap:6}}>
+          {["status","week"].map(function(g){
+            return <button key={g} onClick={function(){setGroupBy(g);}} style={{fontSize:13,padding:"8px 14px",borderRadius:8,border:"1.5px solid "+(groupBy===g?C.primary:C.border),background:groupBy===g?C.primaryLight:"transparent",color:groupBy===g?C.primary:C.textSecondary,cursor:"pointer",fontWeight:groupBy===g?700:400,textTransform:"capitalize"}}>
+              {g==="status"?"By status":"By week"}
+            </button>;
+          })}
+        </div>
+      </div>
+      <div style={{marginLeft:"auto",display:"flex",gap:8,flexWrap:"wrap"}}>
+        <Btn onClick={copyText} disabled={totalRows===0}>{copied==="text"?"Copied!":"Copy as text"}</Btn>
+        <Btn variant="primary" onClick={downloadCsv} disabled={totalRows===0}>⬇ Download CSV</Btn>
+      </div>
+    </div>
+
+    {totalRows===0
+      ?<Alert type="info">No jobs found for the selected period. Try adjusting the date range.</Alert>
+      :<div>
+        <div style={{fontSize:12,color:C.textHint,marginBottom:10}}>{totalRows} job{totalRows!==1?"s":""} in period</div>
+        {groups.map(function(g){
+          return <div key={g.label} style={{marginBottom:20}}>
+            <div style={{fontSize:13,fontWeight:700,color:C.primary,marginBottom:6,padding:"4px 0",borderBottom:"1px solid "+C.border}}>
+              {g.label} <span style={{fontWeight:400,color:C.textHint}}>({g.rows.length})</span>
+            </div>
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>ID</th>
+                    <th style={thStyle}>Company</th>
+                    <th style={thStyle}>Title</th>
+                    <th style={thStyle}>Status</th>
+                    <th style={thStyle}>Ref date</th>
+                    <th style={thStyle}>Applied</th>
+                    <th style={thStyle}>Rejected</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {g.rows.map(function(r,i){
+                    var bg=i%2===0?C.surfaceAlt:C.surface;
+                    return <tr key={r.id+i} style={{background:bg}}>
+                      <td style={Object.assign({},tdHint,{fontFamily:"monospace"})}>{r.id}</td>
+                      <td style={tdStyle}>{r.company}</td>
+                      <td style={Object.assign({},tdStyle,{maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"})}>{r.title}</td>
+                      <td style={tdStyle}><span style={{background:STATUS[r.status.replace(" (archived)","")]?STATUS[r.status.replace(" (archived)","")].bg:C.surfaceAlt,color:STATUS[r.status.replace(" (archived)","")]?STATUS[r.status.replace(" (archived)","")].color:C.textSecondary,borderRadius:6,padding:"2px 8px",fontSize:12,fontWeight:600,whiteSpace:"nowrap"}}>{r.status}</span></td>
+                      <td style={tdHint}>{r.refDate}</td>
+                      <td style={tdHint}>{r.appliedAt}</td>
+                      <td style={tdHint}>{r.rejectedAt}</td>
+                    </tr>;
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>;
+        })}
+      </div>
+    }
+  </Card>;
 
 // ─── Profile Assistant ────────────────────────────────────────────────────────
 // Chat UI. Holds a message history (role: user|assistant, content: string).
