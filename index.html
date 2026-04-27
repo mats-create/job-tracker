@@ -120,6 +120,8 @@
   html[data-theme="dark"] .jt-topbar{background:#1A2420!important;border-bottom-color:#2E3B36!important}
   html[data-theme="dark"] .jt-sb-item:hover{background:#222D29}
   html[data-theme="dark"] .jt-sb-item.active{background:#1F3530;color:#7AAD9C}
+  /* Query pill tooltip — shown on hover via pure CSS */
+  .jt-query-pill:hover .jt-query-tooltip{display:block!important}
 
   /* Mobile: sidebar becomes a slide-out drawer. Top bar with hamburger appears. */
   @media (max-width:767px){
@@ -1810,11 +1812,10 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
     setForm({name:p.name,query:p.query,limit:p.limit,sources:p.sources||["af"]});
     setEditId(p.id);
     setShowForm(true);
-    // Scroll the form into view after React renders it. setTimeout(0) defers
-    // until the next tick so the form node exists in the DOM by then.
+    // Scroll the inline edit card into view after React renders it.
     setTimeout(function(){
       if(formRef.current){ formRef.current.scrollIntoView({behavior:"smooth",block:"center"}); }
-    },0);
+    },50);
   }
 
   async function fetchAF(p){
@@ -1916,13 +1917,14 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
     <Card>
       <SectionTitle action={<div style={{display:"flex",gap:8}}><Btn onClick={runAll} style={{fontSize:13,padding:"8px 14px"}}>▶ Run all active</Btn><Btn variant="primary" onClick={function(){setEditId(null);setForm({name:"",query:"",limit:10,sources:["af"]});setShowForm(function(v){return !v;});}} style={{fontSize:13,padding:"8px 14px"}}>+ New profile</Btn></div>}>Search profiles</SectionTitle>
       <Alert type="info">A search profile is a saved search query. When you click Fetch or run the scheduler, each active profile searches its sources and adds new matching jobs to your list automatically.</Alert>
-      {showForm&&<div ref={formRef} style={{background:C.surfaceAlt,borderRadius:14,padding:"20px",margin:"16px 0",border:"1.5px solid "+C.border}}>
-        <div style={{fontSize:15,fontWeight:700,color:C.textPrimary,marginBottom:16}}>{editId?"Edit profile":"New search profile"}</div>
+      <Alert type="warning" style={{marginTop:8}}>Queries use simple keyword matching — no AND, OR, or boolean operators. To search for multiple roles or locations, create separate profiles (e.g. one for "Product Manager Stockholm", another for "Product Owner Stockholm").</Alert>
+      {showForm&&!editId&&<div ref={formRef} style={{background:C.surfaceAlt,borderRadius:14,padding:"20px",margin:"16px 0",border:"1.5px solid "+C.border}}>
+        <div style={{fontSize:15,fontWeight:700,color:C.textPrimary,marginBottom:16}}>New search profile</div>
         <div className="jt-grid-2" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:14,marginBottom:14}}>
-          <div><Label hint="A name to help you identify this search">Profile name</Label><Inp value={form.name} onChange={function(e){var v=e.target.value;setForm(function(f){return Object.assign({},f,{name:v});});}} placeholder="e.g. UX Design Sweden" /></div>
+          <div><Label hint="A name to help you identify this search">Profile name</Label><Inp value={form.name} onChange={function(e){var v=e.target.value;setForm(function(f){return Object.assign({},f,{name:v});});}} placeholder="e.g. Product Manager Stockholm" /></div>
           <div><Label hint="Maximum jobs to fetch each time this profile runs">Max results</Label><Inp type="number" value={form.limit} onChange={function(e){var v=e.target.value;setForm(function(f){return Object.assign({},f,{limit:v});});}} placeholder="10" style={{width:100}} /></div>
         </div>
-        <div style={{marginBottom:14}}><Label hint="Write naturally — e.g. UX designer Stockholm or product manager fintech remote">Search query</Label><Txta value={form.query} onChange={function(e){var v=e.target.value;setForm(function(f){return Object.assign({},f,{query:v});});}} placeholder='e.g. "UX designer Stockholm"' rows={2} /></div>
+        <div style={{marginBottom:14}}><Label hint="One role or one location per profile. Create separate profiles for variations.">Search query</Label><Txta value={form.query} onChange={function(e){var v=e.target.value;setForm(function(f){return Object.assign({},f,{query:v});});}} placeholder='e.g. "product manager SaaS Stockholm"' rows={2} /></div>
         <div style={{marginBottom:16}}>
           <Label hint="Choose which job boards to search">Search in</Label>
           <div style={{display:"flex",gap:10,marginTop:4}}>
@@ -1932,13 +1934,41 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
             })}
           </div>
         </div>
-        <div style={{display:"flex",gap:10}}><Btn variant="primary" onClick={saveProfile}>{editId?"Update profile":"Save profile"}</Btn><Btn onClick={function(){setShowForm(false);setEditId(null);}}>Cancel</Btn></div>
+        <div style={{display:"flex",gap:10}}><Btn variant="primary" onClick={saveProfile}>Save profile</Btn><Btn onClick={function(){setShowForm(false);setEditId(null);}}>Cancel</Btn></div>
       </div>}
       {profiles.length===0
         ?<EmptyState icon="🔎" title="No search profiles yet" body="Create a profile with a search query to start fetching jobs." />
         :<div style={{display:"flex",flexDirection:"column",gap:12,marginTop:16}}>
           {profiles.map(function(p){
             var st=runStatus[p.id];
+            var isEditingThis=editId===p.id;
+            // Build tooltip URLs for hover display
+            var afUrl="https://jobsearch.api.jobtechdev.se/search?q="+encodeURIComponent(p.query)+"&limit="+p.limit;
+            var jsUrl="https://jsearch.p.rapidapi.com/search?query="+encodeURIComponent(p.query)+"&num_pages=1";
+
+            if(isEditingThis){
+              // ── Inline edit form ───────────────────────────────────────────
+              return <div key={p.id} ref={formRef} style={{background:C.primaryLight,borderRadius:14,padding:"20px",border:"1.5px solid "+C.primary}}>
+                <div style={{fontSize:14,fontWeight:700,color:C.primary,marginBottom:14}}>Editing: {p.name}</div>
+                <div className="jt-grid-2" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:14,marginBottom:14}}>
+                  <div><Label hint="A name to help you identify this search">Profile name</Label><Inp value={form.name} onChange={function(e){var v=e.target.value;setForm(function(f){return Object.assign({},f,{name:v});});}} placeholder="e.g. Product Manager Stockholm" /></div>
+                  <div><Label hint="Maximum jobs to fetch each time this profile runs">Max results</Label><Inp type="number" value={form.limit} onChange={function(e){var v=e.target.value;setForm(function(f){return Object.assign({},f,{limit:v});});}} placeholder="10" style={{width:100}} /></div>
+                </div>
+                <div style={{marginBottom:14}}><Label hint="One role or one location per profile. Create separate profiles for variations — no AND/OR operators supported.">Search query</Label><Txta value={form.query} onChange={function(e){var v=e.target.value;setForm(function(f){return Object.assign({},f,{query:v});});}} placeholder='e.g. "product manager SaaS Stockholm"' rows={2} /></div>
+                <div style={{marginBottom:16}}>
+                  <Label hint="Choose which job boards to search">Search in</Label>
+                  <div style={{display:"flex",gap:10,marginTop:4}}>
+                    {[["af","Arbetsförmedlingen (Swedish jobs)","#EAF2EF","#3D6B5C"],["jsearch","JSearch — Indeed, LinkedIn, Glassdoor","#E3EFF8","#1A5A8A"]].map(function(item){
+                      var on=form.sources.includes(item[0]);
+                      return <button key={item[0]} onClick={function(){toggleSource(item[0]);}} style={{flex:1,padding:"12px 16px",borderRadius:12,border:"2px solid "+(on?item[3]:C.border),background:on?item[2]:"transparent",color:on?item[3]:C.textSecondary,cursor:"pointer",fontSize:13,fontWeight:on?700:500,textAlign:"left"}}>{on?"✓ ":""}{item[1]}</button>;
+                    })}
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:10}}><Btn variant="primary" onClick={saveProfile}>Update profile</Btn><Btn onClick={function(){setShowForm(false);setEditId(null);}}>Cancel</Btn></div>
+              </div>;
+            }
+
+            // ── Display row ────────────────────────────────────────────────
             return <div key={p.id} style={{background:C.surfaceAlt,borderRadius:14,padding:"16px 18px",opacity:p.active?1:0.65}}>
               <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
                 <div style={{paddingTop:2}}><Toggle value={p.active} onChange={function(){var pid=p.id;setProfiles(function(prev){return prev.map(function(x){return x.id===pid?Object.assign({},x,{active:!x.active}):x;});});}} /></div>
@@ -1948,19 +1978,15 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
                     <Chip label={p.active?"Active":"Inactive"} bg={p.active?C.primaryLight:C.surfaceAlt} color={p.active?C.primary:C.textHint} />
                     <Chip label={"max "+p.limit+" results"} />
                   </div>
-                  <div style={{fontSize:13,color:C.textSecondary,marginBottom:8,fontFamily:"monospace",background:C.surface,padding:"6px 10px",borderRadius:8,display:"inline-block"}}>"{p.query}"</div>
-                  <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:4}}>{(p.sources||["af"]).map(function(src){var s=SOURCES[src];return <Chip key={src} label={s.label} bg={s.bg} color={s.color} />;})}</div>
-                  {/* Test query links — open the same query in the source's public web UI
-                      so you can validate results before relying on the profile for scoring. */}
-                  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:4}}>
-                    {(p.sources||["af"]).map(function(src){
-                      var url=src==="af"
-                        ?"https://arbetsformedlingen.se/platsbanken/annonser?q="+encodeURIComponent(p.query)
-                        :"https://se.indeed.com/jobs?q="+encodeURIComponent(p.query);
-                      var label=src==="af"?"🔍 Test on Platsbanken":"🔍 Test on Indeed";
-                      return <a key={src} href={url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:C.primary,textDecoration:"none",padding:"3px 8px",border:"1px solid "+C.primary,borderRadius:6,fontWeight:600,display:"inline-flex",alignItems:"center",gap:4}}>{label}</a>;
-                    })}
+                  {/* Query pill with hover tooltip showing the actual API URL */}
+                  <div style={{position:"relative",display:"inline-block",marginBottom:8}} className="jt-query-pill">
+                    <div style={{fontSize:13,color:C.textSecondary,fontFamily:"monospace",background:C.surface,padding:"6px 10px",borderRadius:8,cursor:"default"}}>"{p.query}"</div>
+                    <div className="jt-query-tooltip" style={{display:"none",position:"absolute",left:0,top:"100%",marginTop:4,background:C.textPrimary,color:C.surface,fontSize:11,padding:"8px 12px",borderRadius:8,zIndex:100,whiteSpace:"pre",boxShadow:C.shadowMd,minWidth:320,maxWidth:480,wordBreak:"break-all",lineHeight:1.7}}>
+                      {(p.sources||["af"]).includes("af")&&"AF API:\n"+afUrl+"\n"}
+                      {(p.sources||["af"]).includes("jsearch")&&"JSearch:\n"+jsUrl}
+                    </div>
                   </div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{(p.sources||["af"]).map(function(src){var s=SOURCES[src];return <Chip key={src} label={s.label} bg={s.bg} color={s.color} />;})}</div>
                   {st&&<Alert type={st.type==="loading"?"info":st.type}>{st.msg}</Alert>}
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:6}}>
