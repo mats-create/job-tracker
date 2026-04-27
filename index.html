@@ -120,74 +120,112 @@
   html[data-theme="dark"] .jt-topbar{background:#1A2420!important;border-bottom-color:#2E3B36!important}
   html[data-theme="dark"] .jt-sb-item:hover{background:#222D29}
   html[data-theme="dark"] .jt-sb-item.active{background:#1F3530;color:#7AAD9C}
-  /* Query pill tooltip — shown on hover via pure CSS */
-  .jt-query-pill:hover .jt-query-tooltip{display:block!important}
+  /* Query pill tooltip — desktop hover only, hidden on touch/mobile */
+  @media (hover:hover) and (pointer:fine){
+    .jt-query-pill:hover .jt-query-tooltip{display:block!important}
+  }
 
-  /* ── Mobile bottom tab bar ───────────────────────────────────────────────
-     Replaces the hamburger + slide-out drawer on narrow screens.
-     The sidebar is hidden entirely on mobile; bottom bar takes over routing. */
+  /* ── Bottom tab bar (mobile only) — hidden on desktop ───────────────────── */
   .jt-bottom-nav{display:none}
+
+  /* ── Mobile: ≤767px ──────────────────────────────────────────────────────── */
   @media (max-width:767px){
+    /* Layout */
+    .jt-sidebar{display:none!important}          /* bottom nav replaces sidebar  */
+    .jt-topbar{display:none!important}            /* no top bar either            */
+    .jt-sidebar-overlay{display:none!important}
+    .jt-main{margin-left:0!important;padding-top:8px;padding-bottom:80px}
+    .jt-container{padding:12px 12px 80px}
+
+    /* Cards & grids */
+    .jt-card{padding:16px!important;border-radius:14px!important}
+    .jt-grid-2{grid-template-columns:1fr!important}
+    .jt-grid-recipient{grid-template-columns:1fr!important}
+    .jt-section-title{flex-wrap:wrap;gap:8px}
+
+    /* Inputs — 16px prevents iOS Safari auto-zoom on focus */
+    input,textarea,select{font-size:16px!important}
+
+    /* ── Bottom tab bar ──────────────────────────────────────────────────── */
     .jt-bottom-nav{
       display:flex;
       position:fixed;bottom:0;left:0;right:0;
-      height:60px;
+      height:56px;
       background:#FFFFFF;
       border-top:1px solid #D9E3DE;
-      z-index:200;
-      box-shadow:0 -2px 8px rgba(0,0,0,0.06);
-      padding-bottom:env(safe-area-inset-bottom); /* iPhone home indicator */
+      z-index:500;
+      /* Respect iPhone home indicator */
+      padding-bottom:env(safe-area-inset-bottom,0px);
+      box-shadow:0 -1px 0 rgba(0,0,0,0.08);
     }
-    html[data-theme="dark"] .jt-bottom-nav{background:#1A2420;border-top-color:#2E3B36}
+    html[data-theme="dark"] .jt-bottom-nav{
+      background:#1A2420;border-top-color:#2E3B36;
+    }
     .jt-bottom-nav-item{
-      flex:1;display:flex;flex-direction:column;align-items:center;
-      justify-content:center;gap:2px;
+      flex:1;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      gap:3px;
       border:none;background:transparent;cursor:pointer;
-      padding:6px 0;font-family:inherit;
-      color:#8FA89F;font-size:10px;font-weight:500;
+      padding:4px 2px 6px;
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+      font-size:9px;font-weight:500;letter-spacing:0.2px;
+      color:#8FA89F;
       -webkit-tap-highlight-color:transparent;
+      min-width:44px;                             /* Apple HIG min touch target  */
+      transition:color 0.15s ease;
     }
     .jt-bottom-nav-item.active{color:#5C8A7A;font-weight:700}
     html[data-theme="dark"] .jt-bottom-nav-item{color:#7A8B85}
     html[data-theme="dark"] .jt-bottom-nav-item.active{color:#7AAD9C}
-    .jt-bottom-nav-icon{font-size:20px;line-height:1}
-    /* Push main content above the bottom bar */
-    .jt-main{margin-left:0!important;padding-top:56px;padding-bottom:72px}
-    /* Hide the hamburger topbar — bottom nav replaces it */
-    .jt-topbar{display:none!important}
-    /* Hide sidebar on mobile entirely */
-    .jt-sidebar{display:none!important}
-    /* More sheet overlay */
+    .jt-bottom-nav-icon{
+      font-size:22px;line-height:1;
+      display:block;
+    }
+    .jt-bottom-nav-item.active .jt-bottom-nav-icon{
+      /* Subtle scale on active for iOS feel */
+      transform:scale(1.08);
+    }
+
+    /* ── More sheet ──────────────────────────────────────────────────────── */
     .jt-more-sheet-overlay{
-      position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:300;
+      position:fixed;inset:0;
+      background:rgba(0,0,0,0.45);
+      z-index:498;
+      -webkit-backdrop-filter:blur(2px);
+      backdrop-filter:blur(2px);
     }
     .jt-more-sheet{
-      position:fixed;bottom:60px;left:0;right:0;
-      background:#FFFFFF;border-radius:16px 16px 0 0;
-      border-top:1px solid #D9E3DE;
-      padding:16px 0 8px;z-index:301;
-      box-shadow:0 -4px 24px rgba(0,0,0,0.12);
+      position:fixed;
+      bottom:calc(56px + env(safe-area-inset-bottom,0px));
+      left:0;right:0;
+      background:#FFFFFF;
+      border-radius:20px 20px 0 0;
+      z-index:499;
+      box-shadow:0 -8px 32px rgba(0,0,0,0.15);
+      overflow:hidden;
     }
-    html[data-theme="dark"] .jt-more-sheet{background:#1A2420;border-top-color:#2E3B36}
+    html[data-theme="dark"] .jt-more-sheet{
+      background:#1A2420;
+    }
+    /* Drag handle */
+    .jt-more-sheet::before{
+      content:'';
+      display:block;
+      width:36px;height:4px;
+      background:rgba(0,0,0,0.15);
+      border-radius:2px;
+      margin:10px auto 0;
+    }
+    html[data-theme="dark"] .jt-more-sheet::before{
+      background:rgba(255,255,255,0.15);
+    }
   }
 
-  /* Mobile: sidebar becomes a slide-out drawer. Top bar with hamburger appears. */
-  @media (max-width:767px){
-    .jt-sidebar{transform:translateX(-100%);width:260px;box-shadow:4px 0 24px rgba(0,0,0,0.18)}
-    .jt-sidebar.open{transform:translateX(0)}
-    .jt-sidebar.collapsed{width:260px}  /* no icon-only mode on mobile */
-    .jt-main{margin-left:0!important;padding-top:56px} /* topbar space */
-    .jt-topbar{display:flex;position:fixed;top:0;left:0;right:0;height:56px;background:#FFFFFF;border-bottom:1px solid #D9E3DE;align-items:center;padding:0 14px;gap:12px;z-index:150;box-shadow:0 1px 4px rgba(0,0,0,0.06)}
-    .jt-sidebar-overlay{display:block;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:190;opacity:0;pointer-events:none;transition:opacity 0.2s}
-    .jt-sidebar-overlay.open{opacity:1;pointer-events:auto}
-    .jt-container{padding:16px 12px 80px}
-    .jt-card{padding:16px 16px!important;border-radius:12px!important}
-    .jt-grid-2{grid-template-columns:1fr!important}
-    .jt-grid-recipient{grid-template-columns:1fr!important}
-    .jt-section-title{flex-wrap:wrap;gap:8px}
-  }
-  @media (max-width:480px){
-    .jt-card{padding:14px 14px!important}
+  /* ── Narrow phones ≤390px ────────────────────────────────────────────────── */
+  @media (max-width:390px){
+    .jt-card{padding:12px!important}
+    .jt-bottom-nav-item{font-size:8px}
+    .jt-bottom-nav-icon{font-size:20px}
   }
 </style>
 </head>
@@ -1245,18 +1283,87 @@ function Alert({type,children}){
   return <div style={{fontSize:13,padding:"10px 14px",borderRadius:10,background:bg,color:col,marginTop:10}}>{children}</div>;
 }
 
-// InfoTip — a small ⓘ icon that toggles an instruction block on click.
-// Replaces always-visible helper text throughout the app to reduce visual
-// noise. Once dismissed per-section it stays hidden until clicked again.
-// Usage: <InfoTip>Your help text here</InfoTip>
-// Optional: label="What's this?" to show text next to the icon.
+// InfoTip — a ⓘ icon that shows a floating tooltip on click.
+// Uses position:fixed so the panel never pushes other content down or gets
+// clipped by overflow:hidden parents. On mobile the panel is anchored to the
+// bottom of the viewport so it's always readable regardless of scroll position.
 function InfoTip({children,label}){
   var [open,setOpen]=useState(false);
-  return <span style={{display:"inline-block",verticalAlign:"middle"}}>
-    <button onClick={function(){setOpen(function(v){return !v;});}} title={open?"Hide info":"Show info"} style={{background:"none",border:"none",cursor:"pointer",color:open?C.info:C.textHint,fontSize:14,padding:"0 4px",lineHeight:1,verticalAlign:"middle",fontWeight:open?700:400}}>
-      {label&&<span style={{fontSize:11,marginRight:3,verticalAlign:"middle"}}>{label}</span>}ⓘ
+  var [pos,setPos]=useState({top:0,left:0});
+  var btnRef=useRef(null);
+  var isMobile=typeof window!=="undefined"&&window.innerWidth<=767;
+
+  function toggle(){
+    if(!open&&btnRef.current){
+      var r=btnRef.current.getBoundingClientRect();
+      setPos({
+        // On desktop: appear below+left-aligned to the button.
+        // On mobile: we'll use a bottom sheet style (overridden in render).
+        top:r.bottom+6,
+        left:Math.max(8,Math.min(r.left,window.innerWidth-288)),
+      });
+    }
+    setOpen(function(v){return !v;});
+  }
+
+  // Close on outside click
+  useEffect(function(){
+    if(!open) return;
+    function handle(e){
+      if(btnRef.current&&!btnRef.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener("mousedown",handle);
+    document.addEventListener("touchstart",handle);
+    return function(){
+      document.removeEventListener("mousedown",handle);
+      document.removeEventListener("touchstart",handle);
+    };
+  },[open]);
+
+  var mobile=typeof window!=="undefined"&&window.innerWidth<=767;
+
+  // Mobile: full-width bottom panel. Desktop: floating near the button.
+  var panelStyle=mobile
+    ?{position:"fixed",left:0,right:0,bottom:0,zIndex:600,
+       background:C.surface,borderTop:"1px solid "+C.border,
+       borderRadius:"16px 16px 0 0",padding:"20px 20px 32px",
+       boxShadow:"0 -8px 32px rgba(0,0,0,0.15)",
+       fontSize:14,color:C.textSecondary,lineHeight:1.7,
+       maxHeight:"60vh",overflowY:"auto"}
+    :{position:"fixed",top:pos.top,left:pos.left,zIndex:600,
+       width:280,background:C.surface,
+       border:"1px solid "+C.border,
+       borderRadius:12,padding:"14px 16px",
+       boxShadow:C.shadowMd,
+       fontSize:13,color:C.textSecondary,lineHeight:1.65};
+
+  return <span style={{display:"inline-block",verticalAlign:"middle",position:"relative"}}>
+    <button ref={btnRef} onClick={toggle}
+      title={open?"Hide info":"Show info"}
+      style={{background:"none",border:"none",cursor:"pointer",
+        color:open?C.info:C.textHint,
+        fontSize:15,padding:"0 4px",lineHeight:1,
+        verticalAlign:"middle",fontWeight:open?700:400,
+        minWidth:24,minHeight:24,
+        display:"inline-flex",alignItems:"center",gap:3}}>
+      {label&&<span style={{fontSize:11,verticalAlign:"middle"}}>{label}</span>}
+      <span style={{fontSize:16}}>ⓘ</span>
     </button>
-    {open&&<div style={{fontSize:12,color:C.textSecondary,background:C.infoBg,border:"1px solid "+C.info,borderRadius:8,padding:"10px 14px",marginTop:6,lineHeight:1.6,display:"block"}}>{children}</div>}
+    {open&&<React.Fragment>
+      {/* Scrim — tap outside to close on mobile */}
+      {mobile&&<div onClick={function(){setOpen(false);}}
+        style={{position:"fixed",inset:0,zIndex:599,background:"rgba(0,0,0,0.3)"}} />}
+      <div style={panelStyle}>
+        {mobile&&<div style={{width:36,height:4,background:C.border,borderRadius:2,margin:"0 auto 16px"}} />}
+        {children}
+        {mobile&&<button onClick={function(){setOpen(false);}}
+          style={{marginTop:16,width:"100%",padding:"12px",borderRadius:10,
+            border:"none",background:C.primaryLight,color:C.primary,
+            fontFamily:"inherit",fontSize:14,fontWeight:700,cursor:"pointer"}}>
+          Done
+        </button>}
+      </div>
+    </React.Fragment>}
   </span>;
 }
 
@@ -2030,31 +2137,33 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
             }
 
             // ── Display row ────────────────────────────────────────────────
-            return <div key={p.id} style={{background:C.surfaceAlt,borderRadius:14,padding:"16px 18px",opacity:p.active?1:0.65}}>
-              <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
-                <div style={{paddingTop:2}}><Toggle value={p.active} onChange={function(){var pid=p.id;setProfiles(function(prev){return prev.map(function(x){return x.id===pid?Object.assign({},x,{active:!x.active}):x;});});}} /></div>
-                <div style={{flex:1}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
-                    <span style={{fontSize:15,fontWeight:700,color:C.textPrimary}}>{p.name}</span>
+            return <div key={p.id} style={{background:C.surfaceAlt,borderRadius:14,padding:"14px 16px",opacity:p.active?1:0.65}}>
+              {/* Top row: toggle + name + status chips */}
+              <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:8}}>
+                <div style={{paddingTop:2,flexShrink:0}}><Toggle value={p.active} onChange={function(){var pid=p.id;setProfiles(function(prev){return prev.map(function(x){return x.id===pid?Object.assign({},x,{active:!x.active}):x;});});}} /></div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:14,fontWeight:700,color:C.textPrimary,lineHeight:1.3,marginBottom:4}}>{p.name}</div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
                     <Chip label={p.active?"Active":"Inactive"} bg={p.active?C.primaryLight:C.surfaceAlt} color={p.active?C.primary:C.textHint} />
-                    <Chip label={"max "+p.limit+" results"} />
+                    <Chip label={"max "+p.limit} />
+                    {(p.sources||["af"]).map(function(src){var s=SOURCES[src];return <Chip key={src} label={s.label} bg={s.bg} color={s.color} />;}) }
                   </div>
-                  {/* Query pill with hover tooltip showing the actual API URL */}
-                  <div style={{position:"relative",display:"inline-block",marginBottom:8}} className="jt-query-pill">
-                    <div style={{fontSize:13,color:C.textSecondary,fontFamily:"monospace",background:C.surface,padding:"6px 10px",borderRadius:8,cursor:"default"}}>"{p.query}"</div>
-                    <div className="jt-query-tooltip" style={{display:"none",position:"absolute",left:0,top:"100%",marginTop:4,background:C.textPrimary,color:C.surface,fontSize:11,padding:"8px 12px",borderRadius:8,zIndex:100,whiteSpace:"pre",boxShadow:C.shadowMd,minWidth:320,maxWidth:480,wordBreak:"break-all",lineHeight:1.7}}>
-                      {(p.sources||["af"]).includes("af")&&"AF API:\n"+afUrl+"\n"}
-                      {(p.sources||["af"]).includes("jsearch")&&"JSearch:\n"+jsUrl}
-                    </div>
-                  </div>
-                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{(p.sources||["af"]).map(function(src){var s=SOURCES[src];return <Chip key={src} label={s.label} bg={s.bg} color={s.color} />;})}</div>
-                  {st&&<Alert type={st.type==="loading"?"info":st.type}>{st.msg}</Alert>}
                 </div>
-                <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                  <Btn onClick={function(){startEdit(p);}} style={{fontSize:12,padding:"6px 12px"}}>Edit</Btn>
-                  <Btn onClick={function(){if(p.active) runProfile(p);}} disabled={!p.active} style={{fontSize:12,padding:"6px 12px",background:p.active?C.primaryLight:"transparent",color:p.active?C.primary:C.textHint}}>Fetch now</Btn>
-                  <Btn variant="danger" onClick={function(){var pid=p.id;setProfiles(function(prev){return prev.filter(function(x){return x.id!==pid;});});}} style={{fontSize:12,padding:"6px 12px"}}>Delete</Btn>
+              </div>
+              {/* Query pill — desktop shows hover tooltip, mobile shows nothing (query visible inline) */}
+              <div style={{position:"relative",display:"block",marginBottom:10}} className="jt-query-pill">
+                <div style={{fontSize:12,color:C.textSecondary,fontFamily:"monospace",background:C.surface,padding:"6px 10px",borderRadius:8,cursor:"default",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>"{p.query}"</div>
+                <div className="jt-query-tooltip" style={{display:"none",position:"fixed",marginTop:4,background:C.textPrimary,color:C.surface,fontSize:11,padding:"10px 14px",borderRadius:10,zIndex:400,whiteSpace:"pre-wrap",boxShadow:"0 4px 20px rgba(0,0,0,0.25)",width:300,wordBreak:"break-all",lineHeight:1.7,pointerEvents:"none"}}>
+                  {(p.sources||["af"]).includes("af")&&"AF API:\n"+afUrl+"\n"}
+                  {(p.sources||["af"]).includes("jsearch")&&"JSearch:\n"+jsUrl}
                 </div>
+              </div>
+              {st&&<Alert type={st.type==="loading"?"info":st.type}>{st.msg}</Alert>}
+              {/* Action strip — horizontal on mobile, compact on desktop */}
+              <div style={{display:"flex",gap:8,paddingTop:10,borderTop:"1px solid "+C.border,flexWrap:"wrap"}}>
+                <Btn onClick={function(){startEdit(p);}} style={{fontSize:12,padding:"8px 14px",flex:1,textAlign:"center",minWidth:60}}>✏ Edit</Btn>
+                <Btn onClick={function(){if(p.active) runProfile(p);}} disabled={!p.active} style={{fontSize:12,padding:"8px 14px",flex:1,textAlign:"center",minWidth:60,background:p.active?C.primaryLight:"transparent",color:p.active?C.primary:C.textHint}}>▶ Fetch</Btn>
+                <Btn variant="danger" onClick={function(){var pid=p.id;setProfiles(function(prev){return prev.filter(function(x){return x.id!==pid;});});}} style={{fontSize:12,padding:"8px 14px",minWidth:60}}>🗑</Btn>
               </div>
             </div>;
           })}
@@ -3481,29 +3590,29 @@ function MobileBottomNav({activeTab,setActiveTab,user,onSignOut,theme,setTheme})
     {moreOpen&&<div className="jt-more-sheet-overlay" onClick={function(){setMoreOpen(false);}} />}
     {/* More sheet */}
     {moreOpen&&<div className="jt-more-sheet">
-      <div style={{padding:"0 16px 12px",borderBottom:"1px solid "+C.border,marginBottom:8}}>
-        <div style={{fontSize:12,fontWeight:700,color:C.textHint,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:12}}>More</div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+      <div style={{padding:"16px 16px 12px",borderBottom:"1px solid "+C.border,marginBottom:4}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.textHint,textTransform:"uppercase",letterSpacing:"0.8px",marginBottom:14}}>More</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6}}>
           {TABS.filter(function(t){return SECONDARY_TABS.includes(t.id);}).map(function(t){
             var active=activeTab===t.id;
-            return <button key={t.id} onClick={function(){go(t.id);}} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6,padding:"14px 8px",borderRadius:12,border:"none",background:active?C.primaryLight:"transparent",color:active?C.primary:C.textSecondary,cursor:"pointer",fontFamily:"inherit"}}>
-              <span style={{fontSize:24}}>{t.icon}</span>
-              <span style={{fontSize:11,fontWeight:active?700:500,textAlign:"center",lineHeight:1.3}}>{t.label}</span>
+            return <button key={t.id} onClick={function(){go(t.id);}} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6,padding:"16px 8px",borderRadius:14,border:"none",background:active?C.primaryLight:"transparent",color:active?C.primary:C.textSecondary,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:active?700:500}}>
+              <span style={{fontSize:26}}>{t.icon}</span>
+              <span style={{lineHeight:1.3,textAlign:"center"}}>{t.label}</span>
             </button>;
           })}
         </div>
       </div>
-      {/* User + sign out + theme in the sheet */}
-      {user&&<div style={{padding:"8px 16px",display:"flex",alignItems:"center",gap:12}}>
+      {/* User row + actions */}
+      {user&&<div style={{padding:"12px 16px 8px",display:"flex",alignItems:"center",gap:12}}>
         {user.photoURL
-          ?<img src={user.photoURL} alt="" referrerPolicy="no-referrer" style={{width:32,height:32,borderRadius:"50%",flexShrink:0}} />
-          :<div style={{width:32,height:32,borderRadius:"50%",background:C.primary,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,flexShrink:0}}>{(user.displayName||user.email||"?").slice(0,1).toUpperCase()}</div>}
+          ?<img src={user.photoURL} alt="" referrerPolicy="no-referrer" style={{width:36,height:36,borderRadius:"50%",flexShrink:0}} />
+          :<div style={{width:36,height:36,borderRadius:"50%",background:C.primary,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,flexShrink:0}}>{(user.displayName||user.email||"?").slice(0,1).toUpperCase()}</div>}
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontSize:13,fontWeight:600,color:C.textPrimary,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.displayName||"Signed in"}</div>
           <div style={{fontSize:11,color:C.textHint,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.email}</div>
         </div>
-        <button onClick={function(){setTheme&&setTheme(theme==="dark"?"light":"dark");}} style={{background:"none",border:"1px solid "+C.border,borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:16,color:C.textHint}}>{theme==="dark"?"☀️":"🌙"}</button>
-        <button onClick={function(){setMoreOpen(false);if(onSignOut)onSignOut();}} style={{background:"none",border:"1px solid "+C.border,borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:12,color:C.textHint,fontFamily:"inherit"}}>Sign out</button>
+        <button onClick={function(){setTheme&&setTheme(theme==="dark"?"light":"dark");}} style={{background:"none",border:"1px solid "+C.border,borderRadius:10,padding:"8px 10px",cursor:"pointer",fontSize:16,color:C.textHint,minWidth:44,minHeight:44}}>{theme==="dark"?"☀️":"🌙"}</button>
+        <button onClick={function(){setMoreOpen(false);if(onSignOut)onSignOut();}} style={{background:"none",border:"1px solid "+C.border,borderRadius:10,padding:"8px 12px",cursor:"pointer",fontSize:12,color:C.textHint,fontFamily:"inherit",minWidth:44,minHeight:44,whiteSpace:"nowrap"}}>Sign out</button>
       </div>}
     </div>}
     {/* Bottom bar */}
