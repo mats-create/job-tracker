@@ -1552,7 +1552,7 @@ function Dashboard({jobs,schedule,setActiveTab,navigateToJobs}){
 }
 
 // ─── Job Row (with expandable details) ───────────────────────────────────────
-function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,onNotesChange,onArchiveToggle,onDismiss,onWriteCoverLetter}){
+function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,onNotesChange,onArchiveToggle,onDismiss,onWriteCoverLetter,onCoverLetterChange}){
   var src=SOURCES[j.sourceType]||SOURCES.manual;
   var hasRichDetails=!!(j.description||j.employerUrl||j.applyUrl);
   var hasNotes=!!(j.notes&&j.notes.trim());
@@ -1622,6 +1622,7 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
           {deadlinePast&&<span style={{fontSize:11,fontWeight:600,color:C.error}}>⚠ Deadline passed</span>}
           {!deadlinePast&&deadlineSoon&&<span style={{fontSize:11,fontWeight:600,color:C.warning}}>⏰ {j.deadline}</span>}
           {hasNotes&&!expanded&&<span style={{fontSize:12,color:C.textHint}} title="Has notes">📝</span>}
+          {j.coverLetter&&!expanded&&<span style={{fontSize:12,color:C.primary}} title="Cover letter saved">✉</span>}
           <span style={{marginLeft:"auto",fontSize:11,color:C.primary,fontWeight:600,whiteSpace:"nowrap"}}>
             {expanded?"▲ Less":"▼ "+(hasNotes||hasRichDetails?"Details":"Notes")}
           </span>
@@ -1690,6 +1691,28 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
         {j.applyUrl&&<a href={j.applyUrl} target="_blank"
           rel="noopener noreferrer"
           style={{color:C.primary,fontWeight:600,textDecoration:"none"}}>Apply ↗</a>}
+      </div>}
+
+      {/* Saved cover letter */}
+      {j.coverLetter&&<div style={{marginBottom:14}}>
+        <div style={{fontSize:11,fontWeight:600,color:C.textHint,
+          letterSpacing:"0.5px",marginBottom:6,display:"flex",alignItems:"center",gap:8}}>
+          COVER LETTER
+          <button onClick={function(){navigator.clipboard.writeText(j.coverLetter);}}
+            style={{fontSize:11,fontWeight:600,color:C.primary,background:"none",border:"none",
+              cursor:"pointer",padding:"1px 6px",borderRadius:6,fontFamily:"inherit"}}>
+            Copy
+          </button>
+          {onWriteCoverLetter&&!j.archived&&<button onClick={function(){onWriteCoverLetter(j.id);}}
+            style={{fontSize:11,fontWeight:600,color:C.textSecondary,background:"none",border:"none",
+              cursor:"pointer",padding:"1px 6px",borderRadius:6,fontFamily:"inherit"}}>
+            Regenerate ↗
+          </button>}
+        </div>
+        <div style={{fontSize:13,lineHeight:1.65,color:C.textPrimary,
+          whiteSpace:"pre-wrap",background:C.surface,padding:"10px 12px",
+          borderRadius:10,border:"1px solid "+C.border,
+          maxHeight:320,overflowY:"auto"}}>{j.coverLetter}</div>
       </div>}
 
       {/* Action strip — consistent, horizontal, clearly grouped */}
@@ -2042,6 +2065,7 @@ function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSor
               onArchiveToggle={function(){toggleArchive(j.id);}}
               onDismiss={dismissJob?function(){dismissJob(j.id);}:null}
               onWriteCoverLetter={startCoverLetter?function(){startCoverLetter(j.id);}:null}
+              onCoverLetterChange={function(text){setJobs(function(prev){return prev.map(function(x){return x.id===j.id?Object.assign({},x,{coverLetter:text}):x;});});}}
             />;
           })}
         </div>}
@@ -2861,7 +2885,7 @@ function CVProfile({cv,setCv}){
 }
 
 // ─── Cover Letters ────────────────────────────────────────────────────────────
-function CoverLetters({jobs,cv,anthropicKey,setActiveTab,pendingCoverLetterJob,setPendingCoverLetterJob}){
+function CoverLetters({jobs,setJobs,cv,anthropicKey,setActiveTab,pendingCoverLetterJob,setPendingCoverLetterJob}){
   // Default to only showing Reviewing (non-archived) jobs — that's the "I'm
   // about to apply, draft me a letter" window. Archived and already-applied
   // jobs aren't useful targets. User can flip the toggle for edge cases like
@@ -2904,6 +2928,27 @@ function CoverLetters({jobs,cv,anthropicKey,setActiveTab,pendingCoverLetterJob,s
   var [error,setError]=useState("");
   var [loading,setLoading]=useState(false);
   var [showEmail,setShowEmail]=useState(false);
+  var [saved,setSaved]=useState(false);
+
+  // Pre-load any stored letter when the selected job changes.
+  useEffect(function(){
+    var job=jobs.find(function(j){return j.id===selectedJob;});
+    setLetter(job&&job.coverLetter?job.coverLetter:"");
+    setSaved(false);
+    setShowEmail(false);
+    setError("");
+  },[selectedJob]);
+
+  // Save (or clear) the letter on the job object.
+  function saveLetter(text){
+    if(!setJobs||!selectedJob) return;
+    setJobs(function(prev){return prev.map(function(j){
+      return j.id===selectedJob?Object.assign({},j,{coverLetter:text||""}):j;
+    });});
+    setSaved(true);
+    setTimeout(function(){setSaved(false);},2000);
+  }
+
   async function generate(){
     var job=eligibleJobs.find(function(j){return j.id===selectedJob;});
     if(!job) return;
@@ -2943,6 +2988,12 @@ function CoverLetters({jobs,cv,anthropicKey,setActiveTab,pendingCoverLetterJob,s
         "Write the cover letter now, following every rule above.";
       var text=await callClaude({apiKey:anthropicKey,prompt:prompt,maxTokens:1500});
       setLetter(text);
+      // Auto-save the generated letter to the job immediately
+      if(setJobs&&selectedJob){
+        setJobs(function(prev){return prev.map(function(j){
+          return j.id===selectedJob?Object.assign({},j,{coverLetter:text}):j;
+        });});
+      }
     }catch(e){setError(e.message||"Error connecting to Claude. Please try again.");}
     setLoading(false);
   }
@@ -2990,12 +3041,14 @@ function CoverLetters({jobs,cv,anthropicKey,setActiveTab,pendingCoverLetterJob,s
     {letter&&<Card>
       <SectionTitle>Your cover letter</SectionTitle>
       <div style={{fontSize:13,color:C.textHint,marginBottom:12}}></div>
-      <Txta value={letter} onChange={function(e){setLetter(e.target.value);}} rows={16} />
-      <div style={{display:"flex",gap:10,marginTop:14,flexWrap:"wrap"}}>
+      <Txta value={letter} onChange={function(e){setLetter(e.target.value);setSaved(false);}} rows={16} />
+      <div style={{display:"flex",gap:10,marginTop:14,flexWrap:"wrap",alignItems:"center"}}>
         <Btn variant="primary" onClick={function(){setShowEmail(true);}}>✉ Send via email</Btn>
         <Btn onClick={function(){exportLetterPdf({letter:letter,cv:cv,job:currentJob});}}>📄 Export as PDF</Btn>
         <Btn onClick={function(){navigator.clipboard.writeText(letter);}}>Copy to clipboard</Btn>
         <Btn onClick={function(){var b=new Blob([letter],{type:"text/plain"});var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="cover-letter.txt";a.click();}}>Export as text file</Btn>
+        <Btn onClick={function(){saveLetter(letter);}} style={{marginLeft:"auto"}}>{saved?"✓ Saved":"Save changes"}</Btn>
+        <Btn variant="danger" onClick={function(){if(confirm("Remove saved cover letter from this job?")){{setLetter("");saveLetter("");}}}}>Remove</Btn>
       </div>
       {showEmail&&<EmailDialog recipients={cv.recipients||[]} subject={emailSubject} body={letter} onClose={function(){setShowEmail(false);}} />}
     </Card>}
@@ -4162,6 +4215,10 @@ function AppShell({user,onSignOut}){
     if(!active.length) return;
     var totalNew=0;
     var errors=[];
+    // Snapshot dismissedIds into a Set once per run. Using a ref snapshot so
+    // the closure always sees the current list regardless of when the callback
+    // was created — fixes the bug where scheduled runs had an empty tombstone set.
+    var tombstones=new Set((dismissedIds||[]).map(String));
     for(var i=0;i<active.length;i++){
       var p=active[i];
       var srcs=p.sources||["af"];
@@ -4174,14 +4231,14 @@ function AppShell({user,onSignOut}){
             var url="https://jobsearch.api.jobtechdev.se/search?q="+encodeURIComponent(p.query)+"&limit="+p.limit+"&resdet=full";
             var out=await smartFetch(url,{headers:h});
             var r=out.response;
-            if(r.ok){var d=await r.json();var ads=d.hits||[];setJobs(function(prev){var ex=new Set(prev.map(function(x){return x.id?x.id.toString():""; }));var nj=ads.filter(function(a){return !ex.has(a.id?a.id.toString():"");}).map(function(a){return mapAfJob(a,p.name);});totalNew+=nj.length;return nj.concat(prev);});}
+            if(r.ok){var d=await r.json();var ads=d.hits||[];setJobs(function(prev){var ex=new Set(prev.map(function(x){return x.id?x.id.toString():""; }));var nj=ads.filter(function(a){var aid=a.id?a.id.toString():"";return aid&&!ex.has(aid)&&!tombstones.has(aid);}).map(function(a){return mapAfJob(a,p.name);});totalNew+=nj.length;return nj.concat(prev);});}
             else{errors.push(p.name+" (AF): "+r.status);}
           }
           if(src==="jsearch"&&jsKey){
             var url2="https://jsearch.p.rapidapi.com/search?query="+encodeURIComponent(p.query)+"&num_pages=1&page=1";
             var out2=await smartFetch(url2,{headers:{"x-rapidapi-key":jsKey,"x-rapidapi-host":"jsearch.p.rapidapi.com"}});
             var r2=out2.response;
-            if(r2.ok){var d2=await r2.json();var ads2=(d2.data||[]).slice(0,p.limit);setJobs(function(prev){var ex=new Set(prev.map(function(x){return x.id?x.id.toString():""; }));var nj=ads2.filter(function(a){return !ex.has(a.job_id);}).map(function(a){return mapJsJob(a,p.name);});totalNew+=nj.length;return nj.concat(prev);});}
+            if(r2.ok){var d2=await r2.json();var ads2=(d2.data||[]).slice(0,p.limit);setJobs(function(prev){var ex=new Set(prev.map(function(x){return x.id?x.id.toString():""; }));var nj=ads2.filter(function(a){var aid=a.job_id?String(a.job_id):"";return aid&&!ex.has(aid)&&!tombstones.has(aid);}).map(function(a){return mapJsJob(a,p.name);});totalNew+=nj.length;return nj.concat(prev);});}
             else{errors.push(p.name+" (JSearch): "+r2.status);}
           }
         }catch(e){errors.push(p.name+": "+e.message);}
@@ -4190,7 +4247,7 @@ function AppShell({user,onSignOut}){
     var msg=(triggered==="manual"?"Manual":"Scheduled")+" run — "+active.length+" profile"+(active.length!==1?"s":"")+", "+totalNew+" new job"+(totalNew!==1?"s":"");
     if(errors.length) msg+=" · errors: "+errors.join("; ");
     addLog(msg,errors.length?"error":(triggered||"scheduled"));
-  },[profiles,afKey,jsKey]);
+  },[profiles,afKey,jsKey,dismissedIds]);
 
   useEffect(function(){
     if(tickRef.current) clearInterval(tickRef.current);
@@ -4239,7 +4296,7 @@ function AppShell({user,onSignOut}){
     assistant:<ProfileAssistant cv={cv} profiles={profiles} setProfiles={setProfiles} anthropicKey={anthropicKey} conversation={assistantConv} setConversation={setAssistantConv} setActiveTab={setActiveTab} setPendingProfileRun={setPendingProfileRun} jobs={jobs} />,
     scheduler:<Scheduler schedule={schedule} setSchedule={setSchedule} profiles={profiles} log={log} resetAllData={resetAllData} exportData={exportData} importData={importData} validateImport={validateImport} dismissedIds={dismissedIds} clearDismissedIds={function(){setDismissedIds([]);}} />,
     cv:<CVProfile cv={cv} setCv={setCv} />,
-    covers:<CoverLetters jobs={jobs} cv={cv} anthropicKey={anthropicKey} setActiveTab={setActiveTab} pendingCoverLetterJob={pendingCoverLetterJob} setPendingCoverLetterJob={setPendingCoverLetterJob} />,
+    covers:<CoverLetters jobs={jobs} setJobs={setJobs} cv={cv} anthropicKey={anthropicKey} setActiveTab={setActiveTab} pendingCoverLetterJob={pendingCoverLetterJob} setPendingCoverLetterJob={setPendingCoverLetterJob} />,
     reports:<Reports jobs={jobs} cv={cv} anthropicKey={anthropicKey} />,
   };
 
