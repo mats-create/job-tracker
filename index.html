@@ -240,6 +240,7 @@
     .jt-bottom-nav-item{font-size:8px}
     .jt-bottom-nav-icon{font-size:20px}
   }
+  @keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -1429,7 +1430,34 @@ function EmailDialog({recipients,subject,body,onClose,onCopy}){
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
-function Dashboard({jobs,schedule,setActiveTab,navigateToJobs}){
+function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoringStatus,onRunAllProfiles,profiles,cv,anthropicKey}){
+  // Quick-action local state — tracks fetch progress independently of the
+  // scoring state which lives in AppShell. Resets after each run.
+  var [fetchStatus,setFetchStatus]=useState(null); // null | "running" | "done" | "error"
+  var [fetchMsg,setFetchMsg]=useState("");
+  var canFetch=(profiles||[]).filter(function(p){return p.active;}).length>0;
+  var canRescore=hasCv(cv)&&jobs.filter(function(j){return !j.archived;}).length>0;
+
+  async function handleRunAll(){
+    if(!canFetch) return;
+    setFetchStatus("running");
+    setFetchMsg("Fetching jobs from active profiles…");
+    try{
+      await onRunAllProfiles("manual");
+      setFetchStatus("done");
+      setFetchMsg("Fetch complete — dashboard updated.");
+    }catch(e){
+      setFetchStatus("error");
+      setFetchMsg("Fetch failed: "+(e.message||"unknown error"));
+    }
+    setTimeout(function(){setFetchStatus(null);setFetchMsg("");},5000);
+  }
+
+  function handleRescore(){
+    if(!canRescore) return;
+    rescoreAll();
+  }
+
   // All Dashboard stats reflect the ACTIVE pipeline — archived jobs are excluded
   // so they don't inflate counts or compete for the "Best match" highlight.
   var active=jobs.filter(function(j){return !j.archived;});
@@ -1479,6 +1507,36 @@ function Dashboard({jobs,schedule,setActiveTab,navigateToJobs}){
         <div style={{fontSize:12,color:C.textHint,marginTop:2}}>{schedule.enabled?"Fetching on "+schedule.days.join(", ")+" · "+schedule.startTime+"–"+schedule.stopTime+" · every "+schedule.intervalMinutes+" min":"Turn on the Scheduler to automatically fetch new jobs throughout the day."}</div>
       </div>
       <Btn onClick={function(){setActiveTab("scheduler");}} style={{fontSize:13,padding:"8px 16px",whiteSpace:"nowrap"}}>{schedule.enabled?"View schedule":"Set up schedule"}</Btn>
+    </Card>
+    <Card>
+      <SectionTitle>Quick actions</SectionTitle>
+      <div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"center"}}>
+        <Btn
+          onClick={handleRunAll}
+          disabled={!canFetch||fetchStatus==="running"}
+          style={{fontSize:13,padding:"9px 18px",display:"flex",alignItems:"center",gap:7}}
+        >
+          {fetchStatus==="running"
+            ?<React.Fragment><span style={{display:"inline-block",width:13,height:13,border:"2px solid currentColor",borderTopColor:"transparent",borderRadius:"50%",animation:"spin 0.7s linear infinite"}} />Fetching…</React.Fragment>
+            :"⟳ Run all active"}
+        </Btn>
+        <Btn
+          onClick={handleRescore}
+          disabled={!canRescore||scoringStatus.active}
+          style={{fontSize:13,padding:"9px 18px",display:"flex",alignItems:"center",gap:7}}
+        >
+          {scoringStatus.active
+            ?<React.Fragment><span style={{display:"inline-block",width:13,height:13,border:"2px solid currentColor",borderTopColor:"transparent",borderRadius:"50%",animation:"spin 0.7s linear infinite"}} />Scoring {scoringStatus.done}/{scoringStatus.total}…</React.Fragment>
+            :"★ Rescore all"}
+        </Btn>
+        {!canFetch&&<span style={{fontSize:12,color:C.textHint}}>No active search profiles.</span>}
+        {!canRescore&&!scoringStatus.active&&<span style={{fontSize:12,color:C.textHint}}>{!hasCv(cv)?"Add your CV to enable rescoring.":""}</span>}
+      </div>
+      {(fetchStatus||scoringStatus.active||scoringStatus.done>0)&&<div style={{marginTop:12,display:"flex",flexDirection:"column",gap:6}}>
+        {fetchMsg&&<Alert type={fetchStatus==="error"?"error":fetchStatus==="done"?"success":"info"}>{fetchMsg}</Alert>}
+        {scoringStatus.active&&<Alert type="info">Scoring jobs against your CV… ({scoringStatus.done} of {scoringStatus.total} done)</Alert>}
+        {!scoringStatus.active&&scoringStatus.total>0&&fetchStatus!=="running"&&<Alert type="success">Rescoring complete — {scoringStatus.total} jobs updated.</Alert>}
+      </div>}
     </Card>
     <Card>
       <SectionTitle>Application pipeline</SectionTitle>
@@ -1622,7 +1680,7 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
           {deadlinePast&&<span style={{fontSize:11,fontWeight:600,color:C.error}}>⚠ Deadline passed</span>}
           {!deadlinePast&&deadlineSoon&&<span style={{fontSize:11,fontWeight:600,color:C.warning}}>⏰ {j.deadline}</span>}
           {hasNotes&&!expanded&&<span style={{fontSize:12,color:C.textHint}} title="Has notes">📝</span>}
-          {j.coverLetter&&!expanded&&<span style={{fontSize:12,color:C.primary}} title="Cover letter saved">✉</span>}
+          {j.coverLetter&&!expanded&&<span title="Cover letter saved" style={{fontSize:13,fontWeight:700,color:"#fff",background:C.primary,borderRadius:6,padding:"1px 6px",letterSpacing:"0.2px",lineHeight:1.5}}>✉</span>}
           <span style={{marginLeft:"auto",fontSize:11,color:C.primary,fontWeight:600,whiteSpace:"nowrap"}}>
             {expanded?"▲ Less":"▼ "+(hasNotes||hasRichDetails?"Details":"Notes")}
           </span>
@@ -4290,7 +4348,7 @@ function AppShell({user,onSignOut}){
   }
 
   var content={
-    dashboard:<Dashboard jobs={jobs} schedule={schedule} setActiveTab={setActiveTab} navigateToJobs={navigateToJobs} />,
+    dashboard:<Dashboard jobs={jobs} schedule={schedule} setActiveTab={setActiveTab} navigateToJobs={navigateToJobs} rescoreAll={rescoreAll} scoringStatus={scoringStatus} onRunAllProfiles={runAllProfiles} profiles={profiles} cv={cv} anthropicKey={anthropicKey} />,
     jobs:<Jobs jobs={jobs} setJobs={setJobs} rescoreAll={rescoreAll} scoringStatus={scoringStatus} scoringError={scoringError} cv={cv} sort={sort} setSort={setSort} dismissJob={dismissJob} tombstoneIds={tombstoneIds} startCoverLetter={startCoverLetter} pendingJobsView={pendingJobsView} setPendingJobsView={setPendingJobsView} />,
     profiles:<SearchProfiles profiles={profiles} setProfiles={setProfiles} setJobs={setJobs} afKey={afKey} setAfKey={setAfKey} jsKey={jsKey} setJsKey={setJsKey} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} pendingProfileRun={pendingProfileRun} setPendingProfileRun={setPendingProfileRun} dismissedIds={dismissedIds} />,
     assistant:<ProfileAssistant cv={cv} profiles={profiles} setProfiles={setProfiles} anthropicKey={anthropicKey} conversation={assistantConv} setConversation={setAssistantConv} setActiveTab={setActiveTab} setPendingProfileRun={setPendingProfileRun} jobs={jobs} />,
