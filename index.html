@@ -1441,7 +1441,7 @@ function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoring
   async function handleRunAll(){
     if(!canFetch) return;
     setFetchStatus("running");
-    setFetchMsg("Fetching jobs from active profiles…");
+    setFetchMsg("Fetch started — running all active profiles…");
     try{
       await onRunAllProfiles("manual");
       setFetchStatus("done");
@@ -1500,43 +1500,43 @@ function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoring
         })}
       </div>
     </div>
-    <Card style={{display:"flex",alignItems:"center",gap:14,padding:"16px 20px"}}>
-      <div style={{width:12,height:12,borderRadius:"50%",background:schedule.enabled?"#4CAF50":C.border,flexShrink:0,boxShadow:schedule.enabled?"0 0 0 3px rgba(76,175,80,0.2)":"none"}} />
-      <div style={{flex:1}}>
-        <div style={{fontSize:14,fontWeight:600,color:C.textPrimary}}>{schedule.enabled?"Auto-fetch is running":"Auto-fetch is off"}</div>
-        <div style={{fontSize:12,color:C.textHint,marginTop:2}}>{schedule.enabled?"Fetching on "+schedule.days.join(", ")+" · "+schedule.startTime+"–"+schedule.stopTime+" · every "+schedule.intervalMinutes+" min":"Turn on the Scheduler to automatically fetch new jobs throughout the day."}</div>
+    <Card style={{display:"flex",flexDirection:"column",gap:12,padding:"16px 20px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:14}}>
+        <div style={{width:12,height:12,borderRadius:"50%",background:schedule.enabled?"#4CAF50":C.border,flexShrink:0,boxShadow:schedule.enabled?"0 0 0 3px rgba(76,175,80,0.2)":"none"}} />
+        <div style={{flex:1}}>
+          <div style={{fontSize:14,fontWeight:600,color:C.textPrimary}}>{schedule.enabled?"Auto-fetch is running":"Auto-fetch is off"}</div>
+          <div style={{fontSize:12,color:C.textHint,marginTop:2}}>{schedule.enabled?"Fetching on "+schedule.days.join(", ")+" · "+schedule.startTime+"–"+schedule.stopTime+" · every "+schedule.intervalMinutes+" min":"Turn on the Scheduler to automatically fetch new jobs throughout the day."}</div>
+        </div>
+        <Btn onClick={function(){setActiveTab("scheduler");}} style={{fontSize:13,padding:"8px 16px",whiteSpace:"nowrap"}}>{schedule.enabled?"View schedule":"Set up schedule"}</Btn>
       </div>
-      <Btn onClick={function(){setActiveTab("scheduler");}} style={{fontSize:13,padding:"8px 16px",whiteSpace:"nowrap"}}>{schedule.enabled?"View schedule":"Set up schedule"}</Btn>
-    </Card>
-    <Card>
-      <SectionTitle>Quick actions</SectionTitle>
-      <div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"center"}}>
+      <div style={{borderTop:"1px solid "+C.border,paddingTop:12,display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
         <Btn
           onClick={handleRunAll}
           disabled={!canFetch||fetchStatus==="running"}
-          style={{fontSize:13,padding:"9px 18px",display:"flex",alignItems:"center",gap:7}}
+          style={{fontSize:13,padding:"8px 16px",display:"inline-flex",alignItems:"center",gap:6}}
         >
           {fetchStatus==="running"
-            ?<React.Fragment><span style={{display:"inline-block",width:13,height:13,border:"2px solid currentColor",borderTopColor:"transparent",borderRadius:"50%",animation:"spin 0.7s linear infinite"}} />Fetching…</React.Fragment>
-            :"⟳ Run all active"}
+            ?<React.Fragment><span style={{display:"inline-block",width:12,height:12,border:"2px solid currentColor",borderTopColor:"transparent",borderRadius:"50%",animation:"spin 0.7s linear infinite",flexShrink:0}} />Fetching…</React.Fragment>
+            :"▶ Run all active"}
         </Btn>
         <Btn
           onClick={handleRescore}
           disabled={!canRescore||scoringStatus.active}
-          style={{fontSize:13,padding:"9px 18px",display:"flex",alignItems:"center",gap:7}}
+          style={{fontSize:13,padding:"8px 16px",display:"inline-flex",alignItems:"center",gap:6}}
         >
           {scoringStatus.active
-            ?<React.Fragment><span style={{display:"inline-block",width:13,height:13,border:"2px solid currentColor",borderTopColor:"transparent",borderRadius:"50%",animation:"spin 0.7s linear infinite"}} />Scoring {scoringStatus.done}/{scoringStatus.total}…</React.Fragment>
-            :"★ Rescore all"}
+            ?<React.Fragment><span style={{display:"inline-block",width:12,height:12,border:"2px solid currentColor",borderTopColor:"transparent",borderRadius:"50%",animation:"spin 0.7s linear infinite",flexShrink:0}} />Scoring {scoringStatus.done}/{scoringStatus.total}…</React.Fragment>
+            :"⟳ Rescore all"}
         </Btn>
         {!canFetch&&<span style={{fontSize:12,color:C.textHint}}>No active search profiles.</span>}
-        {!canRescore&&!scoringStatus.active&&<span style={{fontSize:12,color:C.textHint}}>{!hasCv(cv)?"Add your CV to enable rescoring.":""}</span>}
+        {!canRescore&&!scoringStatus.active&&!hasCv(cv)&&<span style={{fontSize:12,color:C.textHint}}>Add your CV to enable rescoring.</span>}
       </div>
-      {(fetchStatus||scoringStatus.active||scoringStatus.done>0)&&<div style={{marginTop:12,display:"flex",flexDirection:"column",gap:6}}>
-        {fetchMsg&&<Alert type={fetchStatus==="error"?"error":fetchStatus==="done"?"success":"info"}>{fetchMsg}</Alert>}
-        {scoringStatus.active&&<Alert type="info">Scoring jobs against your CV… ({scoringStatus.done} of {scoringStatus.total} done)</Alert>}
-        {!scoringStatus.active&&scoringStatus.total>0&&fetchStatus!=="running"&&<Alert type="success">Rescoring complete — {scoringStatus.total} jobs updated.</Alert>}
-      </div>}
+      {(fetchStatus||scoringStatus.active||(!scoringStatus.active&&scoringStatus.total>0))&&
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          {fetchMsg&&<Alert type={fetchStatus==="error"?"error":fetchStatus==="done"?"success":"info"}>{fetchMsg}</Alert>}
+          {scoringStatus.active&&<Alert type="info">Rescoring started — scoring {scoringStatus.done} of {scoringStatus.total} jobs…</Alert>}
+          {!scoringStatus.active&&scoringStatus.total>0&&<Alert type="success">Rescoring complete — {scoringStatus.total} jobs updated.</Alert>}
+        </div>}
     </Card>
     <Card>
       <SectionTitle>Application pipeline</SectionTitle>
@@ -1680,7 +1680,7 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
           {deadlinePast&&<span style={{fontSize:11,fontWeight:600,color:C.error}}>⚠ Deadline passed</span>}
           {!deadlinePast&&deadlineSoon&&<span style={{fontSize:11,fontWeight:600,color:C.warning}}>⏰ {j.deadline}</span>}
           {hasNotes&&!expanded&&<span style={{fontSize:12,color:C.textHint}} title="Has notes">📝</span>}
-          {j.coverLetter&&!expanded&&<span title="Cover letter saved" style={{fontSize:13,fontWeight:700,color:"#fff",background:C.primary,borderRadius:6,padding:"1px 6px",letterSpacing:"0.2px",lineHeight:1.5}}>✉</span>}
+          {j.coverLetter&&!expanded&&<span title="Cover letter saved" style={{display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:600,color:C.primary,background:C.primary+"22",borderRadius:6,padding:"2px 7px",lineHeight:1,verticalAlign:"middle"}}>✉</span>}
           <span style={{marginLeft:"auto",fontSize:11,color:C.primary,fontWeight:600,whiteSpace:"nowrap"}}>
             {expanded?"▲ Less":"▼ "+(hasNotes||hasRichDetails?"Details":"Notes")}
           </span>
@@ -4055,7 +4055,7 @@ function AppShell({user,onSignOut}){
       // Window expired — make removal permanent by clearing the toast buffer
       setDismissed([]);
       dismissTimerRef.current=null;
-    },8000);
+    },4000);
   }
   function undoDismiss(){
     if(dismissTimerRef.current){ clearTimeout(dismissTimerRef.current); dismissTimerRef.current=null; }
