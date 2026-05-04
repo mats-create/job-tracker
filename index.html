@@ -1820,6 +1820,7 @@ function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSor
   var [search,setSearch]=useState("");
   var [showAdd,setShowAdd]=useState(false);
   var [showArchived,setShowArchived]=useState(false);
+  var [showFilters,setShowFilters]=useState(false);
   var [expandedId,setExpandedId]=useState(null);
   // Selection state for bulk actions. Set of String(id) for consistency with
   // how we handle ID types elsewhere (numeric manual jobs vs string API jobs).
@@ -1831,8 +1832,8 @@ function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSor
   useEffect(function(){
     if(!pendingJobsView) return;
     var p=pendingJobsView;
-    if(p.status&&typeof p.status==="string"){ setFilter(p.status); setStatusGroupFilter(null); }
-    else if(p.statusGroup){ setStatusGroupFilter(p.statusGroup); setFilter("All"); }
+    if(p.status&&typeof p.status==="string"){ setFilter(p.status); setStatusGroupFilter(null); setShowFilters(true); }
+    else if(p.statusGroup){ setStatusGroupFilter(p.statusGroup); setFilter("All"); setShowFilters(true); }
     else if(Object.keys(p).length===0||p.expandId){ /* clear filters for unfiltered view */ setFilter("All"); setStatusGroupFilter(null); }
     if(typeof p.archived==="boolean") setShowArchived(p.archived);
     // Clear other filters that might confuse the deep-link target
@@ -1975,60 +1976,91 @@ function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSor
   }
   return <div style={{display:"flex",flexDirection:"column",gap:16}}>
     <Card style={{padding:"16px 20px"}}>
-      <div style={{fontSize:12,color:C.textHint,marginBottom:8,fontWeight:600,letterSpacing:"0.5px"}}>SEARCH</div>
-      <div style={{position:"relative",marginBottom:14}}>
+      {/* Search — always visible */}
+      <div style={{position:"relative",marginBottom:10}}>
         <Inp value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search by title, company, location, description..." style={{paddingLeft:36,paddingRight:search?36:12}} />
         <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:14,color:C.textHint,pointerEvents:"none"}}>🔍</span>
         {search&&<button onClick={function(){setSearch("");}} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",fontSize:18,color:C.textHint,cursor:"pointer",padding:"4px 8px",lineHeight:1}}>×</button>}
       </div>
-      <div style={{display:"flex",gap:14,alignItems:"center",marginBottom:14,flexWrap:"wrap"}}>
-        <div style={{fontSize:12,color:C.textHint,fontWeight:600,letterSpacing:"0.5px",flexShrink:0}}>SORT BY</div>
-        <Sel value={sort} onChange={function(e){setSort(e.target.value);}} style={{width:"auto",minWidth:200,flexShrink:0}}>
-          {SORT_OPTIONS.map(function(o){return <option key={o.key} value={o.key}>{o.label}</option>;})}
-        </Sel>
-      </div>
-      <div style={{fontSize:12,color:C.textHint,marginBottom:8,fontWeight:600,letterSpacing:"0.5px"}}>FILTER BY STATUS</div>
-      {statusGroupFilter==="applied"&&<div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"6px 12px",borderRadius:20,background:C.primaryLight,border:"1.5px dashed "+C.primary,color:C.primary,fontSize:12,fontWeight:600,marginBottom:10}}>
-        Showing all applied jobs (Applied, Interview, Offer, Rejected, No response)
-        <button onClick={function(){setStatusGroupFilter(null);}} style={{background:"none",border:"none",cursor:"pointer",color:C.primary,fontSize:14,fontWeight:700,padding:0,lineHeight:1}}>×</button>
-      </div>}
-      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14}}>
-        {["All"].concat(STATUSES).map(function(s){
-          var on=filter===s&&!statusGroupFilter;
-          // Count only jobs visible under current archive setting — otherwise
-          // the chip promises results the filter chain will then hide.
-          var cnt=s!=="All"?"("+jobs.filter(function(j){return j.status===s&&(showArchived||!j.archived);}).length+")":"";
-          return <button key={s} onClick={function(){setFilter(s);setStatusGroupFilter(null);}} style={{fontSize:13,fontWeight:on?700:500,padding:"7px 16px",borderRadius:20,border:"1.5px solid "+(on?STATUS[s]?STATUS[s].color:C.primary:C.border),background:on?(STATUS[s]?STATUS[s].bg:C.primaryLight):"transparent",color:on?(STATUS[s]?STATUS[s].color:C.primary):C.textSecondary,cursor:"pointer"}}>{s} {cnt}</button>;
-        })}
-      </div>
-      <div style={{fontSize:12,color:C.textHint,marginBottom:8,fontWeight:600,letterSpacing:"0.5px"}}>FILTER BY SOURCE</div>
-      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14}}>
-        {[["All sources","all"],["Arbetsförmedlingen","af"],["JSearch","jsearch"],["Manual","manual"]].map(function(item){
-          var on=sourceFilter===item[1];
-          return <button key={item[1]} onClick={function(){setSourceFilter(item[1]);}} style={{fontSize:12,fontWeight:on?700:500,padding:"5px 14px",borderRadius:20,border:"1.5px solid "+(on?C.primary:C.border),background:on?C.primaryLight:"transparent",color:on?C.primary:C.textSecondary,cursor:"pointer"}}>{item[0]}</button>;
-        })}
-      </div>
-      <div style={{fontSize:12,color:C.textHint,marginBottom:8,fontWeight:600,letterSpacing:"0.5px"}}>FILTER BY MATCH SCORE</div>
-      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-        {[
-          [0,"Any score",C.border,C.textSecondary,C.surfaceAlt],
-          [50,"≥ 50%",C.error,C.error,C.errorBg],
-          [70,"≥ 70%",C.warning,C.warning,C.warningBg],
-          [85,"≥ 85%",C.success,C.success,C.successBg],
-        ].map(function(item){
-          var on=scoreFilter===item[0];
-          return <button key={item[0]} onClick={function(){setScoreFilter(item[0]);}} style={{fontSize:12,fontWeight:on?700:500,padding:"5px 14px",borderRadius:20,border:"1.5px solid "+(on?item[2]:C.border),background:on?item[4]:"transparent",color:on?item[3]:C.textSecondary,cursor:"pointer"}}>{item[1]}</button>;
-        })}
-      </div>
-      {scoreFilter>0&&<div style={{fontSize:11,color:C.textHint,marginTop:8,fontStyle:"italic"}}>Jobs that haven't been scored yet are hidden while a threshold is active.</div>}
-      {/* Archive controls — shown only when there's something relevant:
-          either archived jobs to reveal, or passed deadlines to archive. */}
-      {(archivedCount>0||passedCount>0)&&<div style={{marginTop:16,paddingTop:16,borderTop:"1px solid "+C.border,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-        {archivedCount>0&&<label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",userSelect:"none",fontSize:13,color:C.textSecondary}}>
-          <input type="checkbox" checked={showArchived} onChange={function(){setShowArchived(function(v){return !v;});}} style={{width:16,height:16,cursor:"pointer",accentColor:C.primary}} />
-          <span>Show archived ({archivedCount})</span>
-        </label>}
-        {passedCount>0&&<Btn onClick={archivePassed} style={{fontSize:12,padding:"6px 12px",marginLeft:"auto"}}>📦 Archive passed deadlines ({passedCount})</Btn>}
+      {/* Filters & Sort toggle */}
+      {(function(){
+        var activeFilterCount=0;
+        if(filter!=="All"||statusGroupFilter) activeFilterCount++;
+        if(sourceFilter!=="all") activeFilterCount++;
+        if(scoreFilter>0) activeFilterCount++;
+        if(sort!=="added_desc") activeFilterCount++;
+        return <button onClick={function(){setShowFilters(function(v){return !v;});}} style={{display:"flex",alignItems:"center",gap:8,fontSize:13,fontWeight:600,color:showFilters||activeFilterCount>0?C.primary:C.textSecondary,background:"none",border:"none",cursor:"pointer",padding:"4px 0",fontFamily:"inherit"}}>
+          <span style={{transition:"transform 0.2s",display:"inline-block",transform:showFilters?"rotate(90deg)":"rotate(0deg)"}}>▶</span>
+          Filters &amp; Sort
+          {activeFilterCount>0&&<span style={{fontSize:11,fontWeight:700,background:C.primary,color:"#fff",borderRadius:10,padding:"1px 7px",lineHeight:1.6}}>{activeFilterCount}</span>}
+        </button>;
+      })()}
+      {/* Collapsible filter + sort section */}
+      {showFilters&&<div style={{marginTop:14,display:"flex",flexDirection:"column",gap:14}}>
+        {/* Sort */}
+        <div>
+          <div style={{fontSize:12,color:C.textHint,fontWeight:600,letterSpacing:"0.5px",marginBottom:8}}>SORT BY</div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {SORT_OPTIONS.map(function(o){
+              var on=sort===o.key;
+              return <button key={o.key} onClick={function(){setSort(o.key);}} style={{fontSize:12,fontWeight:on?700:500,padding:"5px 14px",borderRadius:20,border:"1.5px solid "+(on?C.primary:C.border),background:on?C.primaryLight:"transparent",color:on?C.primary:C.textSecondary,cursor:"pointer"}}>{o.label}</button>;
+            })}
+          </div>
+        </div>
+        {/* Status */}
+        <div>
+          <div style={{fontSize:12,color:C.textHint,fontWeight:600,letterSpacing:"0.5px",marginBottom:8}}>FILTER BY STATUS</div>
+          {statusGroupFilter==="applied"&&<div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"6px 12px",borderRadius:20,background:C.primaryLight,border:"1.5px dashed "+C.primary,color:C.primary,fontSize:12,fontWeight:600,marginBottom:10}}>
+            Showing all applied jobs (Applied, Interview, Offer, Rejected, No response)
+            <button onClick={function(){setStatusGroupFilter(null);}} style={{background:"none",border:"none",cursor:"pointer",color:C.primary,fontSize:14,fontWeight:700,padding:0,lineHeight:1}}>×</button>
+          </div>}
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {["All"].concat(STATUSES).map(function(s){
+              var on=filter===s&&!statusGroupFilter;
+              var cnt=s!=="All"?"("+jobs.filter(function(j){return j.status===s&&(showArchived||!j.archived);}).length+")":"";
+              return <button key={s} onClick={function(){setFilter(s);setStatusGroupFilter(null);}} style={{fontSize:13,fontWeight:on?700:500,padding:"7px 16px",borderRadius:20,border:"1.5px solid "+(on?STATUS[s]?STATUS[s].color:C.primary:C.border),background:on?(STATUS[s]?STATUS[s].bg:C.primaryLight):"transparent",color:on?(STATUS[s]?STATUS[s].color:C.primary):C.textSecondary,cursor:"pointer"}}>{s} {cnt}</button>;
+            })}
+          </div>
+        </div>
+        {/* Source */}
+        <div>
+          <div style={{fontSize:12,color:C.textHint,fontWeight:600,letterSpacing:"0.5px",marginBottom:8}}>FILTER BY SOURCE</div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {[["All sources","all"],["Arbetsförmedlingen","af"],["JSearch","jsearch"],["Manual","manual"]].map(function(item){
+              var on=sourceFilter===item[1];
+              return <button key={item[1]} onClick={function(){setSourceFilter(item[1]);}} style={{fontSize:12,fontWeight:on?700:500,padding:"5px 14px",borderRadius:20,border:"1.5px solid "+(on?C.primary:C.border),background:on?C.primaryLight:"transparent",color:on?C.primary:C.textSecondary,cursor:"pointer"}}>{item[0]}</button>;
+            })}
+          </div>
+        </div>
+        {/* Score */}
+        <div>
+          <div style={{fontSize:12,color:C.textHint,fontWeight:600,letterSpacing:"0.5px",marginBottom:8}}>FILTER BY MATCH SCORE</div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {[
+              [0,"Any score",C.border,C.textSecondary,C.surfaceAlt],
+              [50,"≥ 50%",C.error,C.error,C.errorBg],
+              [70,"≥ 70%",C.warning,C.warning,C.warningBg],
+              [85,"≥ 85%",C.success,C.success,C.successBg],
+            ].map(function(item){
+              var on=scoreFilter===item[0];
+              return <button key={item[0]} onClick={function(){setScoreFilter(item[0]);}} style={{fontSize:12,fontWeight:on?700:500,padding:"5px 14px",borderRadius:20,border:"1.5px solid "+(on?item[2]:C.border),background:on?item[4]:"transparent",color:on?item[3]:C.textSecondary,cursor:"pointer"}}>{item[1]}</button>;
+            })}
+          </div>
+          {scoreFilter>0&&<div style={{fontSize:11,color:C.textHint,marginTop:8,fontStyle:"italic"}}>Jobs that haven't been scored yet are hidden while a threshold is active.</div>}
+        </div>
+        {/* Archive controls */}
+        {(archivedCount>0||passedCount>0)&&<div style={{paddingTop:12,borderTop:"1px solid "+C.border,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+          {archivedCount>0&&<label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",userSelect:"none",fontSize:13,color:C.textSecondary}}>
+            <input type="checkbox" checked={showArchived} onChange={function(){setShowArchived(function(v){return !v;});}} style={{width:16,height:16,cursor:"pointer",accentColor:C.primary}} />
+            <span>Show archived ({archivedCount})</span>
+          </label>}
+          {passedCount>0&&<Btn onClick={archivePassed} style={{fontSize:12,padding:"6px 12px",marginLeft:"auto"}}>📦 Archive passed deadlines ({passedCount})</Btn>}
+        </div>}
+        {/* Clear all filters shortcut */}
+        {(filter!=="All"||statusGroupFilter||sourceFilter!=="all"||scoreFilter>0||sort!=="added_desc")&&
+          <div style={{paddingTop:4}}>
+            <button onClick={function(){setFilter("All");setStatusGroupFilter(null);setSourceFilter("all");setScoreFilter(0);setSort("added_desc");}} style={{fontSize:12,color:C.textHint,background:"none",border:"none",cursor:"pointer",padding:0,fontFamily:"inherit",textDecoration:"underline",textUnderlineOffset:3}}>Clear all filters &amp; sort</button>
+          </div>}
       </div>}
     </Card>
     <Card>
