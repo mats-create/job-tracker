@@ -310,6 +310,8 @@ const STATUS_LIGHT = {
   Offer:{bg:"#F3E8FF",color:"#6B3DAA"},
   Rejected:{bg:"#EEE4E0",color:"#6B5B4E"},
   "No response":{bg:"#E4E4E4",color:"#5A5A5A"},
+  "Ad removed":{bg:"#F5ECD7",color:"#8A6A1A"},
+  "Not relevant":{bg:"#EDECEA",color:"#6B6660"},
 };
 const STATUS_DARK = {
   New:{bg:"#1A3550",color:"#9BC8E5"},
@@ -319,6 +321,8 @@ const STATUS_DARK = {
   Offer:{bg:"#2E1F44",color:"#B89BD8"},
   Rejected:{bg:"#2D2622",color:"#9C8C7E"},
   "No response":{bg:"#2A2A2A",color:"#9A9A9A"},
+  "Ad removed":{bg:"#2E2510",color:"#C9A04A"},
+  "Not relevant":{bg:"#272624",color:"#9A9590"},
 };
 const SOURCES_LIGHT = {
   af:{label:"Arbetsförmedlingen",bg:"#EAF2EF",color:"#3D6B5C"},
@@ -375,7 +379,7 @@ const STATUSES = Object.keys(STATUS);
 // care about "active work" (Dashboard pipeline strip, applications-sent counts)
 // should use these explicit splits rather than slicing STATUSES by index.
 const ACTIVE_STATUSES = ["New","Reviewing","Applied","Interview","Offer"];
-const CLOSED_STATUSES = ["Rejected","No response"];
+const CLOSED_STATUSES = ["Rejected","No response","Ad removed","Not relevant"];
 // Statuses that represent "you have applied and are/were engaged with this role"
 // — used for the applications-sent total. Rejected and No response count here
 // because they represent past applications, even though they're now closed.
@@ -959,33 +963,50 @@ async function callClaudeChat({apiKey,system,messages,maxTokens}){
 // Q&A. When proposing a concrete profile the model emits a PROFILE block that
 // the UI extracts and renders as a saveable card.
 
+// Build a compact, token-efficient summary of the user's job pipeline for
+// injection into the Assistant system prompt. One line per job — enough signal
+// for pattern analysis without blowing the context window.
+// Fields included: status, score, title, company, location, employment type,
+// source, tags, and a 300-char truncated description for keyword analysis.
+// Archived jobs are included (labelled) so the assistant can discuss the full
+// history, not just the active pipeline.
+function jobsSummaryText(jobs){
+  if(!jobs||!jobs.length) return "(No jobs in the pipeline yet.)";
+  // Group by status for readability — makes it easier for the model to identify
+  // patterns within a status group (e.g. "what do my Interview jobs have in common")
+  var groups={};
+  var order=["New","Reviewing","Applied","Interview","Offer","Rejected","No response","Ad removed","Not relevant"];
+  jobs.forEach(function(j){
+    var key=j.archived?"Archived":(j.status||"Unknown");
+    if(!groups[key]) groups[key]=[];
+    groups[key].push(j);
+  });
+  var lines=[];
+  var allKeys=order.concat(Object.keys(groups).filter(function(k){return !order.includes(k);}));
+  allKeys.forEach(function(status){
+    var group=groups[status];
+    if(!group||!group.length) return;
+    lines.push("\n── "+status.toUpperCase()+" ("+group.length+") ──");
+    group.forEach(function(j){
+      var score=j.scored===false?"unscored":((j.score||0)+"%");
+      var tags=j.tags&&j.tags.length?" ["+j.tags.slice(0,4).join(", ")+"]":"";
+      var emp=j.employmentType?" · "+j.employmentType:"";
+      var loc=j.location?" · "+j.location:"";
+      var desc=j.description?(" | desc: "+j.description.replace(/\s+/g," ").slice(0,300)):"";
+      var rat=j.rationale?" | AI: "+j.rationale:"";
+      lines.push("• "+score+" — "+j.title+" @ "+j.company+loc+emp+tags+rat+desc);
+    });
+  });
+  return "Total jobs: "+jobs.length+" ("+Object.keys(groups).map(function(k){return k+": "+groups[k].length;}).join(", ")+")\n"+lines.join("\n");
+}
+
 function buildAssistantSystem(cv,profiles,jobs){
   var cvBlock=hasCv(cv)?cvSummaryText(cv):"(No CV loaded yet. Ask the user to add their CV in the My CV tab before proposing profiles.)";
   var existing=(profiles||[]).length
     ? profiles.map(function(p){return "- \""+p.name+"\" · query: "+p.query+" · sources: "+(p.sources||[]).join("+")+" · max "+p.limit;}).join("\n")
     : "(No profiles saved yet.)";
 
-  // Build top-matches and bottom-matches summaries from scored jobs. Scored
-  // jobs (scored!==false) are the signal; archived ones are excluded so the
-  // user's "decluttered" decisions don't skew the analysis.
-  var scored=(jobs||[]).filter(function(j){return j.scored!==false&&!j.archived&&typeof j.score==="number";});
-  var matchesBlock="(Not enough scored jobs yet — the assistant needs 10+ scored jobs to analyse patterns. Ingest and score some jobs first.)";
-  var hasEnoughMatches=scored.length>=10;
-  if(hasEnoughMatches){
-    var sortedDesc=scored.slice().sort(function(a,b){return (b.score||0)-(a.score||0);});
-    var top=sortedDesc.slice(0,10);
-    var bottom=sortedDesc.slice(-5).reverse(); // worst matches for anti-signal
-    function fmtJob(j){
-      var tags=(j.tags&&j.tags.length)?" · tags: "+j.tags.slice(0,5).join(", "):"";
-      var rat=j.rationale?" — "+j.rationale:"";
-      return "["+(j.score||0)+"%] "+j.title+" at "+j.company+" · "+j.location+tags+rat;
-    }
-    matchesBlock=
-      "TOP 10 highest-scoring jobs (use these to identify what the user fits WELL):\n"+
-      top.map(fmtJob).join("\n")+
-      "\n\nBOTTOM 5 lowest-scoring jobs (anti-signal — patterns to AVOID in queries):\n"+
-      bottom.map(fmtJob).join("\n");
-  }
+  var pipelineBlock=jobsSummaryText(jobs||[]);
 
   return [
     "You are the Profile Assistant embedded in a personal job-tracking app.",
@@ -994,6 +1015,7 @@ function buildAssistantSystem(cv,profiles,jobs){
     "  (a) How this app's features work (Dashboard, My Jobs, Search Profiles, Scheduler, My CV, Cover Letters, Reports).",
     "  (b) Helping the user design high-quality search profiles based on their CV and preferences.",
     "  (c) What the connected job-search APIs (Arbetsförmedlingen, JSearch) can and cannot do.",
+    "  (d) Analysing and discussing the user's job pipeline — patterns across statuses, commonalities in roles they reached Interview for, reasons for rejections, quality of matches, strategic advice based on their actual job data.",
     "",
     "If the user asks about ANYTHING else (general knowledge, coding, personal advice, other products, news, math, trivia, etc.),",
     "politely decline in one sentence and redirect: \"I'm only able to help with building search profiles and using this job tracker. What kind of role are you looking for?\"",
@@ -1014,13 +1036,16 @@ function buildAssistantSystem(cv,profiles,jobs){
     "• For remote/international roles, pick 'jsearch' and use English terms.",
     "• If the user wants both, suggest two separate profiles or one profile with both sources — explain the tradeoff.",
     "",
-    "USING THE TOP-MATCHES DATA (when available):",
-    "When the user asks for profile suggestions based on their highest-scoring jobs, or when they ask what's working / what they should search for more of:",
-    "• Identify common patterns across the TOP 10 jobs: role titles, seniority keywords, industries/domains, locations, recurring tags, employer types (startup vs enterprise, agency vs in-house, etc.).",
-    "• Cross-reference with the BOTTOM 5 to identify anti-patterns. If top matches are startup design roles and bottom are enterprise PM roles, the new profile should lean into \"startup product design\" terms.",
-    "• Since neither API supports exclusion operators, you cannot filter out the anti-patterns directly in the query — mention them in the reasoning field instead so the user understands why the profile is shaped as it is.",
-    "• Prefer 1-2 highly focused profiles over one broad one. A profile built from top matches should surface MORE jobs like those top ones.",
-    "• When patterns are ambiguous (e.g. top matches span design, research, and strategy roles), ask one clarifying question before proposing.",
+    "PIPELINE ANALYSIS GUIDANCE:",
+    "The user's full job pipeline is provided below. Use it to:",
+    "• Identify patterns within any status group — e.g. what Interview-stage jobs have in common (industry, seniority, employer type, skills in description).",
+    "• Spot mismatches — e.g. if Rejected jobs cluster around a specific role type or company size the user's CV doesn't fit well.",
+    "• Surface patterns across statuses — e.g. compare what Interview jobs vs Rejected jobs have in common to identify where the user's profile lands well vs poorly.",
+    "• Recognise 'Not relevant' patterns — if the user keeps marking certain job types as not relevant, that's signal to refine search profiles.",
+    "• Flag 'Ad removed' clusters — if many ads are removed early, that may indicate timing issues (applying too late).",
+    "• Use AI match scores as a calibration signal — high scores that led to Rejection vs low scores that led to Interview are worth flagging.",
+    "• Always ground observations in the actual data. Don't speculate beyond what the pipeline shows.",
+    "• When the pipeline is small (<10 jobs), acknowledge limited signal and be appropriately cautious about generalisations.",
     "",
     "WHEN TO PROPOSE A CONCRETE PROFILE:",
     "Only after you have enough detail about role, seniority, and location/remoteness. Ask for clarification first if needed.",
@@ -1037,8 +1062,8 @@ function buildAssistantSystem(cv,profiles,jobs){
     "THE USER'S EXISTING SEARCH PROFILES:",
     existing,
     "",
-    "THE USER'S SCORED JOBS (signal for smart suggestions):",
-    matchesBlock,
+    "THE USER'S FULL JOB PIPELINE (read-only — for analysis and discussion only, never modify):",
+    pipelineBlock,
   ].join("\n");
 }
 
@@ -1084,6 +1109,8 @@ function extractProfiles(reply){
 // a smart-suggestions prompt is prioritised since it leverages that signal.
 function getStarterPrompts(cv,jobs){
   var scoredCount=(jobs||[]).filter(function(j){return j.scored!==false&&!j.archived&&typeof j.score==="number";}).length;
+  var interviewCount=(jobs||[]).filter(function(j){return j.status==="Interview"||j.status==="Offer";}).length;
+  var rejectedCount=(jobs||[]).filter(function(j){return j.status==="Rejected";}).length;
   var smartPrompt=scoredCount>=10?"Suggest a new profile based on my highest-scoring jobs.":null;
 
   if(!hasCv(cv)){
@@ -1097,6 +1124,10 @@ function getStarterPrompts(cv,jobs){
   var prompts=[];
   // Smart suggestion leads when available — highest-value starter
   if(smartPrompt) prompts.push(smartPrompt);
+  // Pipeline analysis starters — only when there's enough data to be meaningful
+  if(interviewCount>=2) prompts.push("What do my Interview-stage jobs have in common?");
+  else if(interviewCount===1) prompts.push("What stands out about the job I reached Interview for?");
+  if(rejectedCount>=3) prompts.push("Are there patterns in the jobs I've been rejected from?");
   prompts.push("Help me build a search profile from my CV.");
   if(cv.locations) prompts.push("Find roles in "+cv.locations.split(",")[0].trim()+" that fit my background.");
   if(cv.roles) prompts.push("I want to search for "+cv.roles.split(",")[0].trim()+" positions — where should I start?");
@@ -1473,7 +1504,9 @@ function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoring
   // a compact summary so the loop is visible without cluttering the pipeline.
   var rejectedCount=active.filter(function(j){return j.status==="Rejected";}).length;
   var noResponseCount=active.filter(function(j){return j.status==="No response";}).length;
-  var closedTotal=rejectedCount+noResponseCount;
+  var adRemovedCount=active.filter(function(j){return j.status==="Ad removed";}).length;
+  var notRelevantCount=active.filter(function(j){return j.status==="Not relevant";}).length;
+  var closedTotal=rejectedCount+noResponseCount+adRemovedCount+notRelevantCount;
   return <div style={{display:"flex",flexDirection:"column",gap:20}}>
     <div style={{background:"linear-gradient(135deg,"+C.primary+" 0%,"+C.primaryDark+" 100%)",borderRadius:20,padding:"28px",color:"#fff",boxShadow:C.shadowMd}}>
       <div style={{fontSize:22,fontWeight:700,marginBottom:6}}>Good to see you! 👋</div>
@@ -1562,6 +1595,12 @@ function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoring
         {noResponseCount>0&&(navigateToJobs
           ?<button onClick={function(){navigateToJobs({status:"No response"});}} style={{background:"none",border:"none",cursor:"pointer",color:C.textSecondary,fontFamily:"inherit",fontSize:12,padding:0,textDecoration:"underline",textDecorationColor:"transparent",textUnderlineOffset:3,transition:"text-decoration-color 0.15s"}} onMouseEnter={function(e){e.currentTarget.style.textDecorationColor=STATUS["No response"].color;}} onMouseLeave={function(e){e.currentTarget.style.textDecorationColor="transparent";}}><b style={{color:STATUS["No response"].color}}>{noResponseCount}</b> no response</button>
           :<span><b style={{color:STATUS["No response"].color}}>{noResponseCount}</b> no response</span>)}
+        {adRemovedCount>0&&(navigateToJobs
+          ?<button onClick={function(){navigateToJobs({status:"Ad removed"});}} style={{background:"none",border:"none",cursor:"pointer",color:C.textSecondary,fontFamily:"inherit",fontSize:12,padding:0,textDecoration:"underline",textDecorationColor:"transparent",textUnderlineOffset:3,transition:"text-decoration-color 0.15s"}} onMouseEnter={function(e){e.currentTarget.style.textDecorationColor=STATUS["Ad removed"].color;}} onMouseLeave={function(e){e.currentTarget.style.textDecorationColor="transparent";}}><b style={{color:STATUS["Ad removed"].color}}>{adRemovedCount}</b> ad removed</button>
+          :<span><b style={{color:STATUS["Ad removed"].color}}>{adRemovedCount}</b> ad removed</span>)}
+        {notRelevantCount>0&&(navigateToJobs
+          ?<button onClick={function(){navigateToJobs({status:"Not relevant"});}} style={{background:"none",border:"none",cursor:"pointer",color:C.textSecondary,fontFamily:"inherit",fontSize:12,padding:0,textDecoration:"underline",textDecorationColor:"transparent",textUnderlineOffset:3,transition:"text-decoration-color 0.15s"}} onMouseEnter={function(e){e.currentTarget.style.textDecorationColor=STATUS["Not relevant"].color;}} onMouseLeave={function(e){e.currentTarget.style.textDecorationColor="transparent";}}><b style={{color:STATUS["Not relevant"].color}}>{notRelevantCount}</b> not relevant</button>
+          :<span><b style={{color:STATUS["Not relevant"].color}}>{notRelevantCount}</b> not relevant</span>)}
         <span style={{color:C.textHint,marginLeft:"auto"}}>Total closed: {closedTotal}</span>
       </div>}
       {(function(){
@@ -1913,6 +1952,7 @@ function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSor
         var patch={status:newStatus};
         if(newStatus==="Applied"&&!j.appliedAt) patch.appliedAt=nowIso;
         if(newStatus==="Rejected"&&!j.rejectedAt) patch.rejectedAt=nowIso;
+        if(newStatus==="Ad removed"&&!j.adRemovedAt) patch.adRemovedAt=nowIso;
         return Object.assign({},j,patch);
       });
     });
@@ -2149,6 +2189,7 @@ function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSor
                 var patch={status:val};
                 if(val==="Applied"&&!x.appliedAt) patch.appliedAt=new Date().toISOString();
                 if(val==="Rejected"&&!x.rejectedAt) patch.rejectedAt=new Date().toISOString();
+                if(val==="Ad removed"&&!x.adRemovedAt) patch.adRemovedAt=new Date().toISOString();
                 return Object.assign({},x,patch);
               });});}}
               onNotesChange={function(val){setJobs(function(prev){return prev.map(function(x){return x.id===j.id?Object.assign({},x,{notes:val}):x;});});}}
@@ -3189,6 +3230,8 @@ function Reports({jobs,cv,anthropicKey}){
       "• Still awaiting response (Applied status): "+stillApplied+"\n"+
       "• Progressed to Interview stage: "+(interviewed+offered+rejected)+" (currently Interview: "+interviewed+", Offer: "+offered+", Rejected after applying: "+rejected+")\n"+
       "• Closed - No response (ghosted): "+noResponse+"\n"+
+      "• Closed - Ad removed (employer took down listing): "+(byStatus["Ad removed"]||0)+"\n"+
+      "• Closed - Not relevant (reviewed and ruled out as mismatch): "+(byStatus["Not relevant"]||0)+"\n"+
       "• Response rate (any reply, positive or negative): "+responseRate+"%\n"+
       (avgDaysToRejection!==null?"• Average days from application to rejection: "+avgDaysToRejection+" days (based on "+rejectedWithDates.length+" rejections with timestamps)\n":"")+
       "• Breakdown by status: "+STATUSES.map(function(s){return s+"="+(byStatus[s]||0);}).join(", ");
