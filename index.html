@@ -3136,19 +3136,37 @@ function CoverLetters({jobs,setJobs,cv,anthropicKey,setActiveTab,pendingCoverLet
   // eslint-disable-next-line
   },[pendingCoverLetterJob]);
   var [tone,setTone]=useState("Professional");
+  var [language,setLanguage]=useState("auto");
   var [letter,setLetter]=useState("");
   var [error,setError]=useState("");
   var [loading,setLoading]=useState(false);
   var [showEmail,setShowEmail]=useState(false);
   var [saved,setSaved]=useState(false);
 
+  // Detect the likely language of a job description using a simple heuristic:
+  // count common Swedish function words vs English ones. Good enough for the
+  // vast majority of cases without any external API call.
+  function detectJobLanguage(job){
+    if(!job) return "English";
+    var text=((job.description||"")+" "+(job.title||"")).toLowerCase();
+    if(!text.trim()) return "English";
+    var svWords=["och","att","för","med","som","det","vi","på","är","av","har","inom","ett","en","till","samt","goda","kunskaper","erfarenhet","arbeta","söker","tjänst","krav","meriterande"];
+    var enWords=["and","the","for","with","our","you","we","are","will","your","have","this","that","role","team","experience","skills","join","looking","responsible"];
+    var svScore=svWords.reduce(function(n,w){return n+(text.split(new RegExp("\\b"+w+"\\b","g")).length-1);},0);
+    var enScore=enWords.reduce(function(n,w){return n+(text.split(new RegExp("\\b"+w+"\\b","g")).length-1);},0);
+    return svScore>enScore?"Swedish":"English";
+  }
+
   // Pre-load any stored letter when the selected job changes.
+  // Also auto-detect the language from the new job's description.
   useEffect(function(){
     var job=jobs.find(function(j){return j.id===selectedJob;});
     setLetter(job&&job.coverLetter?job.coverLetter:"");
     setSaved(false);
     setShowEmail(false);
     setError("");
+    // Reset to auto when switching jobs so each job gets a fresh detection
+    setLanguage("auto");
   },[selectedJob]);
 
   // Save (or clear) the letter on the job object.
@@ -3168,6 +3186,8 @@ function CoverLetters({jobs,setJobs,cv,anthropicKey,setActiveTab,pendingCoverLet
       setError("Please add a substantive CV in the My CV tab first. The letter can only be grounded in what you've actually written.");
       return;
     }
+    // Resolve the language: auto-detect from job description, or use manual override.
+    var resolvedLang=language==="auto"?detectJobLanguage(job):language;
     setLoading(true);setLetter("");setError("");setShowEmail(false);
     try{
       // Build a tight job brief — includes description when available so the
@@ -3185,7 +3205,7 @@ function CoverLetters({jobs,setJobs,cv,anthropicKey,setActiveTab,pendingCoverLet
       // the candidate, and to omit rather than invent. This is the single
       // biggest quality lever for cover letters.
       var prompt=
-        "You are writing a cover letter for a job applicant. Write it in "+job.lang+" with a "+tone.toLowerCase()+" tone.\n\n"+
+        "You are writing a cover letter for a job applicant. Write it in "+resolvedLang+" with a "+tone.toLowerCase()+" tone.\n\n"+
         "═══ STRICT GROUNDING RULES — FOLLOW EXACTLY ═══\n"+
         "1. The CV below is the ONLY source of truth about the applicant. Do NOT invent, infer, or extrapolate skills, experience, qualifications, achievements, tools, languages, certifications, employers, education, or soft skills that are not explicitly stated in the CV.\n"+
         "2. If the job description lists a requirement that is NOT evidenced in the CV, do NOT claim the applicant has it. Do NOT hint at it, imply it, or use filler phrases suggesting it. Either omit it entirely or frame it honestly as something the applicant is eager to learn.\n"+
@@ -3234,9 +3254,20 @@ function CoverLetters({jobs,setJobs,cv,anthropicKey,setActiveTab,pendingCoverLet
             </div>
           </div>
           :<div>
-            <div className="jt-grid-2" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:14,marginBottom:10}}>
+            <div className="jt-grid-2" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:14,marginBottom:10}}>
               <div><Label hint={showAllStatuses?"Showing all non-archived jobs.":"Showing jobs you're actively reviewing."}>Select a job</Label><Sel value={selectedJob||""} onChange={function(e){var v=e.target.value;var num=Number(v);setSelectedJob(isNaN(num)||String(num)!==v?v:num);}}>{eligibleJobs.map(function(j){return <option key={j.id} value={j.id}>{j.title} – {j.company}{showAllStatuses?" ["+j.status+"]":""}</option>;})}</Sel></div>
               <div><Label hint="This affects the writing style of the letter.">Tone of voice</Label><Sel value={tone} onChange={function(e){setTone(e.target.value);}}>{["Professional","Conversational","Enthusiastic","Formal","Creative"].map(function(t){return <option key={t}>{t}</option>;})}</Sel></div>
+              <div>
+                <Label hint="Auto-detect reads the job description language. Override if the result is wrong.">
+                  Language
+                  {language==="auto"&&currentJob&&<span style={{fontSize:11,color:C.textHint,fontWeight:400,marginLeft:6}}>→ detected: {detectJobLanguage(currentJob)}</span>}
+                </Label>
+                <Sel value={language} onChange={function(e){setLanguage(e.target.value);}}>
+                  <option value="auto">Auto-detect from job description</option>
+                  <option value="English">English</option>
+                  <option value="Swedish">Swedish</option>
+                </Sel>
+              </div>
             </div>
             <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:C.textSecondary,cursor:"pointer",userSelect:"none",marginBottom:14}}>
               <input type="checkbox" checked={showAllStatuses} onChange={function(){setShowAllStatuses(function(v){return !v;});}} style={{width:14,height:14,cursor:"pointer",accentColor:C.primary}} />
