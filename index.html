@@ -744,6 +744,63 @@ function mapJsJob(a,profileName){
   };
 }
 
+// ─── Location filtering ───────────────────────────────────────────────────────
+// Curated list shown in the profile form. value = canonical name used for
+// matching; aliases = alternate spellings that may appear in API responses.
+const LOCATION_OPTIONS=[
+  {value:"Stockholm",   aliases:["Stockholm","Stockholm County","Stockholms län"]},
+  {value:"Göteborg",    aliases:["Göteborg","Gothenburg","Västra Götaland","Göteborg och Bohus"]},
+  {value:"Malmö",       aliases:["Malmö","Malmo","Skåne","Skåne län"]},
+  {value:"Uppsala",     aliases:["Uppsala","Uppsala län"]},
+  {value:"Linköping",   aliases:["Linköping","Linkoping","Östergötland"]},
+  {value:"Örebro",      aliases:["Örebro","Orebro","Örebro län"]},
+  {value:"Västerås",    aliases:["Västerås","Vasteras","Västmanland"]},
+  {value:"Helsingborg", aliases:["Helsingborg"]},
+  {value:"Norrköping",  aliases:["Norrköping","Norrkoping"]},
+  {value:"Jönköping",   aliases:["Jönköping","Jonkoping","Jönköpings län"]},
+  {value:"Lund",        aliases:["Lund"]},
+  {value:"Umeå",        aliases:["Umeå","Umea","Västerbotten"]},
+  {value:"Gävle",       aliases:["Gävle","Gavle","Gävleborg"]},
+  {value:"Borås",       aliases:["Borås","Boras"]},
+  {value:"Sundsvall",   aliases:["Sundsvall","Västernorrland"]},
+  {value:"Karlstad",    aliases:["Karlstad","Värmland"]},
+  {value:"Oskarshamn",  aliases:["Oskarshamn","Kalmar","Kalmar län"]},
+  {value:"Remote",      aliases:["Remote","remote","Distans"]},
+];
+
+// Flat alias lookup: "gothenburg" → "Göteborg" etc.
+var LOCATION_ALIAS_MAP={};
+LOCATION_OPTIONS.forEach(function(opt){
+  LOCATION_ALIAS_MAP[opt.value.toLowerCase()]=opt.value;
+  opt.aliases.forEach(function(a){ LOCATION_ALIAS_MAP[a.toLowerCase()]=opt.value; });
+});
+
+// Resolve any raw location string to a canonical LOCATION_OPTIONS value, or null.
+// Checks each comma-separated part so "Stockholm, SE" → "Stockholm".
+function resolveLocation(locStr){
+  if(!locStr) return null;
+  var parts=locStr.split(",").map(function(s){return s.trim();});
+  for(var i=0;i<parts.length;i++){
+    var c=LOCATION_ALIAS_MAP[parts[i].toLowerCase()];
+    if(c) return c;
+  }
+  return null;
+}
+
+// Post-ingestion location filter — channel-agnostic, runs on normalised jobs.
+// profileLocations: string[] of canonical values; empty/null = keep everything.
+// "Remote" means keep jobs where job.remote===true regardless of city match.
+function filterByLocation(jobs,profileLocations){
+  if(!profileLocations||!profileLocations.length) return jobs;
+  var wantsRemote=profileLocations.includes("Remote");
+  var cityFilters=profileLocations.filter(function(l){return l!=="Remote";});
+  return jobs.filter(function(j){
+    if(wantsRemote&&j.remote===true) return true;
+    if(!cityFilters.length) return false; // only Remote was selected
+    return !!cityFilters.find(function(loc){return resolveLocation(j.location)===loc;});
+  });
+}
+
 // ─── AI Match Scoring ─────────────────────────────────────────────────────────
 // Uses Claude to score how well each job matches the candidate's CV + preferences.
 // Returns a 0–100 integer plus a one-line rationale. Batches up to ~15 jobs per
@@ -2211,7 +2268,7 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
   var [showAnthropicKey,setShowAnthropicKey]=useState(false);
   var [editId,setEditId]=useState(null);
   var [showForm,setShowForm]=useState(false);
-  var [form,setForm]=useState({name:"",query:"",limit:10,sources:["af"]});
+  var [form,setForm]=useState({name:"",query:"",limit:10,sources:["af"],locations:[]});
   var [runStatus,setRunStatus]=useState({});
   // Ref on the edit form so clicking Edit on a profile far down the list
   // can scroll the form into view. Without this, profiles 4+ "looked broken"
@@ -2220,14 +2277,15 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
   var formRef=useRef(null);
 
   function toggleSource(src){setForm(function(f){var srcs=f.sources.includes(src)?f.sources.filter(function(s){return s!==src;}):f.sources.concat([src]);return Object.assign({},f,{sources:srcs});});}
+  function toggleLocation(loc){setForm(function(f){var locs=(f.locations||[]);var next=locs.includes(loc)?locs.filter(function(l){return l!==loc;}):locs.concat([loc]);return Object.assign({},f,{locations:next});});}
   function saveProfile(){
     if(!form.name||!form.query||form.sources.length===0) return;
     if(editId){setProfiles(function(prev){return prev.map(function(p){return p.id===editId?Object.assign({},p,form,{limit:Number(form.limit)}):p;});});setEditId(null);}
     else{setProfiles(function(prev){return prev.concat([Object.assign({id:Date.now()},form,{limit:Number(form.limit),active:true})]);});}
-    setForm({name:"",query:"",limit:10,sources:["af"]});setShowForm(false);
+    setForm({name:"",query:"",limit:10,sources:["af"],locations:[]});setShowForm(false);
   }
   function startEdit(p){
-    setForm({name:p.name,query:p.query,limit:p.limit,sources:p.sources||["af"]});
+    setForm({name:p.name,query:p.query,limit:p.limit,sources:p.sources||["af"],locations:p.locations||[]});
     setEditId(p.id);
     setShowForm(true);
     // Scroll the inline edit card into view after React renders it.
@@ -2262,10 +2320,11 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
         var nj=ads.filter(function(a){
           var aid=a.id?a.id.toString():"";
           if(!aid) return false;
-          if(ex.has(aid)) return false;       // already in current jobs
-          if(tombstones.has(aid)){ skippedDismissed++; return false; } // previously dismissed
+          if(ex.has(aid)) return false;
+          if(tombstones.has(aid)){ skippedDismissed++; return false; }
           return true;
         }).map(function(a){return mapAfJob(a,p.name);});
+        nj=filterByLocation(nj,p.locations||[]);
         added=nj.length;return nj.concat(prev);
       });
       return{added:added,skipped:skippedDismissed};
@@ -2297,6 +2356,7 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
           if(tombstones.has(aid)){ skippedDismissed++; return false; }
           return true;
         }).map(function(a){return mapJsJob(a,p.name);});
+        nj=filterByLocation(nj,p.locations||[]);
         added=nj.length;return nj.concat(prev);
       });
       return{added:added,skipped:skippedDismissed};
@@ -2333,7 +2393,7 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
 
   return <div style={{display:"flex",flexDirection:"column",gap:16}}>
     <Card>
-      <SectionTitle action={<div style={{display:"flex",gap:8,alignItems:"center"}}><InfoTip label="How it works">A search profile is a saved query that runs against job boards automatically. Each active profile searches its sources on schedule or when you click Fetch, adding new matching jobs to your list. Queries use simple keyword matching — no AND/OR operators. To search for multiple roles or locations, create separate profiles (e.g. "Product Manager Stockholm", "Product Owner Stockholm").</InfoTip><Btn onClick={runAll} style={{fontSize:13,padding:"8px 14px"}}>▶ Run all active</Btn><Btn variant="primary" onClick={function(){setEditId(null);setForm({name:"",query:"",limit:10,sources:["af"]});setShowForm(function(v){return !v;});}} style={{fontSize:13,padding:"8px 14px"}}>+ New profile</Btn></div>}>Search profiles</SectionTitle>
+      <SectionTitle action={<div style={{display:"flex",gap:8,alignItems:"center"}}><InfoTip label="How it works">A search profile is a saved query that runs against job boards automatically. Each active profile searches its sources on schedule or when you click Fetch, adding new matching jobs to your list. Queries use simple keyword matching — no AND/OR operators. To search for multiple roles or locations, create separate profiles (e.g. "Product Manager Stockholm", "Product Owner Stockholm").</InfoTip><Btn onClick={runAll} style={{fontSize:13,padding:"8px 14px"}}>▶ Run all active</Btn><Btn variant="primary" onClick={function(){setEditId(null);setForm({name:"",query:"",limit:10,sources:["af"],locations:[]});setShowForm(function(v){return !v;});}} style={{fontSize:13,padding:"8px 14px"}}>+ New profile</Btn></div>}>Search profiles</SectionTitle>
       {showForm&&!editId&&<div ref={formRef} style={{background:C.surfaceAlt,borderRadius:14,padding:"20px",margin:"16px 0",border:"1.5px solid "+C.border}}>
         <div style={{fontSize:15,fontWeight:700,color:C.textPrimary,marginBottom:16}}>New search profile</div>
         <div className="jt-grid-2" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:14,marginBottom:14}}>
@@ -2349,6 +2409,16 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
               return <button key={item[0]} onClick={function(){toggleSource(item[0]);}} style={{flex:1,padding:"12px 16px",borderRadius:12,border:"2px solid "+(on?item[3]:C.border),background:on?item[2]:"transparent",color:on?item[3]:C.textSecondary,cursor:"pointer",fontSize:13,fontWeight:on?700:500,textAlign:"left"}}>{on?"✓ ":""}{item[1]}</button>;
             })}
           </div>
+        </div>
+        <div style={{marginBottom:16}}>
+          <Label hint="Filter results to specific cities or remote. Leave empty to get jobs from all of Sweden/anywhere.">Locations <span style={{fontWeight:400,color:C.textHint}}>(optional — empty = no filter)</span></Label>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:6}}>
+            {LOCATION_OPTIONS.map(function(opt){
+              var on=(form.locations||[]).includes(opt.value);
+              return <button key={opt.value} onClick={function(){toggleLocation(opt.value);}} style={{fontSize:12,fontWeight:on?700:500,padding:"5px 13px",borderRadius:20,border:"1.5px solid "+(on?C.primary:C.border),background:on?C.primaryLight:"transparent",color:on?C.primary:C.textSecondary,cursor:"pointer"}}>{opt.value}</button>;
+            })}
+          </div>
+          {(form.locations||[]).length>0&&<div style={{fontSize:11,color:C.textHint,marginTop:6}}>Jobs not matching these locations will be filtered out after fetching.</div>}
         </div>
         <div style={{display:"flex",gap:10}}><Btn variant="primary" onClick={saveProfile}>Save profile</Btn><Btn onClick={function(){setShowForm(false);setEditId(null);}}>Cancel</Btn></div>
       </div>}
@@ -2380,6 +2450,16 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
                     })}
                   </div>
                 </div>
+                <div style={{marginBottom:16}}>
+                  <Label hint="Filter results to specific cities or remote. Leave empty to get jobs from all of Sweden/anywhere.">Locations <span style={{fontWeight:400,color:C.textHint}}>(optional — empty = no filter)</span></Label>
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:6}}>
+                    {LOCATION_OPTIONS.map(function(opt){
+                      var on=(form.locations||[]).includes(opt.value);
+                      return <button key={opt.value} onClick={function(){toggleLocation(opt.value);}} style={{fontSize:12,fontWeight:on?700:500,padding:"5px 13px",borderRadius:20,border:"1.5px solid "+(on?C.primary:C.border),background:on?C.primaryLight:"transparent",color:on?C.primary:C.textSecondary,cursor:"pointer"}}>{opt.value}</button>;
+                    })}
+                  </div>
+                  {(form.locations||[]).length>0&&<div style={{fontSize:11,color:C.textHint,marginTop:6}}>Jobs not matching these locations will be filtered out after fetching.</div>}
+                </div>
                 <div style={{display:"flex",gap:10}}><Btn variant="primary" onClick={saveProfile}>Update profile</Btn><Btn onClick={function(){setShowForm(false);setEditId(null);}}>Cancel</Btn></div>
               </div>;
             }
@@ -2395,6 +2475,7 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
                     <Chip label={p.active?"Active":"Inactive"} bg={p.active?C.primaryLight:C.surfaceAlt} color={p.active?C.primary:C.textHint} />
                     <Chip label={"max "+p.limit} />
                     {(p.sources||["af"]).map(function(src){var s=SOURCES[src];return <Chip key={src} label={s.label} bg={s.bg} color={s.color} />;}) }
+                    {(p.locations||[]).map(function(loc){return <Chip key={loc} label={"📍 "+loc} bg={C.primaryLight} color={C.primary} />;})}
                   </div>
                 </div>
               </div>
@@ -4364,14 +4445,14 @@ function AppShell({user,onSignOut}){
             var url="https://jobsearch.api.jobtechdev.se/search?q="+encodeURIComponent(p.query)+"&limit="+p.limit+"&resdet=full";
             var out=await smartFetch(url,{headers:h});
             var r=out.response;
-            if(r.ok){var d=await r.json();var ads=d.hits||[];setJobs(function(prev){var ex=new Set(prev.map(function(x){return x.id?x.id.toString():""; }));var nj=ads.filter(function(a){var aid=a.id?a.id.toString():"";return aid&&!ex.has(aid)&&!tombstones.has(aid);}).map(function(a){return mapAfJob(a,p.name);});totalNew+=nj.length;return nj.concat(prev);});}
+            if(r.ok){var d=await r.json();var ads=d.hits||[];setJobs(function(prev){var ex=new Set(prev.map(function(x){return x.id?x.id.toString():""; }));var nj=ads.filter(function(a){var aid=a.id?a.id.toString():"";return aid&&!ex.has(aid)&&!tombstones.has(aid);}).map(function(a){return mapAfJob(a,p.name);});nj=filterByLocation(nj,p.locations||[]);totalNew+=nj.length;return nj.concat(prev);});}
             else{errors.push(p.name+" (AF): "+r.status);}
           }
           if(src==="jsearch"&&jsKey){
             var url2="https://jsearch.p.rapidapi.com/search?query="+encodeURIComponent(p.query)+"&num_pages=1&page=1";
             var out2=await smartFetch(url2,{headers:{"x-rapidapi-key":jsKey,"x-rapidapi-host":"jsearch.p.rapidapi.com"}});
             var r2=out2.response;
-            if(r2.ok){var d2=await r2.json();var ads2=(d2.data||[]).slice(0,p.limit);setJobs(function(prev){var ex=new Set(prev.map(function(x){return x.id?x.id.toString():""; }));var nj=ads2.filter(function(a){var aid=a.job_id?String(a.job_id):"";return aid&&!ex.has(aid)&&!tombstones.has(aid);}).map(function(a){return mapJsJob(a,p.name);});totalNew+=nj.length;return nj.concat(prev);});}
+            if(r2.ok){var d2=await r2.json();var ads2=(d2.data||[]).slice(0,p.limit);setJobs(function(prev){var ex=new Set(prev.map(function(x){return x.id?x.id.toString():""; }));var nj=ads2.filter(function(a){var aid=a.job_id?String(a.job_id):"";return aid&&!ex.has(aid)&&!tombstones.has(aid);}).map(function(a){return mapJsJob(a,p.name);});nj=filterByLocation(nj,p.locations||[]);totalNew+=nj.length;return nj.concat(prev);});}
             else{errors.push(p.name+" (JSearch): "+r2.status);}
           }
         }catch(e){errors.push(p.name+": "+e.message);}
