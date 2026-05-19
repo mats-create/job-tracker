@@ -3448,10 +3448,11 @@ function ActivityListings({jobs}){
       id:shortId(j),
       title:j.title||"",
       company:j.company||"",
-      status:j.status+(j.archived?" (archived)":""),
-      refDate:refDate(j),
+      employmentType:j.employmentType||"—",
+      location:j.location||"—",
       appliedAt:fmtDate(j.appliedAt),
-      rejectedAt:fmtDate(j.rejectedAt),
+      refDate:refDate(j),
+      status:j.status+(j.archived?" (archived)":""),
     };
   }
 
@@ -3503,11 +3504,13 @@ function ActivityListings({jobs}){
       g.rows.forEach(function(r){
         lines.push([
           "#"+r.id,
-          r.company.padEnd(20).slice(0,20),
           r.title.padEnd(30).slice(0,30),
-          r.status.padEnd(16).slice(0,16),
+          r.company.padEnd(20).slice(0,20),
+          r.employmentType.padEnd(14).slice(0,14),
+          r.location.padEnd(16).slice(0,16),
           "Applied: "+r.appliedAt,
-          r.rejectedAt!=="—"?"Rejected: "+r.rejectedAt:"",
+          "Ref: "+r.refDate,
+          r.status.padEnd(16).slice(0,16),
         ].filter(Boolean).join("  "));
       });
       lines.push("");
@@ -3517,17 +3520,18 @@ function ActivityListings({jobs}){
 
   // ── CSV export ───────────────────────────────────────────────────────────
   function buildCsv(){
-    var rows=[["ID","Company","Job Title","Status","Reference Date","Applied Date","Rejected Date","Period","Week"]];
+    var rows=[["ID","Title","Company","Employment Type","Location","Applied","Ref Date","Status","Period","Week"]];
     groups.forEach(function(g){
       g.rows.forEach(function(r){
         rows.push([
           "#"+r.id,
-          r.company,
           r.title,
-          r.status,
-          r.refDate,
+          r.company,
+          r.employmentType,
+          r.location,
           r.appliedAt,
-          r.rejectedAt,
+          r.refDate,
+          r.status,
           startMonth+(startMonth!==endMonth?" to "+endMonth:""),
           g.weekStart||"",
         ].map(function(v){ return "\""+String(v).replace(/"/g,"\"\"")+"\""; }).join(","));
@@ -3602,25 +3606,28 @@ function ActivityListings({jobs}){
                 <thead>
                   <tr>
                     <th style={thStyle}>ID</th>
-                    <th style={thStyle}>Company</th>
                     <th style={thStyle}>Title</th>
-                    <th style={thStyle}>Status</th>
-                    <th style={thStyle}>Ref date</th>
+                    <th style={thStyle}>Company</th>
+                    <th style={thStyle}>Employment type</th>
+                    <th style={thStyle}>Location</th>
                     <th style={thStyle}>Applied</th>
-                    <th style={thStyle}>Rejected</th>
+                    <th style={thStyle}>Ref date</th>
+                    <th style={thStyle}>Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {g.rows.map(function(r,i){
                     var bg=i%2===0?C.surfaceAlt:C.surface;
+                    var rawStatus=r.status.replace(" (archived)","");
                     return <tr key={r.id+i} style={{background:bg}}>
                       <td style={Object.assign({},tdHint,{fontFamily:"monospace"})}>{r.id}</td>
-                      <td style={tdStyle}>{r.company}</td>
                       <td style={Object.assign({},tdStyle,{maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"})}>{r.title}</td>
-                      <td style={tdStyle}><span style={{background:STATUS[r.status.replace(" (archived)","")]?STATUS[r.status.replace(" (archived)","")].bg:C.surfaceAlt,color:STATUS[r.status.replace(" (archived)","")]?STATUS[r.status.replace(" (archived)","")].color:C.textSecondary,borderRadius:6,padding:"2px 8px",fontSize:12,fontWeight:600,whiteSpace:"nowrap"}}>{r.status}</span></td>
-                      <td style={tdHint}>{r.refDate}</td>
+                      <td style={tdStyle}>{r.company}</td>
+                      <td style={tdHint}>{r.employmentType}</td>
+                      <td style={tdHint}>{r.location}</td>
                       <td style={tdHint}>{r.appliedAt}</td>
-                      <td style={tdHint}>{r.rejectedAt}</td>
+                      <td style={tdHint}>{r.refDate}</td>
+                      <td style={tdStyle}><span style={{background:STATUS[rawStatus]?STATUS[rawStatus].bg:C.surfaceAlt,color:STATUS[rawStatus]?STATUS[rawStatus].color:C.textSecondary,borderRadius:6,padding:"2px 8px",fontSize:12,fontWeight:600,whiteSpace:"nowrap"}}>{r.status}</span></td>
                     </tr>;
                   })}
                 </tbody>
