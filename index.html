@@ -1360,8 +1360,8 @@ const NAV_LABELS = {
   covers:"Letters",reports:"Reports",
 };
 
-const PRIMARY_TABS = ["dashboard","jobs","profiles","assistant","cv"];
-const SECONDARY_TABS = ["scheduler","covers","reports"];
+const PRIMARY_TABS = ["dashboard","jobs","profiles","covers","assistant"];
+const SECONDARY_TABS = ["scheduler","cv","reports"];
 
 // ─── MobileBottomNav ──────────────────────────────────────────────────────────
 function MobileBottomNav({activeTab,setActiveTab,user,onSignOut,theme,setTheme}){
@@ -1679,7 +1679,7 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
         </div>
 
         {/* Company + location */}
-        <div className="jt-job-meta" style={{fontSize:13,color:C.textSecondary,marginBottom:8,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+        <div className="jt-job-meta" style={{fontSize:mob()?15:13,color:C.textSecondary,marginBottom:8,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
           {j.company}{j.location?<span style={{color:C.textHint}}> · {j.location}</span>:null}
         </div>
 
@@ -1717,7 +1717,7 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
     {expanded&&<div style={{borderTop:"1px solid "+C.border}}>
 
       {/* Details strip */}
-      <div style={{padding:"12px 14px 0",fontSize:13,color:C.textHint,display:"flex",flexWrap:"wrap",gap:"4px 14px"}}>
+      <div style={{padding:"12px 14px 0",fontSize:mob()?15:13,color:C.textHint,display:"flex",flexWrap:"wrap",gap:"4px 14px"}}>
         <span>Added {j.date}</span>
         {j.employmentType&&<span>{j.employmentType}</span>}
         {j.remote===true&&<span>🌐 Remote</span>}
@@ -1726,7 +1726,7 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
       </div>
 
       {/* AI rationale */}
-      {j.rationale&&j.scored!==false&&<div style={{margin:"10px 14px 0",fontSize:13,color:C.textSecondary,fontStyle:"italic",background:C.surface,borderRadius:8,padding:"8px 12px",lineHeight:1.55,borderLeft:"3px solid "+C.primary}}>
+      {j.rationale&&j.scored!==false&&<div style={{margin:"10px 14px 0",fontSize:mob()?15:13,color:C.textSecondary,fontStyle:"italic",background:C.surface,borderRadius:8,padding:"8px 12px",lineHeight:1.55,borderLeft:"3px solid "+C.primary}}>
         {j.rationale}
       </div>}
 
@@ -1742,7 +1742,7 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
 
       {/* Notes */}
       <div style={{padding:"12px 14px 0"}}>
-        <div style={{fontSize:12,fontWeight:600,color:C.textHint,letterSpacing:"0.5px",marginBottom:6}}>NOTES</div>
+        <div style={{fontSize:mob()?13:12,fontWeight:600,color:C.textHint,letterSpacing:"0.5px",marginBottom:6}}>NOTES</div>
         <textarea
           className="jt-notes-area"
           value={noteDraft}
@@ -1757,8 +1757,8 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
 
       {/* Full description */}
       {j.description&&<div style={{padding:"10px 14px 0"}}>
-        <div style={{fontSize:12,fontWeight:600,color:C.textHint,letterSpacing:"0.5px",marginBottom:6}}>ROLE DESCRIPTION</div>
-        <div style={{fontSize:13,lineHeight:1.6,color:C.textPrimary,maxHeight:220,overflowY:"auto",
+        <div style={{fontSize:mob()?13:12,fontWeight:600,color:C.textHint,letterSpacing:"0.5px",marginBottom:6}}>ROLE DESCRIPTION</div>
+        <div style={{fontSize:mob()?15:13,lineHeight:1.65,color:C.textPrimary,maxHeight:220,overflowY:"auto",
           whiteSpace:"pre-wrap",background:C.surface,padding:"10px 12px",borderRadius:10,
           border:"1px solid "+C.border}}>{j.description}</div>
       </div>}
@@ -1770,7 +1770,7 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
           <button onClick={function(){navigator.clipboard.writeText(j.coverLetter);}}
             style={{fontSize:11,fontWeight:600,color:C.primary,background:"none",border:"none",cursor:"pointer",padding:"1px 6px",borderRadius:6,fontFamily:"inherit"}}>Copy</button>
         </div>
-        <div style={{fontSize:13,lineHeight:1.65,color:C.textPrimary,whiteSpace:"pre-wrap",
+        <div style={{fontSize:mob()?15:13,lineHeight:1.7,color:C.textPrimary,whiteSpace:"pre-wrap",
           background:C.surface,padding:"10px 12px",borderRadius:10,border:"1px solid "+C.border,
           maxHeight:240,overflowY:"auto"}}>{j.coverLetter}</div>
       </div>}
@@ -2879,7 +2879,7 @@ function CoverLetters({jobs,setJobs,cv,anthropicKey,setActiveTab,pendingCoverLet
                 ?<React.Fragment><span style={{display:"inline-block",width:18,height:18,border:"2.5px solid rgba(255,255,255,0.4)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin 0.7s linear infinite"}} />Writing letter…</React.Fragment>
                 :"Generate cover letter ↗"}
             </button>
-            <div style={{fontSize:12,color:C.textHint,fontStyle:"italic",lineHeight:1.5}}>Only references skills from your CV. No invented claims.</div>
+            <div style={{fontSize:mob()?14:12,color:C.textHint,fontStyle:"italic",lineHeight:1.6}}>Only references skills from your CV. No invented claims.</div>
           </div>
       }
       {!anthropicKey&&<Alert type="warning">Add your Anthropic API key in Search Profiles → API keys.</Alert>}
@@ -2888,7 +2888,7 @@ function CoverLetters({jobs,setJobs,cv,anthropicKey,setActiveTab,pendingCoverLet
 
     {letter&&<Card>
       <SectionTitle>Your letter</SectionTitle>
-      <Txta className="jt-cover-textarea" value={letter} onChange={function(e){setLetter(e.target.value);setSaved(false);}} rows={14} style={{fontSize:15,lineHeight:1.7}} />
+      <Txta className="jt-cover-textarea" value={letter} onChange={function(e){setLetter(e.target.value);setSaved(false);}} rows={mob()?16:14} style={{fontSize:mob()?17:15,lineHeight:1.75}} />
       <div className="jt-cover-actions" style={{display:"flex",flexDirection:"column",gap:10,marginTop:14}}>
         <button onClick={function(){setShowEmail(true);}}
           style={{fontSize:15,fontWeight:700,padding:"13px",borderRadius:12,border:"none",
@@ -3681,7 +3681,7 @@ function Reports({jobs,cv,anthropicKey}){
     </Card>
     {report&&<Card>
       <SectionTitle>Your report</SectionTitle>
-      <div className="jt-report-body" style={{fontSize:14,lineHeight:1.8,whiteSpace:"pre-wrap",color:C.textPrimary,background:C.surfaceAlt,borderRadius:12,padding:"16px",marginBottom:14}}>{report}</div>
+      <div className="jt-report-body" style={{fontSize:mob()?16:14,lineHeight:1.85,whiteSpace:"pre-wrap",color:C.textPrimary,background:C.surfaceAlt,borderRadius:12,padding:"16px",marginBottom:14}}>{report}</div>
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
         <button onClick={function(){setShowEmail(true);}}
           style={{fontSize:15,fontWeight:700,padding:"13px",borderRadius:12,border:"none",
