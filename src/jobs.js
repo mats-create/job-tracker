@@ -78,11 +78,11 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
         <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
           {isMobile
             ? <button onClick={function(e){e.stopPropagation();setShowStatusSheet(true);}}
-                style={{display:"inline-flex",alignItems:"center",gap:6,
-                  fontSize:13,fontWeight:700,padding:"6px 12px",
+                style={{display:"inline-flex",alignItems:"center",gap:8,
+                  fontSize:16,fontWeight:700,padding:"9px 14px",
                   background:STATUS[j.status].bg,color:STATUS[j.status].color,
-                  border:"none",borderRadius:10,cursor:"pointer",
-                  fontFamily:"inherit",minHeight:36,flexShrink:0}}>
+                  border:"none",borderRadius:12,cursor:"pointer",
+                  fontFamily:"inherit",minHeight:44,flexShrink:0}}>
                 <span style={{width:8,height:8,borderRadius:"50%",background:STATUS[j.status].color,flexShrink:0}} />
                 {j.status}
                 <span style={{fontSize:10,opacity:0.7}}>▼</span>
@@ -97,7 +97,7 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
           {!deadlinePast&&deadlineSoon&&<span style={{fontSize:11,fontWeight:600,color:C.warning}}>⏰ {j.deadline}</span>}
           {hasNotes&&!expanded&&<span style={{fontSize:13,color:C.textHint}} title="Has notes">📝</span>}
           {j.coverLetter&&!expanded&&<span title="Cover letter saved" style={{fontSize:12,fontWeight:600,color:C.primary,background:C.primary+"22",borderRadius:6,padding:"2px 7px"}}>✉</span>}
-          <span style={{marginLeft:"auto",fontSize:12,color:C.primary,fontWeight:600,whiteSpace:"nowrap"}}>
+          <span style={{marginLeft:"auto",fontSize:mob()?15:13,color:C.primary,fontWeight:700,whiteSpace:"nowrap",padding:mob()?"4px 0":"2px 0"}}>
             {expanded?"▲ Less":"▼ More"}
           </span>
         </div>
@@ -126,7 +126,7 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
         <Chip label={src.label} bg={src.bg} color={src.color} />
         {j.tags.map(function(t,i){return <Chip key={t+i} label={t} />;})}
         {(j.applyUrl||j.url)&&<a href={j.applyUrl||j.url} target="_blank" rel="noopener noreferrer"
-          style={{fontSize:13,color:C.primary,fontWeight:600,textDecoration:"none",marginLeft:"auto"}}>
+          style={{fontSize:mob()?16:13,color:C.primary,fontWeight:600,textDecoration:"none",marginLeft:"auto",padding:mob()?"4px 0":"0"}}>
           View posting ↗
         </a>}
       </div>
