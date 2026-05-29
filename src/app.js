@@ -311,7 +311,7 @@ function AppShell({user,onSignOut}){
   return <div style={{display:"flex",minHeight:"100vh",background:C.background}}>
     {!isMobile&&<Sidebar activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} user={user} onSignOut={onSignOut} theme={theme} setTheme={setTheme} />}
 
-    <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",paddingBottom:isMobile?"calc(80px + env(safe-area-inset-bottom, 0px))":0}}>
+    <div className={"jt-main"+(sidebarCollapsed?" sidebar-collapsed":"")} style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",paddingBottom:isMobile?"calc(80px + env(safe-area-inset-bottom, 0px))":0}}>
       {isMobile&&<div style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",background:C.surface,borderBottom:"1px solid "+C.border,position:"sticky",top:0,zIndex:100}}>
         <div style={{width:30,height:30,borderRadius:8,background:C.primary,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>🌿</div>
         <div style={{fontSize:16,fontWeight:700,color:C.textPrimary}}>{currentTab.label}</div>
