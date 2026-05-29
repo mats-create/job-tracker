@@ -3873,21 +3873,27 @@ function App(){
   var [authChecked,setAuthChecked]=useState(false);
 
   useEffect(function(){
-    var auth=window.__jt_auth;
-    if(!auth){ setUser(null); setAuthChecked(true); return; }
-    var unsub=auth.onAuthStateChanged(function(u){ setUser(u||null); setAuthChecked(true); });
-    return function(){ if(unsub) unsub(); };
+    function init(){
+      var sdk=window.firebaseSdk;
+      if(!sdk){ setUser(null); setAuthChecked(true); return; }
+      var unsub=sdk.onAuthStateChanged(sdk.auth,function(u){ setUser(u||null); setAuthChecked(true); });
+      return unsub;
+    }
+    if(window.__firebaseReady){ var unsub=init(); return function(){ if(unsub) unsub(); }; }
+    function onReady(){ var unsub=init(); if(unsub) window.__fbUnsub=unsub; }
+    window.addEventListener("firebase-ready",onReady,{once:true});
+    return function(){ window.removeEventListener("firebase-ready",onReady); };
   },[]);
 
   async function signIn(){
-    var auth=window.__jt_auth;
-    var provider=new window.__jt_GoogleAuthProvider();
-    await auth.signInWithPopup(provider);
+    var sdk=window.firebaseSdk;
+    var provider=new sdk.GoogleAuthProvider();
+    await sdk.signInWithPopup(sdk.auth,provider);
   }
 
   async function signOut(){
-    var auth=window.__jt_auth;
-    await auth.signOut();
+    var sdk=window.firebaseSdk;
+    await sdk.signOut(sdk.auth);
   }
 
   if(!authChecked) return <AuthSplash />;
