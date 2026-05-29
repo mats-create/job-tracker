@@ -70,7 +70,7 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
         </div>
 
         {/* Company + location */}
-        <div className="jt-job-meta" style={{fontSize:13,color:C.textSecondary,marginBottom:8,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+        <div className="jt-job-meta" style={{fontSize:mob()?15:13,color:C.textSecondary,marginBottom:8,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
           {j.company}{j.location?<span style={{color:C.textHint}}> · {j.location}</span>:null}
         </div>
 
@@ -108,7 +108,7 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
     {expanded&&<div style={{borderTop:"1px solid "+C.border}}>
 
       {/* Details strip */}
-      <div style={{padding:"12px 14px 0",fontSize:13,color:C.textHint,display:"flex",flexWrap:"wrap",gap:"4px 14px"}}>
+      <div style={{padding:"12px 14px 0",fontSize:mob()?15:13,color:C.textHint,display:"flex",flexWrap:"wrap",gap:"4px 14px"}}>
         <span>Added {j.date}</span>
         {j.employmentType&&<span>{j.employmentType}</span>}
         {j.remote===true&&<span>🌐 Remote</span>}
@@ -117,7 +117,7 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
       </div>
 
       {/* AI rationale */}
-      {j.rationale&&j.scored!==false&&<div style={{margin:"10px 14px 0",fontSize:13,color:C.textSecondary,fontStyle:"italic",background:C.surface,borderRadius:8,padding:"8px 12px",lineHeight:1.55,borderLeft:"3px solid "+C.primary}}>
+      {j.rationale&&j.scored!==false&&<div style={{margin:"10px 14px 0",fontSize:mob()?15:13,color:C.textSecondary,fontStyle:"italic",background:C.surface,borderRadius:8,padding:"8px 12px",lineHeight:1.55,borderLeft:"3px solid "+C.primary}}>
         {j.rationale}
       </div>}
 
@@ -133,7 +133,7 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
 
       {/* Notes */}
       <div style={{padding:"12px 14px 0"}}>
-        <div style={{fontSize:12,fontWeight:600,color:C.textHint,letterSpacing:"0.5px",marginBottom:6}}>NOTES</div>
+        <div style={{fontSize:mob()?13:12,fontWeight:600,color:C.textHint,letterSpacing:"0.5px",marginBottom:6}}>NOTES</div>
         <textarea
           className="jt-notes-area"
           value={noteDraft}
@@ -148,8 +148,8 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
 
       {/* Full description */}
       {j.description&&<div style={{padding:"10px 14px 0"}}>
-        <div style={{fontSize:12,fontWeight:600,color:C.textHint,letterSpacing:"0.5px",marginBottom:6}}>ROLE DESCRIPTION</div>
-        <div style={{fontSize:13,lineHeight:1.6,color:C.textPrimary,maxHeight:220,overflowY:"auto",
+        <div style={{fontSize:mob()?13:12,fontWeight:600,color:C.textHint,letterSpacing:"0.5px",marginBottom:6}}>ROLE DESCRIPTION</div>
+        <div style={{fontSize:mob()?15:13,lineHeight:1.65,color:C.textPrimary,maxHeight:220,overflowY:"auto",
           whiteSpace:"pre-wrap",background:C.surface,padding:"10px 12px",borderRadius:10,
           border:"1px solid "+C.border}}>{j.description}</div>
       </div>}
@@ -161,7 +161,7 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
           <button onClick={function(){navigator.clipboard.writeText(j.coverLetter);}}
             style={{fontSize:11,fontWeight:600,color:C.primary,background:"none",border:"none",cursor:"pointer",padding:"1px 6px",borderRadius:6,fontFamily:"inherit"}}>Copy</button>
         </div>
-        <div style={{fontSize:13,lineHeight:1.65,color:C.textPrimary,whiteSpace:"pre-wrap",
+        <div style={{fontSize:mob()?15:13,lineHeight:1.7,color:C.textPrimary,whiteSpace:"pre-wrap",
           background:C.surface,padding:"10px 12px",borderRadius:10,border:"1px solid "+C.border,
           maxHeight:240,overflowY:"auto"}}>{j.coverLetter}</div>
       </div>}

@@ -432,7 +432,7 @@ function Reports({jobs,cv,anthropicKey}){
     </Card>
     {report&&<Card>
       <SectionTitle>Your report</SectionTitle>
-      <div className="jt-report-body" style={{fontSize:14,lineHeight:1.8,whiteSpace:"pre-wrap",color:C.textPrimary,background:C.surfaceAlt,borderRadius:12,padding:"16px",marginBottom:14}}>{report}</div>
+      <div className="jt-report-body" style={{fontSize:mob()?16:14,lineHeight:1.85,whiteSpace:"pre-wrap",color:C.textPrimary,background:C.surfaceAlt,borderRadius:12,padding:"16px",marginBottom:14}}>{report}</div>
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
         <button onClick={function(){setShowEmail(true);}}
           style={{fontSize:15,fontWeight:700,padding:"13px",borderRadius:12,border:"none",

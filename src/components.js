@@ -291,8 +291,8 @@ const NAV_LABELS = {
   covers:"Letters",reports:"Reports",
 };
 
-const PRIMARY_TABS = ["dashboard","jobs","profiles","assistant","cv"];
-const SECONDARY_TABS = ["scheduler","covers","reports"];
+const PRIMARY_TABS = ["dashboard","jobs","profiles","covers","assistant"];
+const SECONDARY_TABS = ["scheduler","cv","reports"];
 
 // ─── MobileBottomNav ──────────────────────────────────────────────────────────
 function MobileBottomNav({activeTab,setActiveTab,user,onSignOut,theme,setTheme}){

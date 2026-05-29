@@ -162,7 +162,7 @@ function CoverLetters({jobs,setJobs,cv,anthropicKey,setActiveTab,pendingCoverLet
                 ?<React.Fragment><span style={{display:"inline-block",width:18,height:18,border:"2.5px solid rgba(255,255,255,0.4)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin 0.7s linear infinite"}} />Writing letter…</React.Fragment>
                 :"Generate cover letter ↗"}
             </button>
-            <div style={{fontSize:12,color:C.textHint,fontStyle:"italic",lineHeight:1.5}}>Only references skills from your CV. No invented claims.</div>
+            <div style={{fontSize:mob()?14:12,color:C.textHint,fontStyle:"italic",lineHeight:1.6}}>Only references skills from your CV. No invented claims.</div>
           </div>
       }
       {!anthropicKey&&<Alert type="warning">Add your Anthropic API key in Search Profiles → API keys.</Alert>}
@@ -171,7 +171,7 @@ function CoverLetters({jobs,setJobs,cv,anthropicKey,setActiveTab,pendingCoverLet
 
     {letter&&<Card>
       <SectionTitle>Your letter</SectionTitle>
-      <Txta className="jt-cover-textarea" value={letter} onChange={function(e){setLetter(e.target.value);setSaved(false);}} rows={14} style={{fontSize:15,lineHeight:1.7}} />
+      <Txta className="jt-cover-textarea" value={letter} onChange={function(e){setLetter(e.target.value);setSaved(false);}} rows={mob()?16:14} style={{fontSize:mob()?17:15,lineHeight:1.75}} />
       <div className="jt-cover-actions" style={{display:"flex",flexDirection:"column",gap:10,marginTop:14}}>
         <button onClick={function(){setShowEmail(true);}}
           style={{fontSize:15,fontWeight:700,padding:"13px",borderRadius:12,border:"none",
