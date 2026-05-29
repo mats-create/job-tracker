@@ -108,58 +108,85 @@ function CoverLetters({jobs,setJobs,cv,anthropicKey,setActiveTab,pendingCoverLet
 
   return <div style={{display:"flex",flexDirection:"column",gap:16}}>
     <Card>
-      <SectionTitle>Generate a cover letter <InfoTip>Claude writes a personalised cover letter based on the job description and your CV. It only references what's explicitly in your CV — no invented skills. Edit the result before sending.</InfoTip></SectionTitle>
+      <SectionTitle>Cover letter <InfoTip>Claude writes a personalised letter based on the job and your CV. Only references what's in your CV — no invented skills.</InfoTip></SectionTitle>
       {noJobsAtAll
         ?<Alert type="warning">Add some jobs first — go to My Jobs or Search Profiles to get started.</Alert>
         :eligibleJobs.length===0
           ?<div style={{padding:"20px",background:C.surfaceAlt,borderRadius:12,textAlign:"center"}}>
             <div style={{fontSize:32,marginBottom:10}}>📝</div>
-            <div style={{fontSize:15,fontWeight:600,color:C.textPrimary,marginBottom:6}}>No jobs ready for a cover letter</div>
-            <div style={{fontSize:13,color:C.textSecondary,marginBottom:14,lineHeight:1.5}}>Cover letters are drafted for jobs you're actively considering.<br/>Move a job to the <b>Reviewing</b> status first, then come back here.</div>
-            <div style={{display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap"}}>
-              <Btn variant="primary" onClick={function(){if(setActiveTab) setActiveTab("jobs");}} style={{fontSize:13}}>Go to My Jobs</Btn>
-              <Btn onClick={function(){setShowAllStatuses(true);}} style={{fontSize:13}}>Show all statuses anyway</Btn>
+            <div style={{fontSize:15,fontWeight:600,color:C.textPrimary,marginBottom:6}}>No jobs ready</div>
+            <div style={{fontSize:14,color:C.textSecondary,marginBottom:16,lineHeight:1.6}}>Move a job to <b>Reviewing</b> status first, or tap below to show all.</div>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              <Btn variant="primary" onClick={function(){if(setActiveTab) setActiveTab("jobs");}} style={{fontSize:15,minHeight:48}}>Go to My Jobs</Btn>
+              <Btn onClick={function(){setShowAllStatuses(true);}} style={{fontSize:15,minHeight:48}}>Show all statuses</Btn>
             </div>
           </div>
-          :<div>
-            <div className="jt-grid-2" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:14,marginBottom:10}}>
-              <div><Label hint={showAllStatuses?"Showing all non-archived jobs.":"Showing jobs you're actively reviewing."}>Select a job</Label><Sel value={selectedJob||""} onChange={function(e){var v=e.target.value;var num=Number(v);setSelectedJob(isNaN(num)||String(num)!==v?v:num);}}>{eligibleJobs.map(function(j){return <option key={j.id} value={j.id}>{j.title} – {j.company}{showAllStatuses?" ["+j.status+"]":""}</option>;})}</Sel></div>
-              <div><Label hint="This affects the writing style of the letter.">Tone of voice</Label><Sel value={tone} onChange={function(e){setTone(e.target.value);}}>{["Professional","Conversational","Enthusiastic","Formal","Creative"].map(function(t){return <option key={t}>{t}</option>;})}</Sel></div>
-              <div>
-                <Label hint="Auto-detect reads the job description language. Override if the result is wrong.">
-                  Language
-                  {language==="auto"&&currentJob&&<span style={{fontSize:11,color:C.textHint,fontWeight:400,marginLeft:6}}>→ detected: {detectJobLanguage(currentJob)}</span>}
-                </Label>
-                <Sel value={language} onChange={function(e){setLanguage(e.target.value);}}>
-                  <option value="auto">Auto-detect from job description</option>
-                  <option value="English">English</option>
-                  <option value="Swedish">Swedish</option>
-                </Sel>
-              </div>
+          :<div style={{display:"flex",flexDirection:"column",gap:14}}>
+            <div>
+              <Label hint={showAllStatuses?"Showing all non-archived jobs.":"Showing Reviewing jobs."}>Job</Label>
+              <Sel className="jt-cover-select" value={selectedJob||""} onChange={function(e){var v=e.target.value;var num=Number(v);setSelectedJob(isNaN(num)||String(num)!==v?v:num);}}>
+                {eligibleJobs.map(function(j){return <option key={j.id} value={j.id}>{j.title} – {j.company}{showAllStatuses?" ["+j.status+"]":""}</option>;})}
+              </Sel>
             </div>
-            <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:C.textSecondary,cursor:"pointer",userSelect:"none",marginBottom:14}}>
-              <input type="checkbox" checked={showAllStatuses} onChange={function(){setShowAllStatuses(function(v){return !v;});}} style={{width:14,height:14,cursor:"pointer",accentColor:C.primary}} />
-              <span>Show all statuses (by default only jobs in <b>Reviewing</b> status are listed)</span>
-              {!showAllStatuses&&reviewingCount>0&&<span style={{color:C.textHint}}>· {reviewingCount} job{reviewingCount!==1?"s":""} reviewing</span>}
+            <div>
+              <Label>Tone</Label>
+              <Sel className="jt-cover-select" value={tone} onChange={function(e){setTone(e.target.value);}}>
+                {["Professional","Conversational","Enthusiastic","Formal","Creative"].map(function(t){return <option key={t}>{t}</option>;})}
+              </Sel>
+            </div>
+            <div>
+              <Label hint="Auto-detect reads the job description language.">
+                Language
+                {language==="auto"&&currentJob&&<span style={{fontSize:12,color:C.textHint,fontWeight:400,marginLeft:6}}>→ {detectJobLanguage(currentJob)}</span>}
+              </Label>
+              <Sel className="jt-cover-select" value={language} onChange={function(e){setLanguage(e.target.value);}}>
+                <option value="auto">Auto-detect</option>
+                <option value="English">English</option>
+                <option value="Swedish">Swedish</option>
+              </Sel>
+            </div>
+            <label style={{display:"flex",alignItems:"center",gap:10,fontSize:14,color:C.textSecondary,cursor:"pointer",userSelect:"none",minHeight:44}}>
+              <input type="checkbox" checked={showAllStatuses} onChange={function(){setShowAllStatuses(function(v){return !v;});}} style={{width:18,height:18,cursor:"pointer",accentColor:C.primary,flexShrink:0}} />
+              Show all statuses
+              {!showAllStatuses&&reviewingCount>0&&<span style={{color:C.textHint}}>({reviewingCount} reviewing)</span>}
             </label>
-            <Btn variant="primary" onClick={generate} disabled={loading||!selectedJob||!anthropicKey} style={{padding:"12px 28px"}}>{loading?"Writing your letter...":"Generate cover letter ↗"}</Btn>
-            <div style={{fontSize:11,color:C.textHint,marginTop:10,fontStyle:"italic",lineHeight:1.5}}>The letter will only reference skills and experience that appear in your CV. If the job asks for something your CV doesn't cover, it won't be claimed. A sparse CV produces a shorter letter — that's intentional.</div>
+            <button onClick={generate} disabled={loading||!selectedJob||!anthropicKey}
+              className="jt-mob-btn"
+              style={{fontSize:16,fontWeight:700,padding:"14px",borderRadius:14,border:"none",
+                background:loading||!selectedJob||!anthropicKey?C.border:C.primary,
+                color:loading||!selectedJob||!anthropicKey?C.textHint:"#fff",
+                cursor:loading||!selectedJob||!anthropicKey?"not-allowed":"pointer",
+                fontFamily:"inherit",width:"100%",minHeight:52,
+                display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
+              {loading
+                ?<React.Fragment><span style={{display:"inline-block",width:18,height:18,border:"2.5px solid rgba(255,255,255,0.4)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin 0.7s linear infinite"}} />Writing letter…</React.Fragment>
+                :"Generate cover letter ↗"}
+            </button>
+            <div style={{fontSize:12,color:C.textHint,fontStyle:"italic",lineHeight:1.5}}>Only references skills from your CV. No invented claims.</div>
           </div>
       }
-      {!anthropicKey&&<Alert type="warning">Add your Anthropic API key in Search Profiles → API keys to use this feature.</Alert>}
+      {!anthropicKey&&<Alert type="warning">Add your Anthropic API key in Search Profiles → API keys.</Alert>}
       {error&&<Alert type="error">{error}</Alert>}
     </Card>
+
     {letter&&<Card>
-      <SectionTitle>Your cover letter</SectionTitle>
-      <div style={{fontSize:13,color:C.textHint,marginBottom:12}}></div>
-      <Txta value={letter} onChange={function(e){setLetter(e.target.value);setSaved(false);}} rows={16} />
-      <div style={{display:"flex",gap:10,marginTop:14,flexWrap:"wrap",alignItems:"center"}}>
-        <Btn variant="primary" onClick={function(){setShowEmail(true);}}>✉ Send via email</Btn>
-        <Btn onClick={function(){exportLetterPdf({letter:letter,cv:cv,job:currentJob});}}>📄 Export as PDF</Btn>
-        <Btn onClick={function(){navigator.clipboard.writeText(letter);}}>Copy to clipboard</Btn>
-        <Btn onClick={function(){var b=new Blob([letter],{type:"text/plain"});var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="cover-letter.txt";a.click();}}>Export as text file</Btn>
-        <Btn onClick={function(){saveLetter(letter);}} style={{marginLeft:"auto"}}>{saved?"✓ Saved":"Save changes"}</Btn>
-        <Btn variant="danger" onClick={function(){if(confirm("Remove saved cover letter from this job?")){{setLetter("");saveLetter("");}}}}>Remove</Btn>
+      <SectionTitle>Your letter</SectionTitle>
+      <Txta className="jt-cover-textarea" value={letter} onChange={function(e){setLetter(e.target.value);setSaved(false);}} rows={14} style={{fontSize:15,lineHeight:1.7}} />
+      <div className="jt-cover-actions" style={{display:"flex",flexDirection:"column",gap:10,marginTop:14}}>
+        <button onClick={function(){setShowEmail(true);}}
+          style={{fontSize:15,fontWeight:700,padding:"13px",borderRadius:12,border:"none",
+            background:C.primary,color:"#fff",cursor:"pointer",fontFamily:"inherit",
+            width:"100%",minHeight:50,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+          ✉ Send via email
+        </button>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <Btn onClick={function(){exportLetterPdf({letter:letter,cv:cv,job:currentJob});}} style={{fontSize:14,minHeight:46}}>📄 PDF</Btn>
+          <Btn onClick={function(){navigator.clipboard.writeText(letter);}} style={{fontSize:14,minHeight:46}}>Copy</Btn>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <Btn onClick={function(){saveLetter(letter);}} style={{fontSize:14,minHeight:46}}>{saved?"✓ Saved":"Save"}</Btn>
+          <Btn variant="danger" onClick={function(){if(confirm("Remove cover letter?")){{setLetter("");saveLetter("");}};}} style={{fontSize:14,minHeight:46}}>Remove</Btn>
+        </div>
       </div>
       {showEmail&&<EmailDialog recipients={cv.recipients||[]} subject={emailSubject} body={letter} onClose={function(){setShowEmail(false);}} />}
     </Card>}

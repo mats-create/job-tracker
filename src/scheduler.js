@@ -408,20 +408,39 @@ function Reports({jobs,cv,anthropicKey}){
   var emailSubject=type+" — "+new Date().toISOString().slice(0,10);
   return <div style={{display:"flex",flexDirection:"column",gap:16}}>
     <Card>
-      <SectionTitle>Generate a report <InfoTip>Claude analyses your job pipeline and writes a summary with insights and recommendations — response rates, patterns, actionable suggestions. Uses your CV and structured skills data if available.</InfoTip></SectionTitle>
-      <div style={{marginBottom:14}}><Label hint="Choose what kind of report you'd like.">Report type</Label><Sel value={type} onChange={function(e){setType(e.target.value);}}>{["Weekly digest","Top 10 matches","Application status report","Monthly summary"].map(function(t){return <option key={t}>{t}</option>;})}</Sel></div>
-      <Btn variant="primary" onClick={generate} disabled={loading||jobs.length===0||!anthropicKey} style={{padding:"12px 28px"}}>{loading?"Writing your report...":"Generate report ↗"}</Btn>
-      {!anthropicKey&&<Alert type="warning">Add your Anthropic API key in Search Profiles → API keys to use this feature.</Alert>}
-      {jobs.length===0&&<Alert type="warning">No jobs in your pipeline yet. Add some jobs first.</Alert>}
+      <SectionTitle>Generate a report <InfoTip>Claude analyses your pipeline and writes a summary with insights and recommendations. Uses your CV if available.</InfoTip></SectionTitle>
+      <div style={{marginBottom:16}}>
+        <Label hint="Choose what kind of report you'd like.">Report type</Label>
+        <Sel className="jt-report-select" value={type} onChange={function(e){setType(e.target.value);}}>
+          {["Weekly digest","Top 10 matches","Application status report","Monthly summary"].map(function(t){return <option key={t}>{t}</option>;})}
+        </Sel>
+      </div>
+      <button onClick={generate} disabled={loading||jobs.length===0||!anthropicKey}
+        style={{fontSize:15,fontWeight:700,padding:"14px",borderRadius:14,border:"none",
+          background:loading||jobs.length===0||!anthropicKey?C.border:C.primary,
+          color:loading||jobs.length===0||!anthropicKey?C.textHint:"#fff",
+          cursor:loading||jobs.length===0||!anthropicKey?"not-allowed":"pointer",
+          fontFamily:"inherit",width:"100%",minHeight:52,
+          display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
+        {loading
+          ?<React.Fragment><span style={{display:"inline-block",width:18,height:18,border:"2.5px solid rgba(255,255,255,0.4)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin 0.7s linear infinite"}} />Writing report…</React.Fragment>
+          :"Generate report ↗"}
+      </button>
+      {!anthropicKey&&<Alert type="warning">Add your Anthropic API key in Search Profiles → API keys.</Alert>}
+      {jobs.length===0&&<Alert type="warning">No jobs yet — add some first.</Alert>}
       {error&&<Alert type="error">{error}</Alert>}
     </Card>
     {report&&<Card>
       <SectionTitle>Your report</SectionTitle>
-      <div style={{fontSize:14,lineHeight:1.8,whiteSpace:"pre-wrap",color:C.textPrimary,background:C.surfaceAlt,borderRadius:12,padding:"20px",marginBottom:14}}>{report}</div>
-      <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-        <Btn variant="primary" onClick={function(){setShowEmail(true);}}>✉ Send via email</Btn>
-        <Btn onClick={function(){navigator.clipboard.writeText(report);}}>Copy to clipboard</Btn>
-        <Btn onClick={function(){var b=new Blob([report],{type:"text/plain"});var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="report.txt";a.click();}}>Export as text file</Btn>
+      <div className="jt-report-body" style={{fontSize:14,lineHeight:1.8,whiteSpace:"pre-wrap",color:C.textPrimary,background:C.surfaceAlt,borderRadius:12,padding:"16px",marginBottom:14}}>{report}</div>
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        <button onClick={function(){setShowEmail(true);}}
+          style={{fontSize:15,fontWeight:700,padding:"13px",borderRadius:12,border:"none",
+            background:C.primary,color:"#fff",cursor:"pointer",fontFamily:"inherit",
+            width:"100%",minHeight:50,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+          ✉ Send via email
+        </button>
+        <Btn onClick={function(){navigator.clipboard.writeText(report);}} style={{fontSize:14,minHeight:46,width:"100%"}}>Copy to clipboard</Btn>
       </div>
       {showEmail&&<EmailDialog recipients={(cv&&cv.recipients)||[]} subject={emailSubject} body={report} onClose={function(){setShowEmail(false);}} />}
     </Card>}
