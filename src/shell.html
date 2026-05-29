@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#5C8A7A" />
+<meta name="description" content="Personal AI-powered job tracking and application assistant" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="Job Tracker" />
+<title>Job Tracker</title>
+
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='112' fill='%235C8A7A'/%3E%3Cpath d='M160 352c0-120 80-200 200-200 0 120-80 200-200 200zm200-200c-50 40-100 110-100 200' stroke='white' stroke-width='22' stroke-linecap='round' fill='none'/%3E%3C/svg%3E" />
+<link rel="apple-touch-icon" href="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='112' fill='%235C8A7A'/%3E%3Cpath d='M160 352c0-120 80-200 200-200 0 120-80 200-200 200zm200-200c-50 40-100 110-100 200' stroke='white' stroke-width='22' stroke-linecap='round' fill='none'/%3E%3C/svg%3E" />
+<link rel="manifest" href='data:application/manifest+json;charset=utf-8,{"name":"Job Tracker","short_name":"Jobs","description":"Personal AI-powered job tracking and application assistant","start_url":".","display":"standalone","background_color":"%23F7F9F7","theme_color":"%235C8A7A","orientation":"portrait","icons":[{"src":"data:image/svg%2Bxml;utf8,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 512 512%27%3E%3Crect width=%27512%27 height=%27512%27 rx=%27112%27 fill=%27%235C8A7A%27/%3E%3Cpath d=%27M160 352c0-120 80-200 200-200 0 120-80 200-200 200zm200-200c-50 40-100 110-100 200%27 stroke=%27white%27 stroke-width=%2722%27 stroke-linecap=%27round%27 fill=%27none%27/%3E%3C/svg%3E","sizes":"any","type":"image/svg+xml","purpose":"any"}]}' />
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+  import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+    from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
+  import { getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot }
+    from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCDYh7BlNb63sOpy8Hje8YYjdBq6f-JD0Y",
+    authDomain: "job-tracker-mph.firebaseapp.com",
+    projectId: "job-tracker-mph",
+    storageBucket: "job-tracker-mph.firebasestorage.app",
+    messagingSenderId: "974850553892",
+    appId: "1:974850553892:web:241c47cd27051df9b700b1"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  window.firebaseSdk = {
+    auth: auth,
+    db: db,
+    GoogleAuthProvider: GoogleAuthProvider,
+    signInWithPopup: signInWithPopup,
+    signOut: signOut,
+    onAuthStateChanged: onAuthStateChanged,
+    doc: doc,
+    getDoc: getDoc,
+    setDoc: setDoc,
+    deleteDoc: deleteDoc,
+    onSnapshot: onSnapshot,
+  };
+  window.__firebaseReady = true;
+  window.dispatchEvent(new Event("firebase-ready"));
+</script>
+
+<script>
+  if (window.pdfjsLib) {
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  }
+</script>
+
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{overscroll-behavior-y:contain}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#F7F9F7;color:#1A2E26;-webkit-tap-highlight-color:transparent;-webkit-font-smoothing:antialiased;transition:background 0.2s ease,color 0.2s ease}
+  html[data-theme="dark"] body{background:#0F1714;color:#E8EDEA}
+  html[data-theme="dark"] input,html[data-theme="dark"] textarea,html[data-theme="dark"] select{color-scheme:dark}
+  input,select,textarea,button{font-family:inherit;font-size:16px}
+  input:focus,select:focus,textarea:focus{outline:2px solid #5C8A7A;outline-offset:1px}
+  button{min-height:36px}
+  ::-webkit-scrollbar{width:6px;height:6px}
+  ::-webkit-scrollbar-track{background:#F0F5F2}
+  ::-webkit-scrollbar-thumb{background:#C0D4CC;border-radius:3px}
+
+  .jt-app{min-height:100vh}
+  .jt-sidebar{position:fixed;top:0;left:0;bottom:0;width:220px;background:#FFFFFF;border-right:1px solid #D9E3DE;display:flex;flex-direction:column;z-index:200;transition:width 0.18s ease,transform 0.22s ease,background 0.2s ease,border-color 0.2s ease;overflow:hidden}
+  .jt-sidebar.collapsed{width:64px}
+  .jt-sidebar-scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:8px 0}
+  .jt-main{margin-left:220px;transition:margin-left 0.18s ease}
+  .jt-main.sidebar-collapsed{margin-left:64px}
+  .jt-container{max-width:960px;margin:0 auto;padding:28px 24px 80px}
+  .jt-topbar{display:none}
+  .jt-sidebar-overlay{display:none}
+
+  .jt-sb-item:hover{background:#F0F5F2}
+  .jt-sb-item.active{background:#D4E5DB;color:#5C8A7A}
+
+  html[data-theme="dark"] .jt-sidebar{background:#1A2420;border-right-color:#2E3B36}
+  html[data-theme="dark"] .jt-topbar{background:#1A2420!important;border-bottom-color:#2E3B36!important}
+  html[data-theme="dark"] .jt-sb-item:hover{background:#222D29}
+  html[data-theme="dark"] .jt-sb-item.active{background:#1F3530;color:#7AAD9C}
+
+  @media (hover:hover) and (pointer:fine){
+    .jt-query-pill:hover .jt-query-tooltip{display:block!important}
+  }
+
+  .jt-bottom-nav{display:none}
+
+  @media (max-width:767px){
+    .jt-sidebar{display:none!important}
+    .jt-topbar{display:none!important}
+    .jt-sidebar-overlay{display:none!important}
+    .jt-main{margin-left:0!important;padding-top:8px;padding-bottom:80px}
+    .jt-container{padding:12px 12px 80px}
+
+    .jt-card{padding:16px!important;border-radius:14px!important}
+    .jt-grid-2{grid-template-columns:1fr!important}
+    .jt-grid-recipient{grid-template-columns:1fr!important}
+    .jt-section-title{flex-wrap:wrap;gap:8px}
+
+    input,textarea,select{font-size:16px!important}
+
+    .jt-bottom-nav{
+      display:flex;
+      position:fixed;bottom:0;left:0;right:0;
+      height:56px;
+      background:#FFFFFF;
+      border-top:1px solid #D9E3DE;
+      z-index:500;
+      padding-bottom:env(safe-area-inset-bottom,0px);
+      box-shadow:0 -1px 0 rgba(0,0,0,0.08);
+      overflow:hidden;
+    }
+    html[data-theme="dark"] .jt-bottom-nav{
+      background:#1A2420;border-top-color:#2E3B36;
+    }
+    .jt-bottom-nav-item{
+      flex:1;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      gap:3px;
+      border:none;background:transparent;cursor:pointer;
+      padding:6px 4px 4px;
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+      color:#8FA89F;
+      -webkit-tap-highlight-color:transparent;
+      overflow:hidden;
+      max-height:56px;
+    }
+    .jt-bottom-nav-item.active{color:#5C8A7A}
+    html[data-theme="dark"] .jt-bottom-nav-item{color:#7A8B85}
+    html[data-theme="dark"] .jt-bottom-nav-item.active{color:#7AAD9C}
+    .jt-bottom-nav-icon{
+      width:24px;height:24px;
+      display:flex;align-items:center;justify-content:center;
+      flex-shrink:0;
+    }
+    .jt-bottom-nav-icon svg{
+      width:24px;height:24px;display:block;
+    }
+    .jt-bottom-nav-item.active .jt-bottom-nav-icon svg{
+      stroke-width:2.2;
+    }
+    .jt-bottom-nav-label{
+      font-size:9px;font-weight:500;
+      letter-spacing:0.1px;
+      line-height:1;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      max-width:100%;
+    }
+    .jt-bottom-nav-item.active .jt-bottom-nav-label{font-weight:700}
+
+    .jt-more-sheet-overlay{
+      position:fixed;inset:0;
+      background:rgba(0,0,0,0.45);
+      z-index:498;
+      -webkit-backdrop-filter:blur(2px);
+      backdrop-filter:blur(2px);
+    }
+    .jt-more-sheet{
+      position:fixed;
+      bottom:calc(56px + env(safe-area-inset-bottom,0px));
+      left:0;right:0;
+      background:#FFFFFF;
+      border-radius:20px 20px 0 0;
+      z-index:499;
+      box-shadow:0 -8px 32px rgba(0,0,0,0.15);
+      overflow:hidden;
+    }
+    html[data-theme="dark"] .jt-more-sheet{
+      background:#1A2420;
+    }
+    .jt-more-sheet::before{
+      content:'';
+      display:block;
+      width:36px;height:4px;
+      background:rgba(0,0,0,0.15);
+      border-radius:2px;
+      margin:10px auto 0;
+    }
+    html[data-theme="dark"] .jt-more-sheet::before{
+      background:rgba(255,255,255,0.15);
+    }
+  }
+
+  @media (max-width:390px){
+    .jt-card{padding:12px!important}
+    .jt-bottom-nav-item{font-size:8px}
+    .jt-bottom-nav-icon{font-size:20px}
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<!-- BABEL_CONTENT_PLACEHOLDER -->
+
+</body>
+</html>
