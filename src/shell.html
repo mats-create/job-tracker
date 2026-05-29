@@ -112,7 +112,7 @@ html[data-theme="dark"] .jt-sb-item.active{background:#1F3530;color:#7AAD9C}
   .jt-sidebar{display:none!important}
   .jt-topbar{display:none!important}
   .jt-sidebar-overlay{display:none!important}
-  .jt-main{margin-left:0!important;padding-top:0;padding-bottom:72px}
+  .jt-main{margin-left:0!important;padding-top:0;padding-bottom:calc(72px + env(safe-area-inset-bottom,0px))}
   .jt-container{padding:12px 12px 80px}
 
   /* ── Typography scale-up ── */
@@ -277,12 +277,13 @@ html[data-theme="dark"] .jt-sb-item.active{background:#1F3530;color:#7AAD9C}
   .jt-bottom-nav{
     display:flex;
     position:fixed;bottom:0;left:0;right:0;
-    height:60px;
+    height:calc(60px + env(safe-area-inset-bottom,0px));
     background:#FFFFFF;
     border-top:1px solid #D9E3DE;
     z-index:500;
     padding-bottom:env(safe-area-inset-bottom,0px);
-    box-shadow:0 -1px 0 rgba(0,0,0,0.08);
+    box-shadow:0 -2px 12px rgba(0,0,0,0.08);
+    align-items:flex-start;
   }
   html[data-theme="dark"] .jt-bottom-nav{background:#1A2420;border-top-color:#2E3B36}
 

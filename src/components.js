@@ -1,5 +1,9 @@
 const { useState, useRef, useEffect, useCallback } = React;
 
+// ─── Mobile helper ────────────────────────────────────────────────────────────
+function mob(){ return typeof window!=="undefined"&&window.innerWidth<=767; }
+
+
 // ─── Error boundary ───────────────────────────────────────────────────────────
 class TabErrorBoundary extends React.Component {
   constructor(props){ super(props); this.state={hasError:false,error:null}; }
@@ -24,9 +28,9 @@ class TabErrorBoundary extends React.Component {
 }
 
 // ─── Primitive UI components ──────────────────────────────────────────────────
-function Card({children,style}){ return <div className="jt-card" style={{background:C.surface,borderRadius:16,boxShadow:C.shadow,padding:"20px 24px",...(style||{})}}>{children}</div>; }
+function Card({children,style}){ var m=mob(); return <div className="jt-card" style={{background:C.surface,borderRadius:m?14:16,boxShadow:C.shadow,padding:m?"14px 16px":"20px 24px",...(style||{})}}>{children}</div>; }
 
-function Label({children,hint}){ return <div style={{marginBottom:6}}><div style={{fontSize:13,fontWeight:600,color:C.textPrimary,marginBottom:hint?2:0}}>{children}</div>{hint&&<div style={{fontSize:11,color:C.textHint}}>{hint}</div>}</div>; }
+function Label({children,hint}){ var m=mob(); return <div style={{marginBottom:m?8:6}}><div style={{fontSize:m?15:13,fontWeight:600,color:C.textPrimary,marginBottom:hint?2:0}}>{children}</div>{hint&&<div style={{fontSize:m?13:11,color:C.textHint,marginTop:2}}>{hint}</div>}</div>; }
 
 function Inp({value,onChange,placeholder,type,style,inputMode,autoComplete,enterKeyHint,onBlur,onKeyDown}){
   var autoType=type==="email"?"email":type==="password"?"current-password":undefined;
@@ -35,15 +39,16 @@ function Inp({value,onChange,placeholder,type,style,inputMode,autoComplete,enter
     autoComplete={autoComplete||autoType||"off"}
     enterKeyHint={enterKeyHint}
     placeholder={placeholder||""}
-    style={{width:"100%",fontSize:14,padding:"10px 12px",borderRadius:10,border:"1.5px solid "+C.border,background:C.surface,color:C.textPrimary,boxSizing:"border-box",...(style||{})}} />;
+    style={{width:"100%",fontSize:mob()?16:14,padding:mob()?"13px 14px":"10px 12px",minHeight:mob()?48:36,borderRadius:10,border:"1.5px solid "+C.border,background:C.surface,color:C.textPrimary,boxSizing:"border-box",...(style||{})}} />;
 }
 
-function Txta({value,onChange,onBlur,placeholder,rows}){ return <textarea value={value} onChange={onChange} onBlur={onBlur} placeholder={placeholder||""} rows={rows||4} style={{width:"100%",fontSize:14,padding:"10px 12px",borderRadius:10,border:"1.5px solid "+C.border,background:C.surface,color:C.textPrimary,boxSizing:"border-box",resize:"vertical",fontFamily:"inherit"}} />; }
+function Txta({value,onChange,onBlur,placeholder,rows,style}){ var m=mob(); return <textarea value={value} onChange={onChange} onBlur={onBlur} placeholder={placeholder||""} rows={rows||4} style={{width:"100%",fontSize:m?16:14,padding:m?"13px 14px":"10px 12px",lineHeight:m?1.65:1.5,borderRadius:10,border:"1.5px solid "+C.border,background:C.surface,color:C.textPrimary,boxSizing:"border-box",resize:"vertical",fontFamily:"inherit",...(style||{})}} />; }
 
-function Sel({value,onChange,children,style}){ return <select value={value} onChange={onChange} style={{width:"100%",fontSize:14,padding:"10px 12px",borderRadius:10,border:"1.5px solid "+C.border,background:C.surface,color:C.textPrimary,boxSizing:"border-box",...(style||{})}}>{children}</select>; }
+function Sel({value,onChange,children,style,className}){ var m=mob(); return <select value={value} onChange={onChange} className={className||""} style={{width:"100%",fontSize:m?16:14,padding:m?"13px 14px":"10px 12px",minHeight:m?50:36,borderRadius:10,border:"1.5px solid "+C.border,background:C.surface,color:C.textPrimary,boxSizing:"border-box",...(style||{})}}>{children}</select>; }
 
 function Btn({children,onClick,variant,disabled,style}){
-  var base={fontSize:14,fontWeight:600,padding:"10px 20px",borderRadius:10,cursor:disabled?"not-allowed":"pointer",border:"none",opacity:disabled?0.5:1,...(style||{})};
+  var m=mob();
+  var base={fontSize:m?15:14,fontWeight:600,padding:m?"12px 18px":"10px 20px",minHeight:m?46:36,borderRadius:m?12:10,cursor:disabled?"not-allowed":"pointer",border:"none",opacity:disabled?0.5:1,...(style||{})};
   if(variant==="primary") return <button onClick={onClick} disabled={disabled} style={{...base,background:C.primary,color:"#fff"}}>{children}</button>;
   if(variant==="danger") return <button onClick={onClick} disabled={disabled} style={{...base,background:C.errorBg,color:C.error,border:"1.5px solid #F5C6C6"}}>{children}</button>;
   return <button onClick={onClick} disabled={disabled} style={{...base,background:C.surfaceAlt,color:C.textPrimary,border:"1.5px solid "+C.border}}>{children}</button>;
@@ -54,7 +59,7 @@ function Toggle({value,onChange,label,hint}){
     <div style={{marginTop:2,width:44,height:24,borderRadius:12,background:value?C.primary:C.border,position:"relative",flexShrink:0}}>
       <div style={{position:"absolute",top:3,left:value?22:3,width:18,height:18,borderRadius:"50%",background:"#fff",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",transition:"left 0.2s"}} />
     </div>
-    {label&&<div><div style={{fontSize:14,fontWeight:600,color:C.textPrimary}}>{label}</div>{hint&&<div style={{fontSize:12,color:C.textHint,marginTop:2}}>{hint}</div>}</div>}
+    {label&&<div><div style={{fontSize:mob()?16:14,fontWeight:600,color:C.textPrimary}}>{label}</div>{hint&&<div style={{fontSize:mob()?14:12,color:C.textHint,marginTop:2,lineHeight:1.5}}>{hint}</div>}</div>}
   </div>;
 }
 
