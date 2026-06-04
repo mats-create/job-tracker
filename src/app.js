@@ -1,3 +1,6 @@
+// app.js
+// Rev: 2026-06-04 — Pass setCv to ProfileAssistant (Gabbi CV write-back).
+
 // ─── AppShell ─────────────────────────────────────────────────────────────────
 function AppShell({user,onSignOut}){
   var [activeTab,setActiveTab]=useState("dashboard");
@@ -288,7 +291,7 @@ function AppShell({user,onSignOut}){
       {key==="dashboard"&&<Dashboard jobs={jobs} schedule={schedule} setActiveTab={setActiveTab} navigateToJobs={navigateToJobs} rescoreAll={rescoreAll} scoringStatus={scoringStatus} onRunAllProfiles={runAllProfiles} profiles={profiles} cv={cv} anthropicKey={anthropicKey} />}
       {key==="jobs"&&<Jobs jobs={jobs} setJobs={setJobs} rescoreAll={rescoreAll} scoringStatus={scoringStatus} scoringError={scoringError} cv={cv} sort={sort} setSort={setSort} dismissJob={dismissJob} tombstoneIds={tombstoneIds} startCoverLetter={startCoverLetter} pendingJobsView={pendingJobsView} setPendingJobsView={setPendingJobsView} />}
       {key==="profiles"&&<SearchProfiles profiles={profiles} setProfiles={setProfiles} setJobs={setJobs} afKey={afKey} setAfKey={setAfKey} jsKey={jsKey} setJsKey={setJsKey} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} pendingProfileRun={pendingProfileRun} setPendingProfileRun={setPendingProfileRun} dismissedIds={dismissedIds} />}
-      {key==="assistant"&&<ProfileAssistant cv={cv} profiles={profiles} setProfiles={setProfiles} anthropicKey={anthropicKey} conversation={assistantConv} setConversation={setAssistantConv} setActiveTab={setActiveTab} setPendingProfileRun={setPendingProfileRun} jobs={jobs} />}
+      {key==="assistant"&&<ProfileAssistant cv={cv} setCv={setCv} profiles={profiles} setProfiles={setProfiles} anthropicKey={anthropicKey} conversation={assistantConv} setConversation={setAssistantConv} setActiveTab={setActiveTab} setPendingProfileRun={setPendingProfileRun} jobs={jobs} />}
       {key==="cv"&&<CVProfile cv={cv} setCv={setCv} />}
       {key==="scheduler"&&<Scheduler schedule={schedule} setSchedule={setSchedule} profiles={profiles} log={log} resetAllData={resetAllData} exportData={exportData} importData={importData} validateImport={validateImport} dismissedIds={dismissedIds} clearDismissedIds={clearDismissedIds} />}
       {key==="covers"&&<CoverLetters jobs={jobs} setJobs={setJobs} cv={cv} anthropicKey={anthropicKey} setActiveTab={setActiveTab} pendingCoverLetterJob={pendingCoverLetterJob} setPendingCoverLetterJob={setPendingCoverLetterJob} />}
