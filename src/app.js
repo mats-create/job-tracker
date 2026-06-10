@@ -2,8 +2,9 @@
 // Rev: 2026-06-04 — Pass setCv to ProfileAssistant (Gabbi CV write-back).
 // Rev: 2026-06-10 — BUG2: fix added counter in runAllProfiles (pre-filter before setJobs);
 //                   BUG8: applyScores uses String() comparison for id matching.
-// Rev: 2026-06-10b — BUG9: setJobs with functional updater now passes updater directly
-//                    to setJobsRaw so React uses real current state, not stale closure.
+// Rev: 2026-06-10b — BUG9: setJobs passes updater to setJobsRaw for correct state.
+// Rev: 2026-06-11 — BUG10: setJobs updater must be pure; side effects (scheduleSave)
+//                   moved outside updater via latestJobsRef + setTimeout(0).
 
 // ─── AppShell ─────────────────────────────────────────────────────────────────
 function AppShell({user,onSignOut}){
@@ -61,17 +62,27 @@ function AppShell({user,onSignOut}){
     pendingSave.current=setTimeout(function(){ doCloudSave(latestState.current); pendingSave.current=null; },600);
   }
 
+  // Ref to capture the latest jobs value computed inside a functional updater,
+  // so we can call scheduleSave outside the updater (updaters must be pure).
+  var latestJobsRef=useRef(null);
+
   function setJobs(v){
     if(typeof v==="function"){
-      // Pass updater directly to setJobsRaw so React uses the real current state,
-      // not the stale 'jobs' closure. Capture result for scheduleSave via ref.
+      // Pass updater directly to setJobsRaw — React will call it with real current
+      // state. Capture the result in a ref (pure — just reading, not scheduling).
       setJobsRaw(function(prev){
         var val=v(prev);
-        latestState.current=Object.assign({},latestState.current,{jobs:val});
-        if(pendingSave.current) clearTimeout(pendingSave.current);
-        pendingSave.current=setTimeout(function(){ doCloudSave(latestState.current); pendingSave.current=null; },600);
+        latestJobsRef.current=val;
         return val;
       });
+      // scheduleSave runs after the updater queues — picks up value from ref.
+      // Uses setTimeout(0) so it runs after React flushes the state update.
+      setTimeout(function(){
+        if(latestJobsRef.current!==null){
+          scheduleSave({jobs:latestJobsRef.current});
+          latestJobsRef.current=null;
+        }
+      },0);
     } else {
       setJobsRaw(v);
       scheduleSave({jobs:v});
