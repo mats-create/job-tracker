@@ -526,6 +526,12 @@ const PROFICIENCY = ["Beginner","Intermediate","Advanced","Expert"];
 const PROF_ORDER = {Beginner:0,Intermediate:1,Advanced:2,Expert:3};
 
 
+// utils.js
+// Rev: 2026-06-10 — BUG1+6: scoreJobs() now accepts object {jobs,cv,apiKey,onBatch}
+//                   and calls onBatch(batchResults, doneCount) after each batch.
+//                   BUG5: filterByLocation now falls back to location-string keyword
+//                   check for remote jobs when j.remote is null/undefined.
+
 // ─── Persistence ──────────────────────────────────────────────────────────────
 const STORAGE_KEY = "jobTracker.v1";
 const STORAGE_VERSION = 1;
@@ -680,7 +686,18 @@ function filterByLocation(jobs,profileLocations){
   var wantsRemote=profileLocations.includes("Remote");
   var cityFilters=profileLocations.filter(function(l){return l!=="Remote";});
   return jobs.filter(function(j){
-    if(wantsRemote&&j.remote===true) return true;
+    if(wantsRemote){
+      // j.remote===true is the clean signal, but AF API often returns null
+      // even for remote-friendly roles. Fall back to location string check.
+      if(j.remote===true) return true;
+      var locLower=(j.location||"").toLowerCase();
+      // Both checks inside the wantsRemote block — don't bleed into city-only profiles
+      if(locLower.indexOf("remote")!==-1||locLower.indexOf("distans")!==-1) return true;
+      // If we want remote but this job doesn't qualify, still allow it through
+      // if it also matches a city filter (mixed remote+city profile)
+      if(!cityFilters.length) return false;
+      return !!cityFilters.find(function(loc){return resolveLocation(j.location)===loc;});
+    }
     if(!cityFilters.length) return false;
     return !!cityFilters.find(function(loc){return resolveLocation(j.location)===loc;});
   });
@@ -1019,20 +1036,33 @@ async function scoreJobBatch(jobs,cv,anthropicKey){
   return parsed;
 }
 
-async function scoreJobs(jobs,cv,anthropicKey){
-  if(!jobs.length) return new Map();
+async function scoreJobs(opts,_cv,_apiKey){
+  // Accept both object form {jobs,cv,apiKey,onBatch} and legacy positional form
+  var jobs, cv, apiKey, onBatch;
+  if(opts&&typeof opts==="object"&&!Array.isArray(opts)&&opts.jobs){
+    jobs=opts.jobs; cv=opts.cv; apiKey=opts.apiKey; onBatch=opts.onBatch;
+  } else {
+    jobs=opts; cv=_cv; apiKey=_apiKey; onBatch=null;
+  }
+  if(!jobs||!jobs.length) return new Map();
   if(!hasCv(cv)) return new Map();
   var result=new Map();
+  var doneCount=0;
   for(var i=0;i<jobs.length;i+=BATCH_SIZE){
     var batch=jobs.slice(i,i+BATCH_SIZE);
     try{
-      var scored=await scoreJobBatch(batch,cv,anthropicKey);
+      var scored=await scoreJobBatch(batch,cv,apiKey);
+      var batchResults=[];
       scored.forEach(function(s){
         if(s&&s.id!==undefined&&s.id!==null){
           var score=Math.max(0,Math.min(100,Math.round(Number(s.score)||0)));
-          result.set(String(s.id),{score:score,rationale:(s.rationale||"").toString().slice(0,120)});
+          var entry={id:String(s.id),score:score,rationale:(s.rationale||"").toString().slice(0,120)};
+          result.set(String(s.id),entry);
+          batchResults.push(entry);
         }
       });
+      doneCount+=batch.length;
+      if(onBatch) onBatch(batchResults,doneCount);
     }catch(e){
       console.warn("Batch scoring failed:",e);
       throw e;
@@ -1434,6 +1464,10 @@ function MobileBottomNav({activeTab,setActiveTab,user,onSignOut,theme,setTheme})
 }
 
 
+// dashboard.js
+// Rev: 2026-06-10 — BUG4: 'Applications sent' tile now counts only active
+//   in-progress applications [Applied,Interview,Offer], not closed outcomes.
+
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoringStatus,onRunAllProfiles,profiles,cv,anthropicKey}){
   var [fetchStatus,setFetchStatus]=useState(null);
@@ -1464,7 +1498,9 @@ function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoring
   var active=jobs.filter(function(j){return !j.archived;});
   var total=active.length;
   var avgScore=total?Math.round(active.reduce(function(a,j){return a+j.score;},0)/total):0;
-  var applied=active.filter(function(j){return APPLIED_STATUSES.includes(j.status);}).length;
+  // Count only genuinely in-progress applications (exclude Rejected, No response)
+  var IN_PROGRESS_STATUSES=["Applied","Interview","Offer"];
+  var applied=active.filter(function(j){return IN_PROGRESS_STATUSES.includes(j.status);}).length;
   var topMatch=active.reduce(function(a,j){return j.score>(a?a.score:0)?j:a;},null);
   var newCount=active.filter(function(j){return j.status==="New";}).length;
   var rejectedCount=active.filter(function(j){return j.status==="Rejected";}).length;
@@ -1481,7 +1517,7 @@ function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoring
         {[
           {label:"Jobs tracked",value:total,sub:"total in pipeline",nav:total>0?{}:null},
           {label:"New to review",value:newCount,sub:"waiting for you",nav:newCount>0?{status:"New"}:null},
-          {label:"Applications sent",value:applied,sub:"in progress",nav:applied>0?{statusGroup:"applied"}:null},
+          {label:"Applications sent",value:applied,sub:"active applications",nav:applied>0?{statusGroup:"applied"}:null},
           {label:"Best match",value:topMatch?topMatch.score+"%":"—",sub:topMatch?topMatch.company:"no jobs yet",nav:topMatch?{expandId:topMatch.id}:null},
         ].map(function(s){
           var clickable=!!(s.nav&&navigateToJobs);
@@ -2111,6 +2147,11 @@ function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSor
 }
 
 
+// profiles.js
+// Rev: 2026-06-10 — BUG2+3: fix added/skipped counters in fetchAF and fetchJS.
+//   Counters were read after async setJobs() so always returned 0.
+//   Now computed synchronously before setJobs() is called.
+
 // ─── Search Profiles ──────────────────────────────────────────────────────────
 function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJsKey,anthropicKey,setAnthropicKey,pendingProfileRun,setPendingProfileRun,dismissedIds}){
   var [showAfKey,setShowAfKey]=useState(false);
@@ -2155,22 +2196,25 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
       }
       var data=await res.json();
       var ads=data.hits||[];
-      var added=0;
-      var skippedDismissed=0;
       var tombstones=new Set((dismissedIds||[]).map(String));
+      // Pre-filter before setJobs so counts are synchronously available.
+      // Tombstone and location checks don't need 'prev'; dedup is done inside setJobs.
+      var skipped=0;
+      var preFiltered=ads.filter(function(a){
+        var aid=a.id?a.id.toString():"";
+        if(!aid) return false;
+        if(tombstones.has(aid)){ skipped++; return false; }
+        return true;
+      }).map(function(a){return mapAfJob(a,p.name);});
+      preFiltered=filterByLocation(preFiltered,p.locations||[]);
+      var addedCount=preFiltered.length;
+      // setJobs only needs to dedup against existing jobs
       setJobs(function(prev){
         var ex=new Set(prev.map(function(j){return j.id?j.id.toString():""; }));
-        var nj=ads.filter(function(a){
-          var aid=a.id?a.id.toString():"";
-          if(!aid) return false;
-          if(ex.has(aid)) return false;
-          if(tombstones.has(aid)){ skippedDismissed++; return false; }
-          return true;
-        }).map(function(a){return mapAfJob(a,p.name);});
-        nj=filterByLocation(nj,p.locations||[]);
-        added=nj.length;return nj.concat(prev);
+        var truly_new=preFiltered.filter(function(j){return !ex.has(j.id?j.id.toString():"");});
+        return truly_new.concat(prev);
       });
-      return{added:added,skipped:skippedDismissed};
+      return{added:addedCount,skipped:skipped};
     }catch(e){return{added:0,error:e.message};}
   }
 
@@ -2187,22 +2231,22 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
       }
       var data=await res.json();
       var ads=(data.data||[]).slice(0,p.limit);
-      var added=0;
-      var skippedDismissed=0;
       var tombstones=new Set((dismissedIds||[]).map(String));
+      var skipped=0;
+      var preFiltered=ads.filter(function(a){
+        var aid=a.job_id?String(a.job_id):"";
+        if(!aid) return false;
+        if(tombstones.has(aid)){ skipped++; return false; }
+        return true;
+      }).map(function(a){return mapJsJob(a,p.name);});
+      preFiltered=filterByLocation(preFiltered,p.locations||[]);
+      var addedCount=preFiltered.length;
       setJobs(function(prev){
         var ex=new Set(prev.map(function(j){return j.id?j.id.toString():""; }));
-        var nj=ads.filter(function(a){
-          var aid=a.job_id?String(a.job_id):"";
-          if(!aid) return false;
-          if(ex.has(aid)) return false;
-          if(tombstones.has(aid)){ skippedDismissed++; return false; }
-          return true;
-        }).map(function(a){return mapJsJob(a,p.name);});
-        nj=filterByLocation(nj,p.locations||[]);
-        added=nj.length;return nj.concat(prev);
+        var truly_new=preFiltered.filter(function(j){return !ex.has(j.id?j.id.toString():"");});
+        return truly_new.concat(prev);
       });
-      return{added:added,skipped:skippedDismissed};
+      return{added:addedCount,skipped:skipped};
     }catch(e){return{added:0,error:e.message};}
   }
 
@@ -3895,6 +3939,8 @@ function Reports({jobs,cv,anthropicKey}){
 
 // app.js
 // Rev: 2026-06-04 — Pass setCv to ProfileAssistant (Gabbi CV write-back).
+// Rev: 2026-06-10 — BUG2: fix added counter in runAllProfiles (pre-filter before setJobs);
+//                   BUG8: applyScores uses String() comparison for id matching.
 
 // ─── AppShell ─────────────────────────────────────────────────────────────────
 function AppShell({user,onSignOut}){
@@ -4004,7 +4050,9 @@ function AppShell({user,onSignOut}){
   var applyScores=useCallback(function(scored){
     setJobs(function(prev){
       return prev.map(function(j){
-        var s=scored.find(function(x){return x.id===j.id;});
+        // Use String comparison — scoreJobs always emits string IDs,
+        // but manual jobs have numeric IDs from Date.now()
+        var s=scored.find(function(x){return String(x.id)===String(j.id);});
         return s?Object.assign({},j,{score:s.score,rationale:s.rationale,scored:true}):j;
       });
     });
@@ -4053,19 +4101,22 @@ function AppShell({user,onSignOut}){
           if(!out.response.ok) continue;
           var data=await out.response.json();
           var ads=src==="af"?(data.hits||[]):(data.data||[]).slice(0,p.limit);
-          var added=0;
+          // Pre-filter (tombstone + location) before setJobs so count is synchronous
+          var preFiltered=ads.filter(function(a){
+            var aid=src==="af"?(a.id?a.id.toString():""):(a.job_id?String(a.job_id):"");
+            if(!aid||tombstones.has(aid)) return false;
+            return true;
+          }).map(function(a){return src==="af"?mapAfJob(a,p.name):mapJsJob(a,p.name);});
+          preFiltered=filterByLocation(preFiltered,p.locations||[]);
+          totalAdded+=preFiltered.length;
           setJobs(function(prev){
             var ex=new Set(prev.map(function(j){return j.id?j.id.toString():""; }));
-            var nj=ads.filter(function(a){
-              var aid=src==="af"?(a.id?a.id.toString():""):(a.job_id?String(a.job_id):"");
-              if(!aid||ex.has(aid)||tombstones.has(aid)) return false;
-              return true;
-            }).map(function(a){return src==="af"?mapAfJob(a,p.name):mapJsJob(a,p.name);});
-            nj=filterByLocation(nj,p.locations||[]);
-            added=nj.length;
-            return nj.concat(prev);
+            var truly_new=preFiltered.filter(function(j){
+              var jid=j.id?j.id.toString():"";
+              return jid&&!ex.has(jid);
+            });
+            return truly_new.concat(prev);
           });
-          totalAdded+=added;
         }catch(e){ console.error("Profile fetch error:",e); }
       }
     }
