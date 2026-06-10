@@ -2,6 +2,8 @@
 // Rev: 2026-06-04 — Pass setCv to ProfileAssistant (Gabbi CV write-back).
 // Rev: 2026-06-10 — BUG2: fix added counter in runAllProfiles (pre-filter before setJobs);
 //                   BUG8: applyScores uses String() comparison for id matching.
+// Rev: 2026-06-10b — BUG9: setJobs with functional updater now passes updater directly
+//                    to setJobsRaw so React uses real current state, not stale closure.
 
 // ─── AppShell ─────────────────────────────────────────────────────────────────
 function AppShell({user,onSignOut}){
@@ -59,7 +61,22 @@ function AppShell({user,onSignOut}){
     pendingSave.current=setTimeout(function(){ doCloudSave(latestState.current); pendingSave.current=null; },600);
   }
 
-  function setJobs(v){ var val=typeof v==="function"?v(jobs):v; setJobsRaw(val); scheduleSave({jobs:val}); }
+  function setJobs(v){
+    if(typeof v==="function"){
+      // Pass updater directly to setJobsRaw so React uses the real current state,
+      // not the stale 'jobs' closure. Capture result for scheduleSave via ref.
+      setJobsRaw(function(prev){
+        var val=v(prev);
+        latestState.current=Object.assign({},latestState.current,{jobs:val});
+        if(pendingSave.current) clearTimeout(pendingSave.current);
+        pendingSave.current=setTimeout(function(){ doCloudSave(latestState.current); pendingSave.current=null; },600);
+        return val;
+      });
+    } else {
+      setJobsRaw(v);
+      scheduleSave({jobs:v});
+    }
+  }
   function setProfiles(v){ var val=typeof v==="function"?v(profiles):v; setProfilesRaw(val); scheduleSave({profiles:val}); }
   function setCv(v){ var val=typeof v==="function"?v(cv):v; setCvRaw(val); scheduleSave({cv:val}); }
   function setAfKey(v){ setAfKeyRaw(v); scheduleSave({afKey:v}); }
