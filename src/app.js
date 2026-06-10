@@ -1,5 +1,7 @@
 // app.js
 // Rev: 2026-06-04 — Pass setCv to ProfileAssistant (Gabbi CV write-back).
+// Rev: 2026-06-10 — BUG2: fix added counter in runAllProfiles (pre-filter before setJobs);
+//                   BUG8: applyScores uses String() comparison for id matching.
 
 // ─── AppShell ─────────────────────────────────────────────────────────────────
 function AppShell({user,onSignOut}){
@@ -109,7 +111,9 @@ function AppShell({user,onSignOut}){
   var applyScores=useCallback(function(scored){
     setJobs(function(prev){
       return prev.map(function(j){
-        var s=scored.find(function(x){return x.id===j.id;});
+        // Use String comparison — scoreJobs always emits string IDs,
+        // but manual jobs have numeric IDs from Date.now()
+        var s=scored.find(function(x){return String(x.id)===String(j.id);});
         return s?Object.assign({},j,{score:s.score,rationale:s.rationale,scored:true}):j;
       });
     });
@@ -158,19 +162,22 @@ function AppShell({user,onSignOut}){
           if(!out.response.ok) continue;
           var data=await out.response.json();
           var ads=src==="af"?(data.hits||[]):(data.data||[]).slice(0,p.limit);
-          var added=0;
+          // Pre-filter (tombstone + location) before setJobs so count is synchronous
+          var preFiltered=ads.filter(function(a){
+            var aid=src==="af"?(a.id?a.id.toString():""):(a.job_id?String(a.job_id):"");
+            if(!aid||tombstones.has(aid)) return false;
+            return true;
+          }).map(function(a){return src==="af"?mapAfJob(a,p.name):mapJsJob(a,p.name);});
+          preFiltered=filterByLocation(preFiltered,p.locations||[]);
+          totalAdded+=preFiltered.length;
           setJobs(function(prev){
             var ex=new Set(prev.map(function(j){return j.id?j.id.toString():""; }));
-            var nj=ads.filter(function(a){
-              var aid=src==="af"?(a.id?a.id.toString():""):(a.job_id?String(a.job_id):"");
-              if(!aid||ex.has(aid)||tombstones.has(aid)) return false;
-              return true;
-            }).map(function(a){return src==="af"?mapAfJob(a,p.name):mapJsJob(a,p.name);});
-            nj=filterByLocation(nj,p.locations||[]);
-            added=nj.length;
-            return nj.concat(prev);
+            var truly_new=preFiltered.filter(function(j){
+              var jid=j.id?j.id.toString():"";
+              return jid&&!ex.has(jid);
+            });
+            return truly_new.concat(prev);
           });
-          totalAdded+=added;
         }catch(e){ console.error("Profile fetch error:",e); }
       }
     }

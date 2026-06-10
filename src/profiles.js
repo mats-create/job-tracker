@@ -1,3 +1,8 @@
+// profiles.js
+// Rev: 2026-06-10 — BUG2+3: fix added/skipped counters in fetchAF and fetchJS.
+//   Counters were read after async setJobs() so always returned 0.
+//   Now computed synchronously before setJobs() is called.
+
 // ─── Search Profiles ──────────────────────────────────────────────────────────
 function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJsKey,anthropicKey,setAnthropicKey,pendingProfileRun,setPendingProfileRun,dismissedIds}){
   var [showAfKey,setShowAfKey]=useState(false);
@@ -42,22 +47,25 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
       }
       var data=await res.json();
       var ads=data.hits||[];
-      var added=0;
-      var skippedDismissed=0;
       var tombstones=new Set((dismissedIds||[]).map(String));
+      // Pre-filter before setJobs so counts are synchronously available.
+      // Tombstone and location checks don't need 'prev'; dedup is done inside setJobs.
+      var skipped=0;
+      var preFiltered=ads.filter(function(a){
+        var aid=a.id?a.id.toString():"";
+        if(!aid) return false;
+        if(tombstones.has(aid)){ skipped++; return false; }
+        return true;
+      }).map(function(a){return mapAfJob(a,p.name);});
+      preFiltered=filterByLocation(preFiltered,p.locations||[]);
+      var addedCount=preFiltered.length;
+      // setJobs only needs to dedup against existing jobs
       setJobs(function(prev){
         var ex=new Set(prev.map(function(j){return j.id?j.id.toString():""; }));
-        var nj=ads.filter(function(a){
-          var aid=a.id?a.id.toString():"";
-          if(!aid) return false;
-          if(ex.has(aid)) return false;
-          if(tombstones.has(aid)){ skippedDismissed++; return false; }
-          return true;
-        }).map(function(a){return mapAfJob(a,p.name);});
-        nj=filterByLocation(nj,p.locations||[]);
-        added=nj.length;return nj.concat(prev);
+        var truly_new=preFiltered.filter(function(j){return !ex.has(j.id?j.id.toString():"");});
+        return truly_new.concat(prev);
       });
-      return{added:added,skipped:skippedDismissed};
+      return{added:addedCount,skipped:skipped};
     }catch(e){return{added:0,error:e.message};}
   }
 
@@ -74,22 +82,22 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
       }
       var data=await res.json();
       var ads=(data.data||[]).slice(0,p.limit);
-      var added=0;
-      var skippedDismissed=0;
       var tombstones=new Set((dismissedIds||[]).map(String));
+      var skipped=0;
+      var preFiltered=ads.filter(function(a){
+        var aid=a.job_id?String(a.job_id):"";
+        if(!aid) return false;
+        if(tombstones.has(aid)){ skipped++; return false; }
+        return true;
+      }).map(function(a){return mapJsJob(a,p.name);});
+      preFiltered=filterByLocation(preFiltered,p.locations||[]);
+      var addedCount=preFiltered.length;
       setJobs(function(prev){
         var ex=new Set(prev.map(function(j){return j.id?j.id.toString():""; }));
-        var nj=ads.filter(function(a){
-          var aid=a.job_id?String(a.job_id):"";
-          if(!aid) return false;
-          if(ex.has(aid)) return false;
-          if(tombstones.has(aid)){ skippedDismissed++; return false; }
-          return true;
-        }).map(function(a){return mapJsJob(a,p.name);});
-        nj=filterByLocation(nj,p.locations||[]);
-        added=nj.length;return nj.concat(prev);
+        var truly_new=preFiltered.filter(function(j){return !ex.has(j.id?j.id.toString():"");});
+        return truly_new.concat(prev);
       });
-      return{added:added,skipped:skippedDismissed};
+      return{added:addedCount,skipped:skipped};
     }catch(e){return{added:0,error:e.message};}
   }
 

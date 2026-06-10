@@ -1,3 +1,7 @@
+// dashboard.js
+// Rev: 2026-06-10 — BUG4: 'Applications sent' tile now counts only active
+//   in-progress applications [Applied,Interview,Offer], not closed outcomes.
+
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoringStatus,onRunAllProfiles,profiles,cv,anthropicKey}){
   var [fetchStatus,setFetchStatus]=useState(null);
@@ -28,7 +32,9 @@ function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoring
   var active=jobs.filter(function(j){return !j.archived;});
   var total=active.length;
   var avgScore=total?Math.round(active.reduce(function(a,j){return a+j.score;},0)/total):0;
-  var applied=active.filter(function(j){return APPLIED_STATUSES.includes(j.status);}).length;
+  // Count only genuinely in-progress applications (exclude Rejected, No response)
+  var IN_PROGRESS_STATUSES=["Applied","Interview","Offer"];
+  var applied=active.filter(function(j){return IN_PROGRESS_STATUSES.includes(j.status);}).length;
   var topMatch=active.reduce(function(a,j){return j.score>(a?a.score:0)?j:a;},null);
   var newCount=active.filter(function(j){return j.status==="New";}).length;
   var rejectedCount=active.filter(function(j){return j.status==="Rejected";}).length;
@@ -45,7 +51,7 @@ function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoring
         {[
           {label:"Jobs tracked",value:total,sub:"total in pipeline",nav:total>0?{}:null},
           {label:"New to review",value:newCount,sub:"waiting for you",nav:newCount>0?{status:"New"}:null},
-          {label:"Applications sent",value:applied,sub:"in progress",nav:applied>0?{statusGroup:"applied"}:null},
+          {label:"Applications sent",value:applied,sub:"active applications",nav:applied>0?{statusGroup:"applied"}:null},
           {label:"Best match",value:topMatch?topMatch.score+"%":"—",sub:topMatch?topMatch.company:"no jobs yet",nav:topMatch?{expandId:topMatch.id}:null},
         ].map(function(s){
           var clickable=!!(s.nav&&navigateToJobs);

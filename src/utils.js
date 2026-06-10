@@ -1,3 +1,9 @@
+// utils.js
+// Rev: 2026-06-10 — BUG1+6: scoreJobs() now accepts object {jobs,cv,apiKey,onBatch}
+//                   and calls onBatch(batchResults, doneCount) after each batch.
+//                   BUG5: filterByLocation now falls back to location-string keyword
+//                   check for remote jobs when j.remote is null/undefined.
+
 // ─── Persistence ──────────────────────────────────────────────────────────────
 const STORAGE_KEY = "jobTracker.v1";
 const STORAGE_VERSION = 1;
@@ -152,7 +158,18 @@ function filterByLocation(jobs,profileLocations){
   var wantsRemote=profileLocations.includes("Remote");
   var cityFilters=profileLocations.filter(function(l){return l!=="Remote";});
   return jobs.filter(function(j){
-    if(wantsRemote&&j.remote===true) return true;
+    if(wantsRemote){
+      // j.remote===true is the clean signal, but AF API often returns null
+      // even for remote-friendly roles. Fall back to location string check.
+      if(j.remote===true) return true;
+      var locLower=(j.location||"").toLowerCase();
+      // Both checks inside the wantsRemote block — don't bleed into city-only profiles
+      if(locLower.indexOf("remote")!==-1||locLower.indexOf("distans")!==-1) return true;
+      // If we want remote but this job doesn't qualify, still allow it through
+      // if it also matches a city filter (mixed remote+city profile)
+      if(!cityFilters.length) return false;
+      return !!cityFilters.find(function(loc){return resolveLocation(j.location)===loc;});
+    }
     if(!cityFilters.length) return false;
     return !!cityFilters.find(function(loc){return resolveLocation(j.location)===loc;});
   });
@@ -491,20 +508,33 @@ async function scoreJobBatch(jobs,cv,anthropicKey){
   return parsed;
 }
 
-async function scoreJobs(jobs,cv,anthropicKey){
-  if(!jobs.length) return new Map();
+async function scoreJobs(opts,_cv,_apiKey){
+  // Accept both object form {jobs,cv,apiKey,onBatch} and legacy positional form
+  var jobs, cv, apiKey, onBatch;
+  if(opts&&typeof opts==="object"&&!Array.isArray(opts)&&opts.jobs){
+    jobs=opts.jobs; cv=opts.cv; apiKey=opts.apiKey; onBatch=opts.onBatch;
+  } else {
+    jobs=opts; cv=_cv; apiKey=_apiKey; onBatch=null;
+  }
+  if(!jobs||!jobs.length) return new Map();
   if(!hasCv(cv)) return new Map();
   var result=new Map();
+  var doneCount=0;
   for(var i=0;i<jobs.length;i+=BATCH_SIZE){
     var batch=jobs.slice(i,i+BATCH_SIZE);
     try{
-      var scored=await scoreJobBatch(batch,cv,anthropicKey);
+      var scored=await scoreJobBatch(batch,cv,apiKey);
+      var batchResults=[];
       scored.forEach(function(s){
         if(s&&s.id!==undefined&&s.id!==null){
           var score=Math.max(0,Math.min(100,Math.round(Number(s.score)||0)));
-          result.set(String(s.id),{score:score,rationale:(s.rationale||"").toString().slice(0,120)});
+          var entry={id:String(s.id),score:score,rationale:(s.rationale||"").toString().slice(0,120)};
+          result.set(String(s.id),entry);
+          batchResults.push(entry);
         }
       });
+      doneCount+=batch.length;
+      if(onBatch) onBatch(batchResults,doneCount);
     }catch(e){
       console.warn("Batch scoring failed:",e);
       throw e;
