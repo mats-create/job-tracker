@@ -1,3 +1,7 @@
+// jobs.js
+// Rev: 2026-06-11 — Silent jobs: auto-filter via pendingJobsView {filter:'silent'},
+//   silent badge on JobRow (Applied 30+ days with no response), clearable filter.
+
 // ─── StatusSheet — mobile bottom sheet for status picking ────────────────────
 function StatusSheet({current,onSelect,onClose}){
   return <React.Fragment>
@@ -29,6 +33,12 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
   var deadlineSoon=j.deadline&&j.deadline>=todayStr&&(new Date(j.deadline)-new Date())<7*24*60*60*1000;
   var deadlinePast=j.deadline&&j.deadline<todayStr;
   var isArchived=!!j.archived;
+  var isSilent=(function(){
+    if(j.status!=="Applied") return false;
+    var ref=j.appliedAt||j.date;
+    if(!ref) return false;
+    return (Date.now()-new Date(ref).getTime())>30*24*60*60*1000;
+  })();
   var [noteDraft,setNoteDraft]=useState(j.notes||"");
   var [showStatusSheet,setShowStatusSheet]=useState(false);
   var isMobile=typeof window!=="undefined"&&window.innerWidth<=767;
@@ -97,6 +107,7 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
           {!deadlinePast&&deadlineSoon&&<span style={{fontSize:11,fontWeight:600,color:C.warning}}>⏰ {j.deadline}</span>}
           {hasNotes&&!expanded&&<span style={{fontSize:13,color:C.textHint}} title="Has notes">📝</span>}
           {j.coverLetter&&!expanded&&<span title="Cover letter saved" style={{fontSize:12,fontWeight:600,color:C.primary,background:C.primary+"22",borderRadius:6,padding:"2px 7px"}}>✉</span>}
+          {isSilent&&<span title="Applied 30+ days ago with no response" style={{fontSize:11,fontWeight:700,color:C.warning,background:C.warningBg,borderRadius:6,padding:"2px 7px",whiteSpace:"nowrap"}}>⏳ Silent</span>}
           <span style={{marginLeft:"auto",fontSize:mob()?15:13,color:C.primary,fontWeight:700,whiteSpace:"nowrap",padding:mob()?"4px 0":"2px 0"}}>
             {expanded?"▲ Less":"▼ More"}
           </span>
@@ -217,13 +228,15 @@ function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSor
   var [expandedId,setExpandedId]=useState(null);
   var [selectedIds,setSelectedIds]=useState(new Set());
   var [form,setForm]=useState({title:"",company:"",location:"",tags:"",applyUrl:"",salary:"",employmentType:"",description:""});
+  var [silentFilter,setSilentFilter]=useState(false);
 
   useEffect(function(){
     if(!pendingJobsView) return;
     var p=pendingJobsView;
-    if(p.status&&typeof p.status==="string"){ setFilter(p.status); setStatusGroupFilter(null); setShowFilters(true); }
-    else if(p.statusGroup){ setStatusGroupFilter(p.statusGroup); setFilter("All"); setShowFilters(true); }
-    else if(Object.keys(p).length===0||p.expandId){ setFilter("All"); setStatusGroupFilter(null); }
+    if(p.filter==="silent"){ setSilentFilter(true); setFilter("All"); setStatusGroupFilter(null); setShowFilters(true); }
+    else if(p.status&&typeof p.status==="string"){ setFilter(p.status); setStatusGroupFilter(null); setSilentFilter(false); setShowFilters(true); }
+    else if(p.statusGroup){ setStatusGroupFilter(p.statusGroup); setFilter("All"); setSilentFilter(false); setShowFilters(true); }
+    else if(Object.keys(p).length===0||p.expandId){ setFilter("All"); setStatusGroupFilter(null); setSilentFilter(false); }
     if(typeof p.archived==="boolean") setShowArchived(p.archived);
     setSourceFilter("all"); setScoreFilter(0); setSearch("");
     if(p.expandId){
@@ -233,6 +246,15 @@ function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSor
     if(setPendingJobsView) setPendingJobsView(null);
     setTimeout(function(){ window.scrollTo({top:0,behavior:"smooth"}); },0);
   },[pendingJobsView]);
+
+  var SILENT_MS=30*24*60*60*1000;
+  var nowMs=Date.now();
+  function isSilentJob(j){
+    if(j.status!=="Applied") return false;
+    var ref=j.appliedAt||j.date;
+    if(!ref) return false;
+    return (nowMs-new Date(ref).getTime())>SILENT_MS;
+  }
 
   var filtered=jobs
     .filter(function(j){return showArchived?true:!j.archived;})
@@ -248,6 +270,7 @@ function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSor
       if(j.scored===false) return false;
       return(j.score||0)>=scoreFilter;
     })
+    .filter(function(j){return silentFilter?isSilentJob(j):true;})
     .filter(function(j){return matchesSearch(j,search);});
   filtered=sortJobs(filtered,sort);
 
@@ -334,6 +357,7 @@ function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSor
   if(sourceFilter!=="all") activeFilterCount++;
   if(scoreFilter>0) activeFilterCount++;
   if(sort!=="added_desc") activeFilterCount++;
+  if(silentFilter) activeFilterCount++;
 
   return <div style={{display:"flex",flexDirection:"column",gap:12}}>
 
@@ -363,7 +387,7 @@ function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSor
         </span>
         {activeFilterCount>0&&<button onClick={function(e){e.stopPropagation();setFilter("All");setStatusGroupFilter(null);setSourceFilter("all");setScoreFilter(0);setSort("added_desc");}}
           style={{fontSize:12,color:C.textHint,background:"none",border:"none",cursor:"pointer",
-            padding:"4px 8px",fontFamily:"inherit",minHeight:"auto"}}>Clear all</button>}
+            padding:"4px 8px",fontFamily:"inherit",minHeight:"auto"}} onClick={function(e){e.stopPropagation();setFilter("All");setStatusGroupFilter(null);setSourceFilter("all");setScoreFilter(0);setSort("added_desc");setSilentFilter(false);}}>Clear all</button>}
       </button>
 
       {showFilters&&<div style={{display:"flex",flexDirection:"column",gap:16,paddingTop:12,borderTop:"1px solid "+C.border}}>
@@ -401,6 +425,10 @@ function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSor
           Show archived ({archivedCount})
         </label>}
         {passedCount>0&&<Btn onClick={archivePassed} style={{fontSize:13}}>📦 Archive {passedCount} passed deadline{passedCount!==1?"s":""}</Btn>}
+        {silentFilter&&<div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderRadius:10,background:C.warningBg,border:"1.5px solid "+C.warning}}>
+          <span style={{fontSize:13,fontWeight:600,color:C.warning}}>⏳ Showing silent jobs only (Applied 30+ days, no response)</span>
+          <button onClick={function(){setSilentFilter(false);}} style={{background:"none",border:"none",cursor:"pointer",color:C.warning,fontSize:16,fontWeight:700,padding:"0 4px",lineHeight:1,fontFamily:"inherit"}}>×</button>
+        </div>}
       </div>}
     </Card>
 
@@ -464,7 +492,7 @@ function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSor
         ?<Card><div style={{textAlign:"center",padding:"24px 16px"}}>
           <div style={{fontSize:32,marginBottom:10}}>🔍</div>
           <div style={{fontSize:15,fontWeight:600,color:C.textSecondary,marginBottom:6}}>No jobs match your filters</div>
-          <Btn onClick={function(){setSearch("");setFilter("All");setSourceFilter("all");setScoreFilter(0);}}>Clear filters</Btn>
+          <Btn onClick={function(){setSearch("");setFilter("All");setSourceFilter("all");setScoreFilter(0);setSilentFilter(false);}}>Clear filters</Btn>
         </div></Card>
         :<Card><EmptyState icon="📋" title="No jobs yet" body="Add manually or fetch from Search Profiles." /></Card>)
       :<div style={{display:"flex",flexDirection:"column",gap:10}}>

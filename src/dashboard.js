@@ -1,6 +1,6 @@
 // dashboard.js
-// Rev: 2026-06-10 — BUG4: 'Applications sent' tile now counts only active
-//   in-progress applications [Applied,Interview,Offer], not closed outcomes.
+// Rev: 2026-06-10 — BUG4: 'Applications sent' tile counts only active in-progress.
+// Rev: 2026-06-11 — Silent jobs link now navigates with filter:"silent" for auto-filter.
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoringStatus,onRunAllProfiles,profiles,cv,anthropicKey}){
@@ -148,7 +148,7 @@ function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoring
         });
         if(!stale.length) return null;
         return <Alert type="info">
-          <span>{stale.length} applied job{stale.length!==1?"s have":" has"} been silent for 30+ days. <span style={{fontWeight:600,textDecoration:"underline",cursor:"pointer"}} onClick={function(){setActiveTab("jobs");}}>Review in My Jobs</span> and mark as <i>No response</i> if appropriate to close the loop.</span>
+          <span>{stale.length} applied job{stale.length!==1?"s have":" has"} been silent for 30+ days. <span style={{fontWeight:600,textDecoration:"underline",cursor:"pointer"}} onClick={function(){if(navigateToJobs) navigateToJobs({filter:"silent"}); else setActiveTab("jobs");}}>Review in My Jobs</span> and mark as <i>No response</i> if appropriate to close the loop.</span>
         </Alert>;
       })()}
     </Card>
