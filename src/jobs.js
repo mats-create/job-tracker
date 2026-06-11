@@ -227,6 +227,7 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
             </button>}
         </div>
       </div>
+    </div>}
   </div>;
 }
 
