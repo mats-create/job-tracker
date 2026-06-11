@@ -2177,8 +2177,8 @@ function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSor
 
 // profiles.js
 // Rev: 2026-06-10 — BUG2+3: fix added/skipped counters in fetchAF and fetchJS.
-//   Counters were read after async setJobs() so always returned 0.
-//   Now computed synchronously before setJobs() is called.
+// Rev: 2026-06-11 — BUG11: addedCount now reflects truly_new.length (post-dedup)
+//   not preFiltered.length, so re-running a profile correctly reports 0 new jobs.
 
 // ─── Search Profiles ──────────────────────────────────────────────────────────
 function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJsKey,anthropicKey,setAnthropicKey,pendingProfileRun,setPendingProfileRun,dismissedIds}){
@@ -2235,14 +2235,15 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
         return true;
       }).map(function(a){return mapAfJob(a,p.name);});
       preFiltered=filterByLocation(preFiltered,p.locations||[]);
-      var addedCount=preFiltered.length;
-      // setJobs only needs to dedup against existing jobs
+      // Use a ref-array so truly_new.length set inside updater is readable outside.
+      var countRef=[0];
       setJobs(function(prev){
         var ex=new Set(prev.map(function(j){return j.id?j.id.toString():""; }));
         var truly_new=preFiltered.filter(function(j){return !ex.has(j.id?j.id.toString():"");});
+        countRef[0]=truly_new.length;
         return truly_new.concat(prev);
       });
-      return{added:addedCount,skipped:skipped};
+      return{added:countRef[0],skipped:skipped};
     }catch(e){return{added:0,error:e.message};}
   }
 
@@ -2268,13 +2269,14 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
         return true;
       }).map(function(a){return mapJsJob(a,p.name);});
       preFiltered=filterByLocation(preFiltered,p.locations||[]);
-      var addedCount=preFiltered.length;
+      var countRef=[0];
       setJobs(function(prev){
         var ex=new Set(prev.map(function(j){return j.id?j.id.toString():""; }));
         var truly_new=preFiltered.filter(function(j){return !ex.has(j.id?j.id.toString():"");});
+        countRef[0]=truly_new.length;
         return truly_new.concat(prev);
       });
-      return{added:addedCount,skipped:skipped};
+      return{added:countRef[0],skipped:skipped};
     }catch(e){return{added:0,error:e.message};}
   }
 
@@ -3970,8 +3972,8 @@ function Reports({jobs,cv,anthropicKey}){
 // Rev: 2026-06-10 — BUG2: fix added counter in runAllProfiles (pre-filter before setJobs);
 //                   BUG8: applyScores uses String() comparison for id matching.
 // Rev: 2026-06-10b — BUG9: setJobs passes updater to setJobsRaw for correct state.
-// Rev: 2026-06-11 — BUG10: setJobs updater must be pure; side effects (scheduleSave)
-//                   moved outside updater via latestJobsRef + setTimeout(0).
+// Rev: 2026-06-11 — BUG10: setJobs updater must be pure; side effects moved outside.
+// Rev: 2026-06-11 — BUG11: totalAdded now uses truly_new.length (post-dedup).
 
 // ─── AppShell ─────────────────────────────────────────────────────────────────
 function AppShell({user,onSignOut}){
@@ -4164,15 +4166,18 @@ function AppShell({user,onSignOut}){
             return true;
           }).map(function(a){return src==="af"?mapAfJob(a,p.name):mapJsJob(a,p.name);});
           preFiltered=filterByLocation(preFiltered,p.locations||[]);
-          totalAdded+=preFiltered.length;
+          // countRef captures truly_new.length from inside the updater (post-dedup)
+          var countRef=[0];
           setJobs(function(prev){
             var ex=new Set(prev.map(function(j){return j.id?j.id.toString():""; }));
             var truly_new=preFiltered.filter(function(j){
               var jid=j.id?j.id.toString():"";
               return jid&&!ex.has(jid);
             });
+            countRef[0]=truly_new.length;
             return truly_new.concat(prev);
           });
+          totalAdded+=countRef[0];
         }catch(e){ console.error("Profile fetch error:",e); }
       }
     }
