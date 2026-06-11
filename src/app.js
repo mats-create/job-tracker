@@ -3,8 +3,8 @@
 // Rev: 2026-06-10 — BUG2: fix added counter in runAllProfiles (pre-filter before setJobs);
 //                   BUG8: applyScores uses String() comparison for id matching.
 // Rev: 2026-06-10b — BUG9: setJobs passes updater to setJobsRaw for correct state.
-// Rev: 2026-06-11 — BUG10: setJobs updater must be pure; side effects (scheduleSave)
-//                   moved outside updater via latestJobsRef + setTimeout(0).
+// Rev: 2026-06-11 — BUG10: setJobs updater must be pure; side effects moved outside.
+// Rev: 2026-06-11 — BUG11: totalAdded now uses truly_new.length (post-dedup).
 
 // ─── AppShell ─────────────────────────────────────────────────────────────────
 function AppShell({user,onSignOut}){
@@ -197,15 +197,18 @@ function AppShell({user,onSignOut}){
             return true;
           }).map(function(a){return src==="af"?mapAfJob(a,p.name):mapJsJob(a,p.name);});
           preFiltered=filterByLocation(preFiltered,p.locations||[]);
-          totalAdded+=preFiltered.length;
+          // countRef captures truly_new.length from inside the updater (post-dedup)
+          var countRef=[0];
           setJobs(function(prev){
             var ex=new Set(prev.map(function(j){return j.id?j.id.toString():""; }));
             var truly_new=preFiltered.filter(function(j){
               var jid=j.id?j.id.toString():"";
               return jid&&!ex.has(jid);
             });
+            countRef[0]=truly_new.length;
             return truly_new.concat(prev);
           });
+          totalAdded+=countRef[0];
         }catch(e){ console.error("Profile fetch error:",e); }
       }
     }

@@ -1,7 +1,7 @@
 // profiles.js
 // Rev: 2026-06-10 — BUG2+3: fix added/skipped counters in fetchAF and fetchJS.
-//   Counters were read after async setJobs() so always returned 0.
-//   Now computed synchronously before setJobs() is called.
+// Rev: 2026-06-11 — BUG11: addedCount now reflects truly_new.length (post-dedup)
+//   not preFiltered.length, so re-running a profile correctly reports 0 new jobs.
 
 // ─── Search Profiles ──────────────────────────────────────────────────────────
 function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJsKey,anthropicKey,setAnthropicKey,pendingProfileRun,setPendingProfileRun,dismissedIds}){
@@ -58,14 +58,15 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
         return true;
       }).map(function(a){return mapAfJob(a,p.name);});
       preFiltered=filterByLocation(preFiltered,p.locations||[]);
-      var addedCount=preFiltered.length;
-      // setJobs only needs to dedup against existing jobs
+      // Use a ref-array so truly_new.length set inside updater is readable outside.
+      var countRef=[0];
       setJobs(function(prev){
         var ex=new Set(prev.map(function(j){return j.id?j.id.toString():""; }));
         var truly_new=preFiltered.filter(function(j){return !ex.has(j.id?j.id.toString():"");});
+        countRef[0]=truly_new.length;
         return truly_new.concat(prev);
       });
-      return{added:addedCount,skipped:skipped};
+      return{added:countRef[0],skipped:skipped};
     }catch(e){return{added:0,error:e.message};}
   }
 
@@ -91,13 +92,14 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
         return true;
       }).map(function(a){return mapJsJob(a,p.name);});
       preFiltered=filterByLocation(preFiltered,p.locations||[]);
-      var addedCount=preFiltered.length;
+      var countRef=[0];
       setJobs(function(prev){
         var ex=new Set(prev.map(function(j){return j.id?j.id.toString():""; }));
         var truly_new=preFiltered.filter(function(j){return !ex.has(j.id?j.id.toString():"");});
+        countRef[0]=truly_new.length;
         return truly_new.concat(prev);
       });
-      return{added:addedCount,skipped:skipped};
+      return{added:countRef[0],skipped:skipped};
     }catch(e){return{added:0,error:e.message};}
   }
 
