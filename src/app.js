@@ -7,8 +7,9 @@
 // Rev: 2026-06-11 — BUG11: totalAdded now uses truly_new.length (post-dedup).
 // Rev: 2026-06-11 — FIX: auto-score newly imported jobs via cvRef/keyRef;
 //                   rescoreJob(jobId) for individual re-score;
-//                   C.background→C.bg (loading/auth screens);
-//                   rescoreAll surfaces partial batch failures.
+//                   C.background→C.bg; rescoreAll surfaces partial failures.
+// Rev: 2026-06-11 — FIX: rescoreJob uses synchronous ref guard to prevent
+//                   concurrent calls; reads job from jobs closure (not no-op updater).
 
 // ─── AppShell ─────────────────────────────────────────────────────────────────
 function AppShell({user,onSignOut}){
@@ -69,6 +70,9 @@ function AppShell({user,onSignOut}){
   // Ref to capture the latest jobs value computed inside a functional updater,
   // so we can call scheduleSave outside the updater (updaters must be pure).
   var latestJobsRef=useRef(null);
+  // Synchronous guard against concurrent rescoreJob calls for the same job.
+  // A ref is used (not state) so the check is immediate, not after a render cycle.
+  var scoringInProgressRef=useRef(new Set());
   // Refs for cv and anthropicKey so runAllProfiles (useCallback) always
   // reads the latest values without needing them in its dep array.
   var cvRef=useRef(cv);
@@ -159,17 +163,17 @@ function AppShell({user,onSignOut}){
   },[]);
 
   var rescoreJob=useCallback(async function(jobId){
-    // Read current jobs via functional updater to get fresh state
-    var targetJob=null;
-    setJobs(function(prev){
-      targetJob=prev.find(function(j){return String(j.id)===String(jobId);});
-      return prev; // no change
-    });
-    // Wait a tick for the updater to run
-    await new Promise(function(r){setTimeout(r,0);});
-    if(!targetJob) return;
-    if(!hasCv(cvRef.current)||!anthropicKeyRef.current) return;
+    // Synchronous guard — prevents concurrent calls for the same job
+    // without waiting for a React render cycle.
+    var key=String(jobId);
+    if(scoringInProgressRef.current.has(key)) return;
+    scoringInProgressRef.current.add(key);
     try{
+      // Read job directly from jobs closure — accurate since rescoreJob
+      // is recreated whenever jobs changes (jobs is in deps array).
+      var targetJob=jobs.find(function(j){return String(j.id)===key;});
+      if(!targetJob) return;
+      if(!hasCv(cvRef.current)||!anthropicKeyRef.current) return;
       await scoreJobs({
         jobs:[targetJob],
         cv:cvRef.current,
@@ -180,8 +184,10 @@ function AppShell({user,onSignOut}){
       });
     }catch(e){
       console.warn("rescoreJob failed:",e);
+    }finally{
+      scoringInProgressRef.current.delete(key);
     }
-  },[applyScores]);
+  },[jobs,applyScores]);
 
   var rescoreAll=useCallback(async function(){
     var unscored=jobs.filter(function(j){return !j.archived;});
