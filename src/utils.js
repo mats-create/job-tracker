@@ -1,8 +1,8 @@
 // utils.js
-// Rev: 2026-06-10 — BUG1+6: scoreJobs() now accepts object {jobs,cv,apiKey,onBatch}
-//                   and calls onBatch(batchResults, doneCount) after each batch.
-//                   BUG5: filterByLocation now falls back to location-string keyword
-//                   check for remote jobs when j.remote is null/undefined.
+// Rev: 2026-06-10 — BUG1+6: scoreJobs() now accepts object {jobs,cv,apiKey,onBatch};
+//                   BUG5: filterByLocation remote keyword fallback.
+// Rev: 2026-06-11 — scoreJobs continues on batch failure instead of aborting;
+//                   returns {result, failedBatches} so callers can surface partial errors.
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
 const STORAGE_KEY = "jobTracker.v1";
@@ -520,6 +520,7 @@ async function scoreJobs(opts,_cv,_apiKey){
   if(!hasCv(cv)) return new Map();
   var result=new Map();
   var doneCount=0;
+  var failedBatches=0;
   for(var i=0;i<jobs.length;i+=BATCH_SIZE){
     var batch=jobs.slice(i,i+BATCH_SIZE);
     try{
@@ -536,10 +537,15 @@ async function scoreJobs(opts,_cv,_apiKey){
       doneCount+=batch.length;
       if(onBatch) onBatch(batchResults,doneCount);
     }catch(e){
-      console.warn("Batch scoring failed:",e);
-      throw e;
+      // Continue scoring remaining batches rather than aborting entirely.
+      // Jobs in this batch remain scored:false.
+      console.warn("Batch scoring failed (batch "+(i/BATCH_SIZE+1)+"):",e);
+      failedBatches++;
+      doneCount+=batch.length;
     }
   }
+  // Return Map for backward compatibility; attach metadata for callers that need it
+  result.failedBatches=failedBatches;
   return result;
 }
 

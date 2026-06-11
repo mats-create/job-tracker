@@ -5,6 +5,10 @@
 // Rev: 2026-06-10b — BUG9: setJobs passes updater to setJobsRaw for correct state.
 // Rev: 2026-06-11 — BUG10: setJobs updater must be pure; side effects moved outside.
 // Rev: 2026-06-11 — BUG11: totalAdded now uses truly_new.length (post-dedup).
+// Rev: 2026-06-11 — FIX: auto-score newly imported jobs via cvRef/keyRef;
+//                   rescoreJob(jobId) for individual re-score;
+//                   C.background→C.bg (loading/auth screens);
+//                   rescoreAll surfaces partial batch failures.
 
 // ─── AppShell ─────────────────────────────────────────────────────────────────
 function AppShell({user,onSignOut}){
@@ -65,6 +69,12 @@ function AppShell({user,onSignOut}){
   // Ref to capture the latest jobs value computed inside a functional updater,
   // so we can call scheduleSave outside the updater (updaters must be pure).
   var latestJobsRef=useRef(null);
+  // Refs for cv and anthropicKey so runAllProfiles (useCallback) always
+  // reads the latest values without needing them in its dep array.
+  var cvRef=useRef(cv);
+  var anthropicKeyRef=useRef(anthropicKey);
+  useEffect(function(){ cvRef.current=cv; },[cv]);
+  useEffect(function(){ anthropicKeyRef.current=anthropicKey; },[anthropicKey]);
 
   function setJobs(v){
     if(typeof v==="function"){
@@ -136,6 +146,7 @@ function AppShell({user,onSignOut}){
     });
   }
 
+
   var applyScores=useCallback(function(scored){
     setJobs(function(prev){
       return prev.map(function(j){
@@ -147,13 +158,38 @@ function AppShell({user,onSignOut}){
     });
   },[]);
 
+  var rescoreJob=useCallback(async function(jobId){
+    // Read current jobs via functional updater to get fresh state
+    var targetJob=null;
+    setJobs(function(prev){
+      targetJob=prev.find(function(j){return String(j.id)===String(jobId);});
+      return prev; // no change
+    });
+    // Wait a tick for the updater to run
+    await new Promise(function(r){setTimeout(r,0);});
+    if(!targetJob) return;
+    if(!hasCv(cvRef.current)||!anthropicKeyRef.current) return;
+    try{
+      await scoreJobs({
+        jobs:[targetJob],
+        cv:cvRef.current,
+        apiKey:anthropicKeyRef.current,
+        onBatch:function(results){
+          applyScores(results);
+        },
+      });
+    }catch(e){
+      console.warn("rescoreJob failed:",e);
+    }
+  },[applyScores]);
+
   var rescoreAll=useCallback(async function(){
     var unscored=jobs.filter(function(j){return !j.archived;});
     if(!unscored.length||!hasCv(cv)) return;
     setScoringStatus({active:true,done:0,total:unscored.length});
     setScoringError("");
     try{
-      await scoreJobs({
+      var scoreResult=await scoreJobs({
         jobs:unscored,cv:cv,apiKey:anthropicKey,
         onBatch:function(results,doneCount){
           applyScores(results);
@@ -161,7 +197,10 @@ function AppShell({user,onSignOut}){
         },
       });
       setScoringStatus({active:false,done:unscored.length,total:unscored.length});
+      var failed=scoreResult.failedBatches||0;
+      if(failed>0) setScoringError(failed+" batch"+(failed!==1?"es":"")+" failed — try Rescore all again.");
     }catch(e){
+      // scoreJobs no longer throws, but guard anyway
       setScoringError(e.message||"Scoring failed.");
       setScoringStatus({active:false,done:0,total:0});
     }
@@ -172,6 +211,7 @@ function AppShell({user,onSignOut}){
     var active=profiles.filter(function(p){return p.active;});
     if(!active.length) return;
     var totalAdded=0;
+    var newJobsBuffer=[];
     var tombstones=new Set((dismissedIds||[]).map(String));
     for(var i=0;i<active.length;i++){
       var p=active[i];
@@ -197,8 +237,8 @@ function AppShell({user,onSignOut}){
             return true;
           }).map(function(a){return src==="af"?mapAfJob(a,p.name):mapJsJob(a,p.name);});
           preFiltered=filterByLocation(preFiltered,p.locations||[]);
-          // countRef captures truly_new.length from inside the updater (post-dedup)
-          var countRef=[0];
+          // countRef[0] = count, countRef[1] = the new jobs array (for auto-scoring)
+          var countRef=[0,[]];
           setJobs(function(prev){
             var ex=new Set(prev.map(function(j){return j.id?j.id.toString():""; }));
             var truly_new=preFiltered.filter(function(j){
@@ -206,13 +246,40 @@ function AppShell({user,onSignOut}){
               return jid&&!ex.has(jid);
             });
             countRef[0]=truly_new.length;
+            countRef[1]=truly_new;
             return truly_new.concat(prev);
           });
           totalAdded+=countRef[0];
+          if(countRef[1].length>0) newJobsBuffer=newJobsBuffer.concat(countRef[1]);
         }catch(e){ console.error("Profile fetch error:",e); }
       }
     }
     addLog((trigger==="manual"?"Manual run":"Scheduled run")+": "+active.length+" profile"+(active.length!==1?"s":"")+", "+totalAdded+" new job"+(totalAdded!==1?"s":"")+" added.",trigger==="manual"?"manual":"info");
+
+    // Auto-score newly imported jobs if CV and API key are available.
+    // Uses refs so we always have fresh values without adding to useCallback deps.
+    if(newJobsBuffer.length>0&&hasCv(cvRef.current)&&anthropicKeyRef.current){
+      setScoringStatus({active:true,done:0,total:newJobsBuffer.length});
+      setScoringError("");
+      try{
+        var scoreResult=await scoreJobs({
+          jobs:newJobsBuffer,
+          cv:cvRef.current,
+          apiKey:anthropicKeyRef.current,
+          onBatch:function(results,doneCount){
+            applyScores(results);
+            setScoringStatus({active:true,done:doneCount,total:newJobsBuffer.length});
+          },
+        });
+        var failed=scoreResult.failedBatches||0;
+        setScoringStatus({active:false,done:newJobsBuffer.length,total:newJobsBuffer.length});
+        if(failed>0) setScoringError(failed+" batch"+(failed!==1?"es":"")+" failed to score — try Rescore all to retry.");
+      }catch(e){
+        // scoreJobs no longer throws, but guard anyway
+        setScoringStatus({active:false,done:0,total:0});
+        setScoringError("Auto-scoring failed: "+(e.message||"unknown error"));
+      }
+    }
   },[profiles,afKey,jsKey,dismissedIds]);
 
   useEffect(function(){
@@ -327,7 +394,7 @@ function AppShell({user,onSignOut}){
     var key=activeTab;
     return <TabErrorBoundary tabKey={key}>
       {key==="dashboard"&&<Dashboard jobs={jobs} schedule={schedule} setActiveTab={setActiveTab} navigateToJobs={navigateToJobs} rescoreAll={rescoreAll} scoringStatus={scoringStatus} onRunAllProfiles={runAllProfiles} profiles={profiles} cv={cv} anthropicKey={anthropicKey} />}
-      {key==="jobs"&&<Jobs jobs={jobs} setJobs={setJobs} rescoreAll={rescoreAll} scoringStatus={scoringStatus} scoringError={scoringError} cv={cv} sort={sort} setSort={setSort} dismissJob={dismissJob} tombstoneIds={tombstoneIds} startCoverLetter={startCoverLetter} pendingJobsView={pendingJobsView} setPendingJobsView={setPendingJobsView} />}
+      {key==="jobs"&&<Jobs jobs={jobs} setJobs={setJobs} rescoreAll={rescoreAll} rescoreJob={rescoreJob} scoringStatus={scoringStatus} scoringError={scoringError} cv={cv} sort={sort} setSort={setSort} dismissJob={dismissJob} tombstoneIds={tombstoneIds} startCoverLetter={startCoverLetter} pendingJobsView={pendingJobsView} setPendingJobsView={setPendingJobsView} />}
       {key==="profiles"&&<SearchProfiles profiles={profiles} setProfiles={setProfiles} setJobs={setJobs} afKey={afKey} setAfKey={setAfKey} jsKey={jsKey} setJsKey={setJsKey} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} pendingProfileRun={pendingProfileRun} setPendingProfileRun={setPendingProfileRun} dismissedIds={dismissedIds} />}
       {key==="assistant"&&<ProfileAssistant cv={cv} setCv={setCv} profiles={profiles} setProfiles={setProfiles} anthropicKey={anthropicKey} conversation={assistantConv} setConversation={setAssistantConv} setActiveTab={setActiveTab} setPendingProfileRun={setPendingProfileRun} jobs={jobs} />}
       {key==="cv"&&<CVProfile cv={cv} setCv={setCv} />}
@@ -340,7 +407,7 @@ function AppShell({user,onSignOut}){
   var currentTab=TABS.find(function(t){return t.id===activeTab;})||TABS[0];
 
   if(!cloudReady){
-    return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.background}}>
+    return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.bg}}>
       <div style={{textAlign:"center"}}>
         <div style={{fontSize:40,marginBottom:16}}>🌿</div>
         <div style={{fontSize:18,fontWeight:700,color:C.textPrimary,marginBottom:8}}>Loading your data…</div>
@@ -349,7 +416,7 @@ function AppShell({user,onSignOut}){
     </div>;
   }
 
-  return <div style={{display:"flex",minHeight:"100vh",background:C.background}}>
+  return <div style={{display:"flex",minHeight:"100vh",background:C.bg}}>
     {!isMobile&&<Sidebar activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} user={user} onSignOut={onSignOut} theme={theme} setTheme={setTheme} />}
 
     <div className={"jt-main"+(sidebarCollapsed?" sidebar-collapsed":"")} style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",paddingBottom:isMobile?"calc(80px + env(safe-area-inset-bottom, 0px))":0}}>
@@ -387,7 +454,7 @@ function DismissToast({job,onUndo}){
 
 // ─── AuthSplash ───────────────────────────────────────────────────────────────
 function AuthSplash(){
-  return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.background}}>
+  return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.bg}}>
     <div style={{textAlign:"center"}}>
       <div style={{fontSize:40,marginBottom:16}}>🌿</div>
       <div style={{fontSize:18,fontWeight:700,color:C.textPrimary,marginBottom:8}}>Signing you in…</div>
@@ -407,7 +474,7 @@ function SignInScreen({onSignIn}){
     catch(e){ setError(e.message||"Sign-in failed. Please try again."); setLoading(false); }
   }
 
-  return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.background,padding:24}}>
+  return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.bg,padding:24}}>
     <div style={{width:"100%",maxWidth:420,textAlign:"center"}}>
       <div style={{width:64,height:64,borderRadius:20,background:C.primary,display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,margin:"0 auto 24px",boxShadow:"0 8px 24px rgba(74,141,103,0.3)"}}>🌿</div>
       <h1 style={{fontSize:26,fontWeight:800,color:C.textPrimary,marginBottom:8}}>Job Tracker</h1>

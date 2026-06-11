@@ -1,6 +1,6 @@
 // jobs.js
-// Rev: 2026-06-11 — Silent jobs: auto-filter via pendingJobsView {filter:'silent'},
-//   silent badge on JobRow (Applied 30+ days with no response), clearable filter.
+// Rev: 2026-06-11 — Silent jobs: auto-filter, badge, clearable filter.
+// Rev: 2026-06-11 — Individual re-score button in JobRow expanded view.
 
 // ─── StatusSheet — mobile bottom sheet for status picking ────────────────────
 function StatusSheet({current,onSelect,onClose}){
@@ -26,7 +26,7 @@ function StatusSheet({current,onSelect,onClose}){
 }
 
 // ─── Job Row ──────────────────────────────────────────────────────────────────
-function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,onNotesChange,onArchiveToggle,onDismiss,onWriteCoverLetter}){
+function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,onNotesChange,onArchiveToggle,onDismiss,onWriteCoverLetter,onRescore,rescoring}){
   var src=SOURCES[j.sourceType]||SOURCES.manual;
   var hasNotes=!!(j.notes&&j.notes.trim());
   var todayStr=new Date().toISOString().slice(0,10);
@@ -190,7 +190,7 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
             ✉ Write cover letter
           </button>}
 
-        {/* Secondary: archive + dismiss side by side */}
+        {/* Secondary: re-score + archive + dismiss */}
         <div className="jt-job-action-row" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
           {onArchiveToggle&&
             <button onClick={onArchiveToggle}
@@ -209,6 +209,23 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
               🗑 Dismiss
             </button>}
         </div>
+        {onRescore&&!isArchived&&
+          <button onClick={function(){if(!rescoring) onRescore();}}
+            disabled={!!rescoring}
+            style={{fontSize:14,fontWeight:600,padding:"10px 8px",borderRadius:12,
+              border:"1.5px solid "+C.border,background:"transparent",
+              color:rescoring?C.textHint:C.textSecondary,
+              cursor:rescoring?"not-allowed":"pointer",fontFamily:"inherit",
+              minHeight:44,width:"100%",
+              display:"flex",alignItems:"center",justifyContent:"center",gap:8,
+              opacity:rescoring?0.6:1}}>
+            {rescoring
+              ?<React.Fragment>
+                <span style={{display:"inline-block",width:14,height:14,border:"2px solid currentColor",borderTopColor:"transparent",borderRadius:"50%",animation:"spin 0.7s linear infinite"}} />
+                Scoring…
+              </React.Fragment>
+              :"⟳ Re-score this job"}
+          </button>}
       </div>
 
     </div>}
@@ -216,7 +233,7 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
 }
 
 // ─── Jobs ─────────────────────────────────────────────────────────────────────
-function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSort,dismissJob,tombstoneIds,startCoverLetter,pendingJobsView,setPendingJobsView}){
+function Jobs({jobs,setJobs,rescoreAll,rescoreJob,scoringStatus,scoringError,cv,sort,setSort,dismissJob,tombstoneIds,startCoverLetter,pendingJobsView,setPendingJobsView}){
   var [filter,setFilter]=useState("All");
   var [statusGroupFilter,setStatusGroupFilter]=useState(null);
   var [sourceFilter,setSourceFilter]=useState("all");
@@ -229,6 +246,7 @@ function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSor
   var [selectedIds,setSelectedIds]=useState(new Set());
   var [form,setForm]=useState({title:"",company:"",location:"",tags:"",applyUrl:"",salary:"",employmentType:"",description:""});
   var [silentFilter,setSilentFilter]=useState(false);
+  var [rescoringId,setRescoringId]=useState(null);
 
   useEffect(function(){
     if(!pendingJobsView) return;
@@ -523,6 +541,11 @@ function Jobs({jobs,setJobs,rescoreAll,scoringStatus,scoringError,cv,sort,setSor
             onArchiveToggle={function(){toggleArchive(j.id);}}
             onDismiss={dismissJob?function(){dismissJob(j.id);}:null}
             onWriteCoverLetter={startCoverLetter?function(){startCoverLetter(j.id);}:null}
+            onRescore={rescoreJob?function(){
+              setRescoringId(j.id);
+              rescoreJob(j.id).then(function(){setRescoringId(null);}).catch(function(){setRescoringId(null);});
+            }:null}
+            rescoring={rescoringId===j.id}
           />;
         })}
       </div>}
