@@ -10,6 +10,8 @@
 //                   C.background→C.bg; rescoreAll surfaces partial failures.
 // Rev: 2026-06-11 — FIX: rescoreJob uses synchronous ref guard to prevent
 //                   concurrent calls; reads job from jobs closure (not no-op updater).
+// Rev: 2026-06-12 — importSummary: persistent dismissable card on Dashboard
+//                   showing per-profile results after each run.
 
 // ─── AppShell ─────────────────────────────────────────────────────────────────
 function AppShell({user,onSignOut}){
@@ -35,6 +37,7 @@ function AppShell({user,onSignOut}){
   var [dismissToast,setDismissToast]=useState(null);
   var [dismissUndoTimer,setDismissUndoTimer]=useState(null);
   var [pendingJobsView,setPendingJobsView]=useState(null);
+  var [importSummary,setImportSummary]=useState(null);
   var [pendingProfileRun,setPendingProfileRun]=useState(null);
   var [pendingCoverLetterJob,setPendingCoverLetterJob]=useState(null);
   var [theme,setThemeRaw]=useState(getSavedTheme);
@@ -218,6 +221,7 @@ function AppShell({user,onSignOut}){
     if(!active.length) return;
     var totalAdded=0;
     var newJobsBuffer=[];
+    var profileResults=[];
     var tombstones=new Set((dismissedIds||[]).map(String));
     for(var i=0;i<active.length;i++){
       var p=active[i];
@@ -257,7 +261,8 @@ function AppShell({user,onSignOut}){
           });
           totalAdded+=countRef[0];
           if(countRef[1].length>0) newJobsBuffer=newJobsBuffer.concat(countRef[1]);
-        }catch(e){ console.error("Profile fetch error:",e); }
+          profileResults.push({name:p.name,source:src,added:countRef[0],skipped:0,failed:false});
+        }catch(e){ console.error("Profile fetch error:",e); profileResults.push({name:p.name,source:srcs[si]||"af",added:0,skipped:0,failed:true}); }
       }
     }
     addLog((trigger==="manual"?"Manual run":"Scheduled run")+": "+active.length+" profile"+(active.length!==1?"s":"")+", "+totalAdded+" new job"+(totalAdded!==1?"s":"")+" added.",trigger==="manual"?"manual":"info");
@@ -286,6 +291,18 @@ function AppShell({user,onSignOut}){
         setScoringError("Auto-scoring failed: "+(e.message||"unknown error"));
       }
     }
+    // Build import summary for persistent Dashboard card
+    var scoredCount=newJobsBuffer.length>0&&hasCv(cvRef.current)&&anthropicKeyRef.current
+      ?(newJobsBuffer.length-(typeof scoreResult!=="undefined"?(scoreResult.failedBatches||0)*BATCH_SIZE:0))
+      :0;
+    setImportSummary({
+      timestamp:new Date().toISOString(),
+      trigger:trigger,
+      profiles:profileResults,
+      totalAdded:totalAdded,
+      scored:scoredCount,
+      scoringFailed:typeof scoreResult!=="undefined"?(scoreResult.failedBatches||0):0,
+    });
   },[profiles,afKey,jsKey,dismissedIds]);
 
   useEffect(function(){
@@ -399,7 +416,7 @@ function AppShell({user,onSignOut}){
   function renderTab(){
     var key=activeTab;
     return <TabErrorBoundary tabKey={key}>
-      {key==="dashboard"&&<Dashboard jobs={jobs} schedule={schedule} setActiveTab={setActiveTab} navigateToJobs={navigateToJobs} rescoreAll={rescoreAll} scoringStatus={scoringStatus} onRunAllProfiles={runAllProfiles} profiles={profiles} cv={cv} anthropicKey={anthropicKey} />}
+      {key==="dashboard"&&<Dashboard jobs={jobs} schedule={schedule} setActiveTab={setActiveTab} navigateToJobs={navigateToJobs} rescoreAll={rescoreAll} scoringStatus={scoringStatus} onRunAllProfiles={runAllProfiles} profiles={profiles} cv={cv} anthropicKey={anthropicKey} importSummary={importSummary} onDismissImportSummary={function(){setImportSummary(null);}} />}
       {key==="jobs"&&<Jobs jobs={jobs} setJobs={setJobs} rescoreAll={rescoreAll} rescoreJob={rescoreJob} scoringStatus={scoringStatus} scoringError={scoringError} cv={cv} sort={sort} setSort={setSort} dismissJob={dismissJob} tombstoneIds={tombstoneIds} startCoverLetter={startCoverLetter} pendingJobsView={pendingJobsView} setPendingJobsView={setPendingJobsView} />}
       {key==="profiles"&&<SearchProfiles profiles={profiles} setProfiles={setProfiles} setJobs={setJobs} afKey={afKey} setAfKey={setAfKey} jsKey={jsKey} setJsKey={setJsKey} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} pendingProfileRun={pendingProfileRun} setPendingProfileRun={setPendingProfileRun} dismissedIds={dismissedIds} />}
       {key==="assistant"&&<ProfileAssistant cv={cv} setCv={setCv} profiles={profiles} setProfiles={setProfiles} anthropicKey={anthropicKey} conversation={assistantConv} setConversation={setAssistantConv} setActiveTab={setActiveTab} setPendingProfileRun={setPendingProfileRun} jobs={jobs} />}

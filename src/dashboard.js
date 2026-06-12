@@ -1,9 +1,114 @@
 // dashboard.js
 // Rev: 2026-06-10 — BUG4: 'Applications sent' tile counts only active in-progress.
 // Rev: 2026-06-11 — Silent jobs link now navigates with filter:"silent" for auto-filter.
+// Rev: 2026-06-12 — Import summary card: persistent dismissable card after each run.
+
+
+// ─── ImportSummaryCard ────────────────────────────────────────────────────────
+function ImportSummaryCard({summary,onDismiss}){
+  if(!summary) return null;
+  var m=mob();
+
+  var ts=new Date(summary.timestamp);
+  var dateStr=ts.toLocaleDateString("sv-SE",{weekday:"short",month:"short",day:"numeric"});
+  var timeStr=ts.toLocaleTimeString("sv-SE",{hour:"2-digit",minute:"2-digit"});
+  var triggerLabel=summary.trigger==="manual"?"Manual run":"Scheduled run";
+
+  var srcLabel=function(src){return src==="af"?"Arbetsförmedlingen":src==="jsearch"?"JSearch":"API";};
+
+  var hasAnyNew=summary.totalAdded>0;
+  var hasAnyFailed=(summary.profiles||[]).some(function(p){return p.failed;});
+
+  return <div style={{
+    background:C.surface,
+    borderRadius:16,
+    border:"1.5px solid "+(hasAnyFailed?C.warning:hasAnyNew?C.primary:C.border),
+    boxShadow:C.shadow,
+    overflow:"hidden",
+  }}>
+    {/* Header */}
+    <div style={{
+      display:"flex",alignItems:"center",gap:12,
+      padding:m?"12px 14px":"14px 20px",
+      background:hasAnyFailed?C.warningBg:hasAnyNew?C.primaryLight:C.surfaceAlt,
+      borderBottom:"1px solid "+(hasAnyFailed?C.warning:hasAnyNew?C.primary:C.border),
+    }}>
+      <span style={{fontSize:m?18:20}}>{hasAnyFailed?"⚠️":hasAnyNew?"✅":"🔄"}</span>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:m?14:15,fontWeight:700,color:C.textPrimary}}>
+          {triggerLabel} · {dateStr} at {timeStr}
+        </div>
+        <div style={{fontSize:m?12:13,color:C.textSecondary,marginTop:2}}>
+          {hasAnyNew
+            ?summary.totalAdded+" new job"+(summary.totalAdded!==1?"s":"")+" imported"
+              +(summary.scored>0?" · "+summary.scored+" scored":"")
+            :"No new jobs found — pipeline is up to date"}
+        </div>
+      </div>
+      <button onClick={onDismiss}
+        style={{background:"none",border:"none",cursor:"pointer",
+          color:C.textHint,fontSize:22,lineHeight:1,padding:"4px 8px",
+          fontFamily:"inherit",flexShrink:0,minHeight:36,minWidth:36,
+          display:"flex",alignItems:"center",justifyContent:"center"}}
+        title="Dismiss">×</button>
+    </div>
+
+    {/* Per-profile breakdown */}
+    {(summary.profiles||[]).length>0&&<div style={{padding:m?"10px 14px":"12px 20px"}}>
+      <div style={{fontSize:11,fontWeight:700,color:C.textHint,letterSpacing:"0.5px",
+        textTransform:"uppercase",marginBottom:8}}>Per profile</div>
+      <div style={{display:"flex",flexDirection:"column",gap:6}}>
+        {summary.profiles.map(function(p,i){
+          var src=SOURCES[p.source]||SOURCES.manual;
+          return <div key={i} style={{
+            display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",
+            padding:"8px 12px",borderRadius:10,
+            background:p.failed?C.errorBg:p.added>0?C.successBg:C.surfaceAlt,
+          }}>
+            <span style={{fontSize:12,fontWeight:600,
+              color:p.failed?C.error:p.added>0?C.success:C.textHint,
+              background:p.failed?C.errorBg:p.added>0?C.successBg:C.surfaceAlt,
+              padding:"2px 8px",borderRadius:6,border:"1px solid "+(p.failed?C.error:p.added>0?C.success:C.border),
+              whiteSpace:"nowrap"}}>
+              {src.label}
+            </span>
+            <span style={{fontSize:m?13:14,fontWeight:600,color:C.textPrimary,flex:1,minWidth:0,
+              overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+              {p.name}
+            </span>
+            <span style={{fontSize:m?13:14,fontWeight:700,
+              color:p.failed?C.error:p.added>0?C.success:C.textHint,
+              whiteSpace:"nowrap",flexShrink:0}}>
+              {p.failed?"API error":p.added>0?"+"+p.added+" new":"Up to date"}
+            </span>
+          </div>;
+        })}
+      </div>
+    </div>}
+
+    {/* Footer with Got it button */}
+    <div style={{
+      padding:m?"10px 14px":"12px 20px",
+      borderTop:"1px solid "+C.border,
+      display:"flex",alignItems:"center",justifyContent:"flex-end",
+      background:C.surfaceAlt,
+    }}>
+      {summary.scoringFailed>0&&<span style={{fontSize:12,color:C.warning,flex:1}}>
+        ⚠ {summary.scoringFailed} scoring batch{summary.scoringFailed!==1?"es":""} failed — try Rescore all.
+      </span>}
+      <button onClick={onDismiss}
+        style={{fontSize:m?15:14,fontWeight:700,
+          padding:m?"10px 24px":"8px 20px",borderRadius:10,
+          border:"none",background:C.primary,color:"#fff",
+          cursor:"pointer",fontFamily:"inherit",minHeight:m?44:36}}>
+        Got it
+      </button>
+    </div>
+  </div>;
+}
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
-function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoringStatus,onRunAllProfiles,profiles,cv,anthropicKey}){
+function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoringStatus,onRunAllProfiles,profiles,cv,anthropicKey,importSummary,onDismissImportSummary}){
   var [fetchStatus,setFetchStatus]=useState(null);
   var [fetchMsg,setFetchMsg]=useState("");
   var canFetch=(profiles||[]).filter(function(p){return p.active;}).length>0;
@@ -44,6 +149,7 @@ function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoring
   var closedTotal=rejectedCount+noResponseCount+adRemovedCount+notRelevantCount;
 
   return <div style={{display:"flex",flexDirection:"column",gap:20}}>
+    {importSummary&&<ImportSummaryCard summary={importSummary} onDismiss={onDismissImportSummary} />}
     <div style={{background:"linear-gradient(135deg,"+C.primary+" 0%,"+C.primaryDark+" 100%)",borderRadius:20,padding:"28px",color:"#fff",boxShadow:C.shadowMd}}>
       <div style={{fontSize:22,fontWeight:700,marginBottom:6}}>Good to see you! 👋</div>
       <div style={{fontSize:14,opacity:0.85,marginBottom:20}}>Here's your job search summary for today.</div>
