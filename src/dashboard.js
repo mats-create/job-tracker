@@ -2,10 +2,11 @@
 // Rev: 2026-06-10 — BUG4: 'Applications sent' tile counts only active in-progress.
 // Rev: 2026-06-11 — Silent jobs link now navigates with filter:"silent" for auto-filter.
 // Rev: 2026-06-12 — Import summary card: persistent dismissable card after each run.
+// Rev: 2026-06-12 — Import summary moved to overlay triggered by button; auto-card removed.
 
 
-// ─── ImportSummaryCard ────────────────────────────────────────────────────────
-function ImportSummaryCard({summary,onDismiss}){
+// ─── ImportSummaryOverlay ─────────────────────────────────────────────────────
+function ImportSummaryOverlay({summary,onClose,onClear}){
   if(!summary) return null;
   var m=mob();
 
@@ -13,104 +14,116 @@ function ImportSummaryCard({summary,onDismiss}){
   var dateStr=ts.toLocaleDateString("sv-SE",{weekday:"short",month:"short",day:"numeric"});
   var timeStr=ts.toLocaleTimeString("sv-SE",{hour:"2-digit",minute:"2-digit"});
   var triggerLabel=summary.trigger==="manual"?"Manual run":"Scheduled run";
-
-  var srcLabel=function(src){return src==="af"?"Arbetsförmedlingen":src==="jsearch"?"JSearch":"API";};
-
   var hasAnyNew=summary.totalAdded>0;
   var hasAnyFailed=(summary.profiles||[]).some(function(p){return p.failed;});
 
-  return <div style={{
-    background:C.surface,
-    borderRadius:16,
-    border:"1.5px solid "+(hasAnyFailed?C.warning:hasAnyNew?C.primary:C.border),
-    boxShadow:C.shadow,
-    overflow:"hidden",
-  }}>
-    {/* Header */}
-    <div style={{
-      display:"flex",alignItems:"center",gap:12,
-      padding:m?"12px 14px":"14px 20px",
-      background:hasAnyFailed?C.warningBg:hasAnyNew?C.primaryLight:C.surfaceAlt,
-      borderBottom:"1px solid "+(hasAnyFailed?C.warning:hasAnyNew?C.primary:C.border),
-    }}>
-      <span style={{fontSize:m?18:20}}>{hasAnyFailed?"⚠️":hasAnyNew?"✅":"🔄"}</span>
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{fontSize:m?14:15,fontWeight:700,color:C.textPrimary}}>
-          {triggerLabel} · {dateStr} at {timeStr}
+  var sheetStyle=m
+    ?{position:"fixed",bottom:0,left:0,right:0,zIndex:610,
+      background:C.surface,borderRadius:"20px 20px 0 0",
+      boxShadow:"0 -8px 32px rgba(0,0,0,0.18)",
+      maxHeight:"80vh",overflowY:"auto",
+      paddingBottom:"calc(env(safe-area-inset-bottom,0px) + 8px)"}
+    :{position:"fixed",top:"50%",left:"50%",
+      transform:"translate(-50%,-50%)",
+      zIndex:610,width:"min(540px,92vw)",
+      background:C.surface,borderRadius:20,
+      boxShadow:"0 8px 40px rgba(0,0,0,0.18)",
+      maxHeight:"85vh",overflowY:"auto"};
+
+  return <React.Fragment>
+    <div onClick={onClose}
+      style={{position:"fixed",inset:0,zIndex:609,
+        background:"rgba(0,0,0,0.45)",
+        backdropFilter:"blur(2px)",WebkitBackdropFilter:"blur(2px)"}} />
+    <div style={sheetStyle}>
+      {m&&<div style={{width:36,height:4,background:C.border,borderRadius:2,margin:"10px auto 0"}} />}
+
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",gap:12,
+        padding:m?"14px 16px":"18px 24px",
+        background:hasAnyFailed?C.warningBg:hasAnyNew?C.primaryLight:C.surfaceAlt,
+        borderBottom:"1px solid "+(hasAnyFailed?C.warning:hasAnyNew?C.primary:C.border)}}>
+        <span style={{fontSize:m?20:22}}>{hasAnyFailed?"⚠️":hasAnyNew?"✅":"🔄"}</span>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:m?15:16,fontWeight:700,color:C.textPrimary}}>
+            {triggerLabel} · {dateStr} at {timeStr}
+          </div>
+          <div style={{fontSize:m?13:14,color:C.textSecondary,marginTop:3}}>
+            {hasAnyNew
+              ?summary.totalAdded+" new job"+(summary.totalAdded!==1?"s":"")+" imported"
+                +(summary.scored>0?" · "+summary.scored+" scored":"")
+              :"No new jobs found — pipeline is up to date"}
+          </div>
         </div>
-        <div style={{fontSize:m?12:13,color:C.textSecondary,marginTop:2}}>
-          {hasAnyNew
-            ?summary.totalAdded+" new job"+(summary.totalAdded!==1?"s":"")+" imported"
-              +(summary.scored>0?" · "+summary.scored+" scored":"")
-            :"No new jobs found — pipeline is up to date"}
+        <button onClick={onClose}
+          style={{background:"none",border:"none",cursor:"pointer",
+            color:C.textHint,fontSize:24,lineHeight:1,padding:"4px 8px",
+            flexShrink:0,minHeight:40,minWidth:40,
+            display:"flex",alignItems:"center",justifyContent:"center",
+            fontFamily:"inherit"}}>×</button>
+      </div>
+
+      {/* Per-profile breakdown */}
+      {(summary.profiles||[]).length>0&&<div style={{padding:m?"12px 16px":"16px 24px"}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.textHint,
+          letterSpacing:"0.5px",textTransform:"uppercase",marginBottom:10}}>Per profile</div>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {summary.profiles.map(function(p,i){
+            var src=SOURCES[p.source]||SOURCES.manual;
+            return <div key={i} style={{display:"flex",alignItems:"center",gap:10,
+              flexWrap:"wrap",padding:"10px 14px",borderRadius:12,
+              background:p.failed?C.errorBg:p.added>0?C.successBg:C.surfaceAlt}}>
+              <span style={{fontSize:12,fontWeight:600,padding:"2px 8px",borderRadius:6,
+                border:"1px solid "+(p.failed?C.error:p.added>0?C.success:C.border),
+                color:p.failed?C.error:p.added>0?C.success:C.textHint,
+                background:p.failed?C.errorBg:p.added>0?C.successBg:C.surfaceAlt,
+                whiteSpace:"nowrap"}}>
+                {src.label}
+              </span>
+              <span style={{fontSize:m?14:15,fontWeight:600,color:C.textPrimary,
+                flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                {p.name}
+              </span>
+              <span style={{fontSize:m?14:15,fontWeight:700,whiteSpace:"nowrap",flexShrink:0,
+                color:p.failed?C.error:p.added>0?C.success:C.textHint}}>
+                {p.failed?"API error":p.added>0?"+"+p.added+" new":"Up to date"}
+              </span>
+            </div>;
+          })}
+        </div>
+      </div>}
+
+      {/* Footer */}
+      <div style={{padding:m?"12px 16px":"14px 24px",borderTop:"1px solid "+C.border,
+        display:"flex",alignItems:"center",gap:10,background:C.surfaceAlt,flexWrap:"wrap"}}>
+        {summary.scoringFailed>0&&<span style={{fontSize:13,color:C.warning,flex:1}}>
+          ⚠ {summary.scoringFailed} scoring batch{summary.scoringFailed!==1?"es":""} failed — try Rescore all.
+        </span>}
+        <div style={{marginLeft:"auto",display:"flex",gap:10}}>
+          <button onClick={onClear}
+            style={{fontSize:m?14:13,fontWeight:600,padding:m?"10px 18px":"8px 16px",
+              borderRadius:10,border:"1.5px solid "+C.border,background:"transparent",
+              color:C.textSecondary,cursor:"pointer",fontFamily:"inherit",minHeight:m?44:36}}>
+            Clear
+          </button>
+          <button onClick={onClose}
+            style={{fontSize:m?15:14,fontWeight:700,padding:m?"10px 24px":"8px 20px",
+              borderRadius:10,border:"none",background:C.primary,color:"#fff",
+              cursor:"pointer",fontFamily:"inherit",minHeight:m?44:36}}>
+            Close
+          </button>
         </div>
       </div>
-      <button onClick={onDismiss}
-        style={{background:"none",border:"none",cursor:"pointer",
-          color:C.textHint,fontSize:22,lineHeight:1,padding:"4px 8px",
-          fontFamily:"inherit",flexShrink:0,minHeight:36,minWidth:36,
-          display:"flex",alignItems:"center",justifyContent:"center"}}
-        title="Dismiss">×</button>
     </div>
-
-    {/* Per-profile breakdown */}
-    {(summary.profiles||[]).length>0&&<div style={{padding:m?"10px 14px":"12px 20px"}}>
-      <div style={{fontSize:11,fontWeight:700,color:C.textHint,letterSpacing:"0.5px",
-        textTransform:"uppercase",marginBottom:8}}>Per profile</div>
-      <div style={{display:"flex",flexDirection:"column",gap:6}}>
-        {summary.profiles.map(function(p,i){
-          var src=SOURCES[p.source]||SOURCES.manual;
-          return <div key={i} style={{
-            display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",
-            padding:"8px 12px",borderRadius:10,
-            background:p.failed?C.errorBg:p.added>0?C.successBg:C.surfaceAlt,
-          }}>
-            <span style={{fontSize:12,fontWeight:600,
-              color:p.failed?C.error:p.added>0?C.success:C.textHint,
-              background:p.failed?C.errorBg:p.added>0?C.successBg:C.surfaceAlt,
-              padding:"2px 8px",borderRadius:6,border:"1px solid "+(p.failed?C.error:p.added>0?C.success:C.border),
-              whiteSpace:"nowrap"}}>
-              {src.label}
-            </span>
-            <span style={{fontSize:m?13:14,fontWeight:600,color:C.textPrimary,flex:1,minWidth:0,
-              overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-              {p.name}
-            </span>
-            <span style={{fontSize:m?13:14,fontWeight:700,
-              color:p.failed?C.error:p.added>0?C.success:C.textHint,
-              whiteSpace:"nowrap",flexShrink:0}}>
-              {p.failed?"API error":p.added>0?"+"+p.added+" new":"Up to date"}
-            </span>
-          </div>;
-        })}
-      </div>
-    </div>}
-
-    {/* Footer with Got it button */}
-    <div style={{
-      padding:m?"10px 14px":"12px 20px",
-      borderTop:"1px solid "+C.border,
-      display:"flex",alignItems:"center",justifyContent:"flex-end",
-      background:C.surfaceAlt,
-    }}>
-      {summary.scoringFailed>0&&<span style={{fontSize:12,color:C.warning,flex:1}}>
-        ⚠ {summary.scoringFailed} scoring batch{summary.scoringFailed!==1?"es":""} failed — try Rescore all.
-      </span>}
-      <button onClick={onDismiss}
-        style={{fontSize:m?15:14,fontWeight:700,
-          padding:m?"10px 24px":"8px 20px",borderRadius:10,
-          border:"none",background:C.primary,color:"#fff",
-          cursor:"pointer",fontFamily:"inherit",minHeight:m?44:36}}>
-        Got it
-      </button>
-    </div>
-  </div>;
+  </React.Fragment>;
 }
+
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoringStatus,onRunAllProfiles,profiles,cv,anthropicKey,importSummary,onDismissImportSummary}){
   var [fetchStatus,setFetchStatus]=useState(null);
   var [fetchMsg,setFetchMsg]=useState("");
+  var [showSummaryOverlay,setShowSummaryOverlay]=useState(false);
   var canFetch=(profiles||[]).filter(function(p){return p.active;}).length>0;
   var canRescore=hasCv(cv)&&jobs.filter(function(j){return !j.archived;}).length>0;
 
@@ -149,7 +162,7 @@ function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoring
   var closedTotal=rejectedCount+noResponseCount+adRemovedCount+notRelevantCount;
 
   return <div style={{display:"flex",flexDirection:"column",gap:20}}>
-    {importSummary&&<ImportSummaryCard summary={importSummary} onDismiss={onDismissImportSummary} />}
+    {showSummaryOverlay&&<ImportSummaryOverlay summary={importSummary} onClose={function(){setShowSummaryOverlay(false);}} onClear={function(){setShowSummaryOverlay(false);if(onDismissImportSummary)onDismissImportSummary();}} />}
     <div style={{background:"linear-gradient(135deg,"+C.primary+" 0%,"+C.primaryDark+" 100%)",borderRadius:20,padding:"28px",color:"#fff",boxShadow:C.shadowMd}}>
       <div style={{fontSize:22,fontWeight:700,marginBottom:6}}>Good to see you! 👋</div>
       <div style={{fontSize:14,opacity:0.85,marginBottom:20}}>Here's your job search summary for today.</div>
@@ -201,6 +214,16 @@ function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoring
             ?<React.Fragment><span style={{display:"inline-block",width:12,height:12,border:"2px solid currentColor",borderTopColor:"transparent",borderRadius:"50%",animation:"spin 0.7s linear infinite",flexShrink:0}} />Scoring {scoringStatus.done}/{scoringStatus.total}…</React.Fragment>
             :"⟳ Rescore all"}
         </Btn>
+        {importSummary&&<button onClick={function(){setShowSummaryOverlay(true);}}
+          style={{fontSize:13,fontWeight:600,padding:"8px 14px",borderRadius:10,
+            border:"1.5px solid "+C.primary,background:C.primaryLight,
+            color:C.primary,cursor:"pointer",fontFamily:"inherit",
+            display:"inline-flex",alignItems:"center",gap:6,minHeight:36}}>
+          📋 Last import
+          {importSummary.totalAdded>0&&<span style={{fontSize:11,fontWeight:700,
+            background:C.primary,color:"#fff",borderRadius:10,
+            padding:"1px 6px",lineHeight:1.6}}>{importSummary.totalAdded}</span>}
+        </button>}
         {!canFetch&&<span style={{fontSize:12,color:C.textHint}}>No active search profiles.</span>}
         {!canRescore&&!scoringStatus.active&&!hasCv(cv)&&<span style={{fontSize:12,color:C.textHint}}>Add your CV to enable rescoring.</span>}
       </div>
