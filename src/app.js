@@ -10,6 +10,7 @@
 //                   C.background→C.bg; rescoreAll surfaces partial failures.
 // Rev: 2026-06-11 — FIX: rescoreJob uses synchronous ref guard to prevent
 //                   concurrent calls; reads job from jobs closure (not no-op updater).
+// Rev: 2026-06-13 — Added extractedAt field to CV initial state and resetAllData.
 // Rev: 2026-06-12 — importSummary: persistent dismissable card on Dashboard
 //                   showing per-profile results after each run.
 
@@ -18,7 +19,7 @@ function AppShell({user,onSignOut}){
   var [activeTab,setActiveTab]=useState("dashboard");
   var [jobs,setJobsRaw]=useState([]);
   var [profiles,setProfilesRaw]=useState([]);
-  var [cv,setCvRaw]=useState({text:"",roles:"",industries:"",locations:"",salary:"",workType:"Any",tools:[],skills:[],achievements:[],recipients:[],uploaded:false,fileName:""});
+  var [cv,setCvRaw]=useState({text:"",roles:"",industries:"",locations:"",salary:"",workType:"Any",tools:[],skills:[],achievements:[],recipients:[],uploaded:false,fileName:"",extractedAt:""});
   var [afKey,setAfKeyRaw]=useState("");
   var [jsKey,setJsKeyRaw]=useState("");
   var [anthropicKey,setAnthropicKeyRaw]=useState("");
@@ -400,7 +401,7 @@ function AppShell({user,onSignOut}){
     if(!confirm("Are you absolutely sure? This cannot be undone.")) return;
     var uid=user.uid;
     cloudDelete(uid);
-    setJobsRaw([]); setProfilesRaw([]); setCvRaw({text:"",roles:"",industries:"",locations:"",salary:"",workType:"Any",tools:[],skills:[],achievements:[],recipients:[],uploaded:false,fileName:""});
+    setJobsRaw([]); setProfilesRaw([]); setCvRaw({text:"",roles:"",industries:"",locations:"",salary:"",workType:"Any",tools:[],skills:[],achievements:[],recipients:[],uploaded:false,fileName:"",extractedAt:""});
     setAfKeyRaw(""); setJsKeyRaw(""); setAnthropicKeyRaw("");
     setScheduleRaw(DEFAULT_SCHEDULE); setLogRaw([]); setSortRaw("added_desc");
     setAssistantConvRaw([]); setDismissedIdsRaw([]); setSidebarCollapsedRaw(false);
