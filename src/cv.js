@@ -3,8 +3,9 @@
 //   CV_IMPORT contained personal data (tools/skills/achievements) visible
 //   to all users. All new users now start with empty CV sections.
 // Rev: 2026-06-13 — Added "Clear all CV data" button with two-step confirmation.
-// Rev: 2026-06-13 — Added extractedAt timestamp; clarified copy so users understand
-//                   the PDF is not retained — only the extracted text is stored.
+// Rev: 2026-06-13 — Added extractedAt timestamp; clarified copy.
+// Rev: 2026-06-13 — Consolidated CV controls: Clear button moved next to tab buttons;
+//                   status line replaces duplicate Alert; SectionTitle cleaned up.
 
 // ─── InlineListEditor ─────────────────────────────────────────────────────────
 function InlineListEditor({items,onChange,fields,addLabel,sortFields,defaultSort}){
@@ -209,15 +210,44 @@ function CVProfile({cv,setCv}){
   return <div style={{display:"flex",flexDirection:"column",gap:16}}>
 
     <Card>
-      <SectionTitle action={<button onClick={clearAllCv} style={{fontSize:12,fontWeight:600,padding:"6px 12px",borderRadius:8,border:"1.5px solid "+C.error,background:C.errorBg,color:C.error,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>🗑 Clear all CV data</button>}>Your CV <InfoTip>Text is extracted from your PDF and stored for AI match scoring and cover letter generation. The original PDF file is not retained — only the extracted text is saved. Text-based PDFs work best; scanned image PDFs may not extract correctly.</InfoTip></SectionTitle>
-      {hasText&&<Alert type="success">
-        CV text extracted · {cvCharCount.toLocaleString()} characters
+      <SectionTitle>Your CV <InfoTip>Text is extracted from your PDF and stored for AI match scoring and cover letter generation. The original PDF file is not retained — only the extracted text is saved. Text-based PDFs work best; scanned image PDFs may not extract correctly.</InfoTip></SectionTitle>
+
+      {/* Controls row: mode tabs + clear button */}
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,flexWrap:"wrap"}}>
+        {["paste","upload"].map(function(t){
+          return <button key={t} onClick={function(){setTab(t);}}
+            style={{padding:"8px 20px",borderRadius:10,
+              border:"2px solid "+(tab===t?C.primary:C.border),
+              background:tab===t?C.primaryLight:"transparent",
+              color:tab===t?C.primary:C.textSecondary,
+              fontSize:13,fontWeight:tab===t?700:500,cursor:"pointer"}}>
+            {t==="paste"?"Paste text":"Upload PDF"}
+          </button>;
+        })}
+        {hasText&&<button onClick={clearAllCv}
+          style={{marginLeft:"auto",fontSize:12,fontWeight:600,
+            padding:"8px 14px",borderRadius:10,
+            border:"1.5px solid "+C.error,background:C.errorBg,
+            color:C.error,cursor:"pointer",fontFamily:"inherit",
+            whiteSpace:"nowrap"}}>
+          🗑 Clear CV
+        </button>}
+      </div>
+
+      {/* Status line — single source of truth for CV state */}
+      {hasText&&<div style={{fontSize:12,color:C.textSecondary,marginBottom:14,
+        padding:"7px 12px",borderRadius:8,background:C.successBg,
+        border:"1px solid "+C.success,lineHeight:1.6}}>
+        <span style={{fontWeight:600,color:C.success}}>✓ CV text active</span>
+        {" · "}{cvCharCount.toLocaleString()} characters
         {cv.fileName?" · source: "+cv.fileName:" · pasted text"}
         {cv.extractedAt?" · extracted: "+new Date(cv.extractedAt).toLocaleString("sv-SE",{year:"numeric",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}):""}
-      </Alert>}
-      <div style={{display:"flex",gap:8,marginBottom:16,marginTop:hasText?14:0}}>
-        {["paste","upload"].map(function(t){return <button key={t} onClick={function(){setTab(t);}} style={{padding:"8px 20px",borderRadius:10,border:"2px solid "+(tab===t?C.primary:C.border),background:tab===t?C.primaryLight:"transparent",color:tab===t?C.primary:C.textSecondary,fontSize:13,fontWeight:tab===t?700:500,cursor:"pointer"}}>{t==="paste"?"Paste text":"Upload PDF"}</button>;})}
-      </div>
+      </div>}
+      {!hasText&&<div style={{fontSize:12,color:C.textHint,marginBottom:14,
+        padding:"7px 12px",borderRadius:8,background:C.surfaceAlt,
+        border:"1px solid "+C.border}}>
+        No CV text yet — paste your CV or upload a PDF to enable AI scoring and cover letters.
+      </div>}
       {tab==="paste"
         ?<div>
           <Label hint="Paste the full text of your CV — experience, skills, education. Also shows text extracted from an uploaded PDF so you can review it.">CV content</Label>
