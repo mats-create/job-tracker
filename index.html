@@ -1475,6 +1475,7 @@ function MobileBottomNav({activeTab,setActiveTab,user,onSignOut,theme,setTheme})
 // Rev: 2026-06-11 — Silent jobs link now navigates with filter:"silent" for auto-filter.
 // Rev: 2026-06-12 — Import summary card: persistent dismissable card after each run.
 // Rev: 2026-06-12 — Import summary moved to overlay triggered by button; auto-card removed.
+// Rev: 2026-06-15 — Per-profile rows now show fetched/new/skipped counts; source removed.
 
 
 // ─── ImportSummaryOverlay ─────────────────────────────────────────────────────
@@ -1539,26 +1540,33 @@ function ImportSummaryOverlay({summary,onClose,onClear}){
       {(summary.profiles||[]).length>0&&<div style={{padding:m?"12px 16px":"16px 24px"}}>
         <div style={{fontSize:11,fontWeight:700,color:C.textHint,
           letterSpacing:"0.5px",textTransform:"uppercase",marginBottom:10}}>Per profile</div>
-        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
           {summary.profiles.map(function(p,i){
-            var src=SOURCES[p.source]||SOURCES.manual;
+            var isNew=p.added>0;
+            var isFailed=p.failed;
+            var rowBg=isFailed?C.errorBg:isNew?C.successBg:C.surfaceAlt;
+
+            // Build the numbers string
+            var nums=[];
+            if(isFailed){
+              nums.push("API error");
+            } else {
+              if(p.fetched!=null) nums.push(p.fetched+" fetched");
+              if(isNew) nums.push(p.added+" new");
+              else nums.push("0 new");
+              if(p.skipped>0) nums.push(p.skipped+" dismissed");
+            }
+
             return <div key={i} style={{display:"flex",alignItems:"center",gap:10,
-              flexWrap:"wrap",padding:"10px 14px",borderRadius:12,
-              background:p.failed?C.errorBg:p.added>0?C.successBg:C.surfaceAlt}}>
-              <span style={{fontSize:12,fontWeight:600,padding:"2px 8px",borderRadius:6,
-                border:"1px solid "+(p.failed?C.error:p.added>0?C.success:C.border),
-                color:p.failed?C.error:p.added>0?C.success:C.textHint,
-                background:p.failed?C.errorBg:p.added>0?C.successBg:C.surfaceAlt,
-                whiteSpace:"nowrap"}}>
-                {src.label}
-              </span>
-              <span style={{fontSize:m?14:15,fontWeight:600,color:C.textPrimary,
+              padding:"9px 14px",borderRadius:10,background:rowBg}}>
+              <span style={{fontSize:m?13:14,fontWeight:600,color:C.textPrimary,
                 flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                 {p.name}
               </span>
-              <span style={{fontSize:m?14:15,fontWeight:700,whiteSpace:"nowrap",flexShrink:0,
-                color:p.failed?C.error:p.added>0?C.success:C.textHint}}>
-                {p.failed?"API error":p.added>0?"+"+p.added+" new":"Up to date"}
+              <span style={{fontSize:m?12:13,fontWeight:isFailed||isNew?700:400,
+                whiteSpace:"nowrap",flexShrink:0,
+                color:isFailed?C.error:isNew?C.success:C.textHint}}>
+                {nums.join(" · ")}
               </span>
             </div>;
           })}
@@ -4109,6 +4117,7 @@ function Reports({jobs,cv,anthropicKey}){
 // Rev: 2026-06-11 — FIX: rescoreJob uses synchronous ref guard to prevent
 //                   concurrent calls; reads job from jobs closure (not no-op updater).
 // Rev: 2026-06-13 — Added extractedAt field to CV initial state and resetAllData.
+// Rev: 2026-06-15 — importSummary per-profile now includes fetched+skipped counts.
 // Rev: 2026-06-12 — importSummary: persistent dismissable card on Dashboard
 //                   showing per-profile results after each run.
 
@@ -4340,13 +4349,16 @@ function AppShell({user,onSignOut}){
           var data=await out.response.json();
           var ads=src==="af"?(data.hits||[]):(data.data||[]).slice(0,p.limit);
           // Pre-filter (tombstone + location) before setJobs so count is synchronous
+          var fetchedCount=ads.length;
+          var skippedCount=0;
           var preFiltered=ads.filter(function(a){
             var aid=src==="af"?(a.id?a.id.toString():""):(a.job_id?String(a.job_id):"");
-            if(!aid||tombstones.has(aid)) return false;
+            if(!aid) return false;
+            if(tombstones.has(aid)){ skippedCount++; return false; }
             return true;
           }).map(function(a){return src==="af"?mapAfJob(a,p.name):mapJsJob(a,p.name);});
           preFiltered=filterByLocation(preFiltered,p.locations||[]);
-          // countRef[0] = count, countRef[1] = the new jobs array (for auto-scoring)
+          // countRef[0]=added count, countRef[1]=new jobs array (for auto-scoring)
           var countRef=[0,[]];
           setJobs(function(prev){
             var ex=new Set(prev.map(function(j){return j.id?j.id.toString():""; }));
@@ -4360,7 +4372,7 @@ function AppShell({user,onSignOut}){
           });
           totalAdded+=countRef[0];
           if(countRef[1].length>0) newJobsBuffer=newJobsBuffer.concat(countRef[1]);
-          profileResults.push({name:p.name,source:src,added:countRef[0],skipped:0,failed:false});
+          profileResults.push({name:p.name,source:src,fetched:fetchedCount,added:countRef[0],skipped:skippedCount,failed:false});
         }catch(e){ console.error("Profile fetch error:",e); profileResults.push({name:p.name,source:srcs[si]||"af",added:0,skipped:0,failed:true}); }
       }
     }
