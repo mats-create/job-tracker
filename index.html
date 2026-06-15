@@ -3123,9 +3123,14 @@ function CoverLetters({jobs,setJobs,cv,anthropicKey,setActiveTab,pendingCoverLet
 
 
 // assistant.js
-// Rev: 2026-06-04 — Gabbi rename; CV write-back (tools/skills/achievements);
-//                   <<<ACTION>>> protocol with confirmation cards;
-//                   CV edit starter prompt added.
+// Rev: 2026-06-04 — Gabbi rename; CV write-back; <<<ACTION>>> protocol; CV edit starter.
+// Rev: 2026-06-15 — Job status + notes write access (job_update action type);
+//                   CV preferences write access (cv_pref action type);
+//                   Profile edit/toggle/delete (profile_update action type);
+//                   jobsSummaryText adds appliedAt/rejectedAt dates;
+//                   smarter context-aware starter prompts;
+//                   updated intro description and scope;
+//                   softer off-topic redirect tone.
 
 // ─── Job summary for system prompt ───────────────────────────────────────────
 function jobsSummaryText(jobs){
@@ -3150,7 +3155,14 @@ function jobsSummaryText(jobs){
       var loc=j.location?" · "+j.location:"";
       var desc=j.description?(" | desc: "+j.description.replace(/\s+/g," ").slice(0,300)):"";
       var rat=j.rationale?" | AI: "+j.rationale:"";
-      lines.push("• "+score+" — "+j.title+" @ "+j.company+loc+emp+tags+rat+desc);
+      // Include key dates for pipeline analysis
+      var dates=[];
+      if(j.appliedAt) dates.push("applied:"+j.appliedAt.slice(0,10));
+      if(j.rejectedAt) dates.push("rejected:"+j.rejectedAt.slice(0,10));
+      if(j.date) dates.push("added:"+j.date.slice(0,10));
+      var dateStr=dates.length?" | "+dates.join(", "):"";
+      var notes=j.notes?" | notes: "+j.notes.slice(0,100):"";
+      lines.push("• id:"+j.id+" "+score+" — "+j.title+" @ "+j.company+loc+emp+tags+rat+dateStr+notes+desc);
     });
   });
   return "Total jobs: "+jobs.length+" ("+Object.keys(groups).map(function(k){return k+": "+groups[k].length;}).join(", ")+")\n"+lines.join("\n");
@@ -3160,7 +3172,10 @@ function jobsSummaryText(jobs){
 function buildAssistantSystem(cv,profiles,jobs){
   var cvBlock=hasCv(cv)?cvSummaryText(cv):"(No CV loaded yet — ask the user to add their CV in the My CV tab.)";
   var existing=(profiles||[]).length
-    ? profiles.map(function(p){return "- \""+p.name+"\" · query: "+p.query+" · sources: "+(p.sources||[]).join("+")+" · max "+p.limit;}).join("\n")
+    ? profiles.map(function(p){
+        return "- id:"+p.id+" \""+p.name+"\" · query: "+p.query+" · sources: "+(p.sources||[]).join("+")+
+               " · max "+p.limit+" · "+(p.active?"active":"inactive");
+      }).join("\n")
     : "(No profiles saved yet.)";
   var pipelineBlock=jobsSummaryText(jobs||[]);
 
@@ -3168,52 +3183,68 @@ function buildAssistantSystem(cv,profiles,jobs){
     "You are Gabbi, an AI assistant embedded in a personal job-tracking app.",
     "Your personality: warm, direct, practically helpful. You use the user's first name if you know it.",
     "",
-    "STRICT SCOPE — you ONLY discuss:",
+    "You help with these topics:",
     "  (a) How this app's features work.",
-    "  (b) Helping the user design high-quality search profiles.",
+    "  (b) Designing and editing search profiles.",
     "  (c) What the connected APIs (Arbetsförmedlingen, JSearch) can do.",
     "  (d) Analysing the user's job pipeline — patterns, matches, strategic advice.",
-    "  (e) Analysing and improving the user's CV sections (tools, skills, achievements, preferences).",
-    "  (f) Proposing and applying edits to CV tools, skills and achievements when asked.",
+    "  (e) Analysing and improving CV sections (tools, skills, achievements, preferences).",
+    "  (f) Applying edits to CV and job data when the user asks.",
     "",
-    "Off-topic requests: decline in one sentence, redirect to job-search topics.",
+    "For anything outside job search and this app, just say so briefly and offer to help with what you can.",
     "",
     "TONE: friendly, concise, practical. One clarifying question at a time max.",
     "",
-    "═══ CV ANALYSIS & EDITING ═══",
-    "You have full access to the user's CV text, tools, skills and achievements below.",
-    "When asked to analyse the CV you can:",
-    "• Identify gaps — skills or tools common in the user's target roles that are missing.",
-    "• Spot weak entries — vague descriptions, missing years/level/employers.",
-    "• Suggest improvements — better wording, missing achievements, underrepresented strengths.",
-    "• Cross-reference with the job pipeline — highlight skills that appear in job descriptions but are absent from the CV.",
-    "• Process the raw CV text and suggest new tools/skills/achievements not yet in the structured sections.",
-    "",
-    "WHEN THE USER CONFIRMS they want changes applied, emit them as <<<ACTION>>> blocks (see below).",
-    "Always show a brief summary of what you'll change and ask for confirmation BEFORE emitting action blocks.",
+    "═══ WHAT GABBI CAN WRITE ═══",
+    "You can make changes to: CV sections, job status/notes, search profiles.",
+    "Always describe what you plan to change and ask for confirmation BEFORE emitting action blocks.",
     "Never emit action blocks unless the user has explicitly confirmed.",
+    "You may emit multiple action blocks in one reply.",
+    "Do NOT use markdown code fences around action blocks.",
     "",
     "═══ ACTION PROTOCOL ═══",
-    "To add or edit CV entries emit one block per change, exactly like this:",
+    "",
+    "── 1. CV EDITS (tools, skills, achievements) ──",
     "<<<ACTION>>>",
     "{\"type\":\"cv_edit\",\"section\":\"tools\",\"op\":\"add\",\"item\":{\"name\":\"Notion\",\"years\":2,\"level\":\"Intermediate\",\"employers\":\"\"}}",
     "<<</ACTION>>>",
+    "Sections: \"tools\", \"skills\", \"achievements\"",
+    "Ops: add | edit (match by name for tools/skills, description substring for achievements) | delete",
+    "Tool/Skill fields: name (string), years (number), level (Beginner|Intermediate|Advanced|Expert), employers (string)",
+    "Achievement fields: description (string), employer (string), year (string)",
     "",
-    "Supported sections: \"tools\", \"skills\", \"achievements\"",
-    "Supported ops:",
-    "  add    — adds a new entry (item must have all required fields)",
-    "  edit   — edits an existing entry matched by name (for tools/skills) or description substring (for achievements). Include only fields to change plus the match key.",
-    "  delete — deletes by name (tools/skills) or description substring (achievements). Item needs only the match key.",
+    "── 2. CV PREFERENCES ──",
+    "<<<ACTION>>>",
+    "{\"type\":\"cv_pref\",\"field\":\"roles\",\"value\":\"Product Manager, CPO, Product Owner\"}",
+    "<<</ACTION>>>",
+    "Fields: roles | industries | locations | salary | workType (Any|Remote|Hybrid|On-site)",
     "",
-    "Tool/Skill item fields: name (string), years (number), level (one of: "+["Beginner","Intermediate","Advanced","Expert"].join("|")+"), employers (string)",
-    "Achievement item fields: description (string), employer (string), year (string)",
+    "── 3. JOB UPDATES ──",
+    "<<<ACTION>>>",
+    "{\"type\":\"job_update\",\"jobId\":12345,\"op\":\"setStatus\",\"value\":\"Applied\"}",
+    "<<</ACTION>>>",
+    "Ops:",
+    "  setStatus — value must be one of: New, Reviewing, Applied, Interview, Offer, Rejected, No response, Ad removed, Not relevant",
+    "  setNotes  — value is a string (replaces existing notes)",
+    "  appendNote — value is appended to existing notes with a newline separator",
+    "jobId must exactly match the id shown in the pipeline list below.",
+    "When setting status to Applied, also set appliedAt to today's date (ISO format).",
+    "For job updates: if the user says a company or title name rather than an id, find the matching job in the pipeline and use its id.",
     "",
-    "You may emit multiple action blocks in one reply.",
-    "Do NOT use markdown code fences around action blocks.",
-    "Do NOT invent fields beyond those listed above.",
+    "── 4. PROFILE UPDATES ──",
+    "<<<ACTION>>>",
+    "{\"type\":\"profile_update\",\"profileId\":12345,\"op\":\"setActive\",\"value\":false}",
+    "<<</ACTION>>>",
+    "Ops:",
+    "  setActive — value: true or false",
+    "  setQuery  — value: new query string",
+    "  setLimit  — value: integer 5–50",
+    "  delete    — no value needed (removes the profile)",
+    "profileId must exactly match the id shown in the profiles list below.",
+    "Do NOT delete profiles unless the user explicitly asks to delete (not just deactivate).",
     "",
-    "═══ SEARCH PROFILE PROTOCOL ═══",
-    "When proposing a search profile emit:",
+    "═══ SEARCH PROFILE SUGGESTIONS ═══",
+    "When proposing a NEW profile emit:",
     "<<<PROFILE>>>",
     "{\"name\":\"Short name\",\"query\":\"free-text terms\",\"sources\":[\"af\"],\"limit\":15,\"reasoning\":\"One sentence\"}",
     "<<</PROFILE>>>",
@@ -3222,9 +3253,19 @@ function buildAssistantSystem(cv,profiles,jobs){
     "• Arbetsförmedlingen (af) — free Swedish API, single free-text q param, no AND/OR.",
     "• JSearch (jsearch) — RapidAPI, Indeed/LinkedIn/Glassdoor, needs user's RapidAPI key.",
     "",
+    "═══ CV ANALYSIS GUIDANCE ═══",
+    "When asked to analyse the CV:",
+    "• Identify gaps — skills or tools common in the user's target roles that are missing.",
+    "• Spot weak entries — vague descriptions, missing years/level/employers.",
+    "• Suggest improvements — better wording, missing achievements, underrepresented strengths.",
+    "• Cross-reference with the job pipeline — highlight skills that appear in job descriptions but are absent from the CV.",
+    "• Process the raw CV text and suggest new tools/skills/achievements not yet in the structured sections.",
+    "",
     "═══ PIPELINE ANALYSIS GUIDANCE ═══",
     "Use the pipeline to identify patterns, mismatches, response rates, and strategic advice.",
+    "The pipeline includes applied/rejected dates — use these for response rate and time-to-rejection analysis.",
     "Ground all observations in actual data. Be cautious with <10 jobs.",
+    "For silent jobs (Applied 30+ days, no response), proactively suggest marking them as No response.",
     "",
     "═══ USER'S CV & PREFERENCES ═══",
     cvBlock,
@@ -3232,7 +3273,7 @@ function buildAssistantSystem(cv,profiles,jobs){
     "═══ USER'S SEARCH PROFILES ═══",
     existing,
     "",
-    "═══ USER'S JOB PIPELINE (read-only) ═══",
+    "═══ USER'S JOB PIPELINE ═══",
     pipelineBlock,
   ].join("\n");
 }
@@ -3260,33 +3301,10 @@ function extractProfiles(reply){
   return profiles;
 }
 
-// ─── Extract <<<ACTION>>> blocks ──────────────────────────────────────────────
-function extractActions(reply){
-  var re=/<<<ACTION>>>([\s\S]*?)<<<\/ACTION>>>/g;
-  var actions=[];
-  var m;
-  while((m=re.exec(reply))!==null){
-    try{
-      var raw=m[1].trim().replace(/^```(?:json)?\s*/i,"").replace(/\s*```\s*$/,"").trim();
-      var obj=JSON.parse(raw);
-      if(obj&&obj.type==="cv_edit"&&obj.section&&obj.op&&obj.item){
-        actions.push(obj);
-      }
-    }catch(e){}
-  }
-  return actions;
-}
-
 // ─── Parse reply into ordered segments ───────────────────────────────────────
 function parseReplySegments(reply){
-  var allBlockRe=/<<<(?:PROFILE|ACTION)>>>[\s\S]*?<<<\/(?:PROFILE|ACTION)>>>/g;
-  var segments=[];
-  var lastIndex=0;
-  var m;
   var profileRe=/<<<PROFILE>>>([\s\S]*?)<<<\/PROFILE>>>/g;
   var actionRe=/<<<ACTION>>>([\s\S]*?)<<<\/ACTION>>>/g;
-
-  // Collect all block positions with type
   var blocks=[];
   var r;
   profileRe.lastIndex=0;
@@ -3295,6 +3313,8 @@ function parseReplySegments(reply){
   while((r=actionRe.exec(reply))!==null) blocks.push({index:r.index,end:actionRe.lastIndex,type:"action",raw:r[1]});
   blocks.sort(function(a,b){return a.index-b.index;});
 
+  var segments=[];
+  var lastIndex=0;
   blocks.forEach(function(b){
     var before=reply.slice(lastIndex,b.index).trim();
     if(before) segments.push({type:"text",value:before});
@@ -3308,7 +3328,7 @@ function parseReplySegments(reply){
           limit:Math.max(1,Math.min(50,parseInt(obj.limit,10)||15)),
           reasoning:typeof obj.reasoning==="string"?obj.reasoning.slice(0,300):"",
         }});
-      } else if(b.type==="action"&&obj.type==="cv_edit"&&obj.section&&obj.op&&obj.item){
+      } else if(b.type==="action"&&obj.type){
         segments.push({type:"action",value:obj});
       }
     }catch(e){
@@ -3325,9 +3345,17 @@ function parseReplySegments(reply){
 
 // ─── Starter prompts ──────────────────────────────────────────────────────────
 function getStarterPrompts(cv,jobs){
-  var scoredCount=(jobs||[]).filter(function(j){return j.scored!==false&&!j.archived&&typeof j.score==="number";}).length;
-  var interviewCount=(jobs||[]).filter(function(j){return j.status==="Interview"||j.status==="Offer";}).length;
-  var rejectedCount=(jobs||[]).filter(function(j){return j.status==="Rejected";}).length;
+  var activeJobs=(jobs||[]).filter(function(j){return !j.archived;});
+  var scoredCount=activeJobs.filter(function(j){return j.scored!==false&&typeof j.score==="number";}).length;
+  var interviewCount=activeJobs.filter(function(j){return j.status==="Interview"||j.status==="Offer";}).length;
+  var rejectedCount=activeJobs.filter(function(j){return j.status==="Rejected";}).length;
+  var now=Date.now();
+  var silentCount=activeJobs.filter(function(j){
+    if(j.status!=="Applied") return false;
+    var ref=j.appliedAt||j.date;
+    return ref&&(now-new Date(ref).getTime())>30*24*60*60*1000;
+  }).length;
+  var lowestScored=scoredCount>=5?activeJobs.filter(function(j){return j.scored!==false&&typeof j.score==="number";}).sort(function(a,b){return a.score-b.score;})[0]:null;
   var hasStructured=!!(cv&&((cv.tools&&cv.tools.length)||(cv.skills&&cv.skills.length)||(cv.achievements&&cv.achievements.length)));
 
   if(!hasCv(cv)){
@@ -3335,51 +3363,87 @@ function getStarterPrompts(cv,jobs){
       "I'd like help building my first search profile.",
       "What kinds of job searches can this app do?",
       "How should I structure my CV to get better match scores?",
+      "What can you help me with?",
     ];
   }
   var prompts=[];
+  // Context-aware: most urgent/actionable first
+  if(silentCount>0) prompts.push("I have "+silentCount+" application"+(silentCount>1?"s":"")+" with no response for 30+ days — what should I do?");
   if(hasStructured) prompts.push("Review my CV sections and add anything important that's missing.");
   if(scoredCount>=10) prompts.push("Suggest a new profile based on my highest-scoring jobs.");
-  if(hasStructured) prompts.push("What skills or tools am I missing for my target roles?");
+  if(lowestScored) prompts.push("Why is my match score low for "+lowestScored.title+" at "+lowestScored.company+"?");
   if(interviewCount>=2) prompts.push("What do my Interview-stage jobs have in common?");
   else if(interviewCount===1) prompts.push("What stands out about the job I reached Interview for?");
   if(rejectedCount>=3) prompts.push("Are there patterns in the jobs I've been rejected from?");
+  if(activeJobs.length>0) prompts.push("Update a job status or add a note for me.");
+  if(hasStructured) prompts.push("What skills or tools am I missing for my target roles?");
   prompts.push("Help me build a search profile from my CV.");
   return prompts.slice(0,4);
 }
 
-// ─── ActionCard — confirmation UI for cv_edit actions ────────────────────────
+// ─── ActionCard ───────────────────────────────────────────────────────────────
 function ActionCard({action,onAccept,onReject,accepted,rejected}){
   var a=action;
-  var sectionLabel=a.section==="tools"?"Tool":a.section==="skills"?"Skill":"Achievement";
-  var opLabel=a.op==="add"?"Add":a.op==="edit"?"Edit":"Delete";
-  var opColor=a.op==="delete"?C.error:a.op==="edit"?C.warning:C.success;
-  var opBg=a.op==="delete"?C.errorBg:a.op==="edit"?C.warningBg:C.successBg;
 
-  var itemSummary="";
-  if(a.section==="achievements"){
-    itemSummary=(a.item.description||"").slice(0,120)+(a.item.employer?" — "+a.item.employer:"")+(a.item.year?" ("+a.item.year+")":"");
-  } else {
-    itemSummary=(a.item.name||"")+(a.item.years?" · "+a.item.years+" yr":"")+(a.item.level?" · "+a.item.level:"")+(a.item.employers?" · "+a.item.employers:"");
+  // Determine label and colours based on action type
+  var typeLabel="";
+  var opLabel=a.op==="add"?"Add":a.op==="edit"?"Edit":a.op==="delete"?"Delete":
+    a.op==="setStatus"?"Set status":a.op==="setNotes"?"Set notes":
+    a.op==="appendNote"?"Add note":a.op==="setActive"?"Toggle":
+    a.op==="setQuery"?"Edit query":a.op==="setLimit"?"Edit limit":"Update";
+  var opColor=C.success;
+  var opBg=C.successBg;
+
+  if(a.type==="cv_edit"){
+    typeLabel=a.section==="tools"?"CV Tool":a.section==="skills"?"CV Skill":"CV Achievement";
+    opColor=a.op==="delete"?C.error:a.op==="edit"?C.warning:C.success;
+    opBg=a.op==="delete"?C.errorBg:a.op==="edit"?C.warningBg:C.successBg;
+  } else if(a.type==="cv_pref"){
+    typeLabel="CV Preference";
+    opColor=C.info; opBg=C.infoBg;
+  } else if(a.type==="job_update"){
+    typeLabel="Job";
+    opColor=a.op==="setStatus"?C.primary:C.info;
+    opBg=a.op==="setStatus"?C.primaryLight:C.infoBg;
+  } else if(a.type==="profile_update"){
+    typeLabel="Search Profile";
+    opColor=a.op==="delete"?C.error:C.warning;
+    opBg=a.op==="delete"?C.errorBg:C.warningBg;
+  }
+
+  // Build summary text
+  var summary="";
+  if(a.type==="cv_edit"){
+    if(a.section==="achievements"){
+      summary=(a.item.description||"").slice(0,120)+(a.item.employer?" — "+a.item.employer:"")+(a.item.year?" ("+a.item.year+")":"");
+    } else {
+      summary=(a.item.name||"")+(a.item.years?" · "+a.item.years+" yr":"")+(a.item.level?" · "+a.item.level:"")+(a.item.employers?" · "+a.item.employers:"");
+    }
+  } else if(a.type==="cv_pref"){
+    summary=(a.field||"")+" → "+(typeof a.value==="string"?a.value.slice(0,100):String(a.value));
+  } else if(a.type==="job_update"){
+    summary="Job #"+a.jobId+" → "+(typeof a.value==="string"?a.value.slice(0,120):String(a.value||""));
+  } else if(a.type==="profile_update"){
+    summary="Profile #"+a.profileId+" → "+(a.op==="delete"?"DELETE":typeof a.value!=="undefined"?String(a.value).slice(0,80):"");
   }
 
   if(accepted){
     return <div style={{border:"1.5px solid "+C.success,borderRadius:12,padding:"12px 14px",background:C.successBg,display:"flex",alignItems:"center",gap:10}}>
       <span style={{fontSize:16}}>✓</span>
-      <span style={{fontSize:13,color:C.success,fontWeight:600}}>{opLabel} {sectionLabel}: {(a.item.name||a.item.description||"").slice(0,60)} — applied</span>
+      <span style={{fontSize:13,color:C.success,fontWeight:600}}>{opLabel} {typeLabel}: {summary.slice(0,80)} — applied</span>
     </div>;
   }
   if(rejected){
     return <div style={{border:"1.5px solid "+C.border,borderRadius:12,padding:"12px 14px",background:C.surfaceAlt,display:"flex",alignItems:"center",gap:10,opacity:0.5}}>
-      <span style={{fontSize:13,color:C.textHint}}>Skipped: {opLabel} {sectionLabel}</span>
+      <span style={{fontSize:13,color:C.textHint}}>Skipped: {opLabel} {typeLabel}</span>
     </div>;
   }
 
   return <div style={{border:"2px solid "+opColor,borderRadius:12,padding:"14px 16px",background:opBg}}>
-    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-      <span style={{fontSize:11,fontWeight:700,color:opColor,letterSpacing:"0.5px"}}>{opLabel.toUpperCase()} {sectionLabel.toUpperCase()}</span>
+    <div style={{fontSize:11,fontWeight:700,color:opColor,letterSpacing:"0.5px",marginBottom:8}}>
+      {opLabel.toUpperCase()} {typeLabel.toUpperCase()}
     </div>
-    <div style={{fontSize:14,fontWeight:600,color:C.textPrimary,marginBottom:10,lineHeight:1.45}}>{itemSummary||"(no details)"}</div>
+    <div style={{fontSize:14,fontWeight:600,color:C.textPrimary,marginBottom:10,lineHeight:1.45}}>{summary||"(no details)"}</div>
     <div style={{display:"flex",gap:8}}>
       <Btn variant="primary" onClick={onAccept} style={{fontSize:13,padding:"7px 16px"}}>✓ Apply</Btn>
       <Btn onClick={onReject} style={{fontSize:13,padding:"7px 14px"}}>Skip</Btn>
@@ -3406,12 +3470,11 @@ function ProfileCard({profile,alreadySaved,justSaved,onSave,onRun}){
 }
 
 // ─── Gabbi (ProfileAssistant) ─────────────────────────────────────────────────
-function ProfileAssistant({cv,setCv,profiles,setProfiles,anthropicKey,conversation,setConversation,setActiveTab,setPendingProfileRun,jobs}){
+function ProfileAssistant({cv,setCv,jobs,setJobs,profiles,setProfiles,anthropicKey,conversation,setConversation,setActiveTab,setPendingProfileRun}){
   var [input,setInput]=useState("");
   var [loading,setLoading]=useState(false);
   var [error,setError]=useState("");
   var [justSavedId,setJustSavedId]=useState(null);
-  // Track accept/reject state per action: key = msgIdx+":"+actionIdx
   var [actionStates,setActionStates]=useState({});
   var scrollRef=useRef(null);
 
@@ -3454,7 +3517,7 @@ function ProfileAssistant({cv,setCv,profiles,setProfiles,anthropicKey,conversati
     setActionStates({});
   }
 
-  // ── Profile save/run ──────────────────────────────────────────────────────
+  // ── Profile save/run ─────────────────────────────────────────────────────
   function saveProfile(prof){
     var newProfile={id:Date.now(),name:prof.name,query:prof.query,limit:prof.limit,sources:prof.sources,active:true};
     setProfiles(function(prev){return prev.concat([newProfile]);});
@@ -3465,67 +3528,100 @@ function ProfileAssistant({cv,setCv,profiles,setProfiles,anthropicKey,conversati
     setActiveTab("profiles");
   }
 
-  // ── CV action apply ───────────────────────────────────────────────────────
+  // ── Apply an action block ─────────────────────────────────────────────────
   function applyAction(action){
-    var sec=action.section; // "tools"|"skills"|"achievements"
-    var op=action.op;
-    var item=action.item;
-
-    setCv(function(prev){
-      var list=(prev[sec]||[]).slice();
-
-      if(sec==="achievements"){
-        if(op==="add"){
-          list=list.concat([Object.assign({id:Date.now()},item)]);
-        } else if(op==="edit"){
-          var matchDesc=(item.description||"").toLowerCase().slice(0,60);
-          list=list.map(function(x){
-            if(x.description&&x.description.toLowerCase().includes(matchDesc)){
-              return Object.assign({},x,item);
-            }
-            return x;
-          });
-        } else if(op==="delete"){
-          var matchDesc2=(item.description||"").toLowerCase().slice(0,60);
-          list=list.filter(function(x){
-            return !(x.description&&x.description.toLowerCase().includes(matchDesc2));
-          });
+    // ── cv_edit ──────────────────────────────────────────────────────────────
+    if(action.type==="cv_edit"){
+      var sec=action.section;
+      var op=action.op;
+      var item=action.item;
+      setCv(function(prev){
+        var list=(prev[sec]||[]).slice();
+        if(sec==="achievements"){
+          if(op==="add"){
+            list=list.concat([Object.assign({id:Date.now()},item)]);
+          } else if(op==="edit"){
+            var md=(item.description||"").toLowerCase().slice(0,60);
+            list=list.map(function(x){return x.description&&x.description.toLowerCase().includes(md)?Object.assign({},x,item):x;});
+          } else if(op==="delete"){
+            var md2=(item.description||"").toLowerCase().slice(0,60);
+            list=list.filter(function(x){return !(x.description&&x.description.toLowerCase().includes(md2));});
+          }
+        } else {
+          if(op==="add"){
+            var exists=list.some(function(x){return x.name&&x.name.toLowerCase()===(item.name||"").toLowerCase();});
+            if(!exists) list=list.concat([Object.assign({id:Date.now()},item)]);
+          } else if(op==="edit"){
+            list=list.map(function(x){return x.name&&x.name.toLowerCase()===(item.name||"").toLowerCase()?Object.assign({},x,item):x;});
+          } else if(op==="delete"){
+            list=list.filter(function(x){return !(x.name&&x.name.toLowerCase()===(item.name||"").toLowerCase());});
+          }
         }
+        return Object.assign({},prev,{[sec]:list});
+      });
+    }
+
+    // ── cv_pref ──────────────────────────────────────────────────────────────
+    else if(action.type==="cv_pref"){
+      var allowed=["roles","industries","locations","salary","workType"];
+      if(allowed.indexOf(action.field)===-1) return;
+      setCv(function(prev){
+        var patch={};
+        patch[action.field]=action.value;
+        return Object.assign({},prev,patch);
+      });
+    }
+
+    // ── job_update ───────────────────────────────────────────────────────────
+    else if(action.type==="job_update"&&setJobs){
+      var jid=String(action.jobId);
+      setJobs(function(prev){
+        return prev.map(function(j){
+          if(String(j.id)!==jid) return j;
+          var patch={};
+          if(action.op==="setStatus"){
+            patch.status=action.value;
+            if(action.value==="Applied"&&!j.appliedAt) patch.appliedAt=new Date().toISOString();
+            if(action.value==="Rejected"&&!j.rejectedAt) patch.rejectedAt=new Date().toISOString();
+          } else if(action.op==="setNotes"){
+            patch.notes=String(action.value||"");
+          } else if(action.op==="appendNote"){
+            patch.notes=((j.notes||"").trim()+(j.notes?"\n":"")+String(action.value||"")).trim();
+          }
+          return Object.assign({},j,patch);
+        });
+      });
+    }
+
+    // ── profile_update ───────────────────────────────────────────────────────
+    else if(action.type==="profile_update"&&setProfiles){
+      var pid=action.profileId;
+      if(action.op==="delete"){
+        setProfiles(function(prev){return prev.filter(function(p){return p.id!==pid;});});
       } else {
-        // tools or skills — match by name
-        if(op==="add"){
-          // avoid exact duplicates
-          var exists=list.some(function(x){return x.name&&x.name.toLowerCase()===(item.name||"").toLowerCase();});
-          if(!exists) list=list.concat([Object.assign({id:Date.now()},item)]);
-        } else if(op==="edit"){
-          list=list.map(function(x){
-            if(x.name&&x.name.toLowerCase()===(item.name||"").toLowerCase()){
-              return Object.assign({},x,item);
-            }
-            return x;
+        setProfiles(function(prev){
+          return prev.map(function(p){
+            if(p.id!==pid) return p;
+            var patch={};
+            if(action.op==="setActive") patch.active=!!action.value;
+            else if(action.op==="setQuery") patch.query=String(action.value||"").slice(0,300);
+            else if(action.op==="setLimit") patch.limit=Math.max(1,Math.min(50,parseInt(action.value,10)||15));
+            return Object.assign({},p,patch);
           });
-        } else if(op==="delete"){
-          list=list.filter(function(x){
-            return !(x.name&&x.name.toLowerCase()===(item.name||"").toLowerCase());
-          });
-        }
+        });
       }
-
-      return Object.assign({},prev,{[sec]:list});
-    });
+    }
   }
 
   function handleAccept(msgIdx,actionIdx,action){
-    var key=msgIdx+":"+actionIdx;
     applyAction(action);
-    setActionStates(function(prev){return Object.assign({},prev,{[key]:"accepted"});});
+    setActionStates(function(prev){return Object.assign({},prev,{[msgIdx+":"+actionIdx]:"accepted"});});
   }
   function handleReject(msgIdx,actionIdx){
-    var key=msgIdx+":"+actionIdx;
-    setActionStates(function(prev){return Object.assign({},prev,{[key]:"rejected"});});
+    setActionStates(function(prev){return Object.assign({},prev,{[msgIdx+":"+actionIdx]:"rejected"});});
   }
 
-  // ── Markdown renderer ─────────────────────────────────────────────────────
+  // ── Markdown renderer ────────────────────────────────────────────────────
   function renderMarkdown(text){
     if(!text) return null;
     var paragraphs=text.split(/\n{2,}/);
@@ -3560,11 +3656,10 @@ function ProfileAssistant({cv,setCv,profiles,setProfiles,anthropicKey,conversati
     return result;
   }
 
-  // ── Render one assistant message ──────────────────────────────────────────
+  // ── Render one assistant message ─────────────────────────────────────────
   function renderAssistantMessage(reply,msgIdx){
     var segments=parseReplySegments(reply);
     var actionCounter=0;
-
     return segments.map(function(seg,i){
       if(seg.type==="text"){
         return <div key={i} style={{lineHeight:1.55,fontSize:14,color:C.textPrimary}}>{renderMarkdown(seg.value)}</div>;
@@ -3598,7 +3693,9 @@ function ProfileAssistant({cv,setCv,profiles,setProfiles,anthropicKey,conversati
   return <div style={{display:"flex",flexDirection:"column",gap:16}}>
     <Card>
       <SectionTitle action={conversation.length>0?<Btn onClick={clearConversation} style={{fontSize:12,padding:"6px 12px"}}>Clear</Btn>:null}>Gabbi — AI Assistant</SectionTitle>
-      <div style={{fontSize:13,color:C.textHint,marginBottom:14,lineHeight:1.6}}>Gabbi helps you design search profiles, analyse your pipeline, and improve your CV sections. She can add, edit or delete tools, skills and achievements after you confirm.</div>
+      <div style={{fontSize:13,color:C.textHint,marginBottom:14,lineHeight:1.6}}>
+        Gabbi can analyse your CV, discuss your pipeline, manage your search profiles, and update job statuses or notes — all after you confirm.
+      </div>
       {!anthropicKey&&<Alert type="warning">Add your Anthropic API key in Search Profiles → API keys to use Gabbi.</Alert>}
       {!hasCv(cv)&&anthropicKey&&<Alert type="info">Tip: add your CV in My CV so Gabbi can tailor suggestions to your background.</Alert>}
       {hasCv(cv)&&!hasStructured&&anthropicKey&&<Alert type="info">Tip: populate the Tools, Skills and Achievements sections in My CV for richer analysis.</Alert>}
@@ -3608,12 +3705,12 @@ function ProfileAssistant({cv,setCv,profiles,setProfiles,anthropicKey,conversati
       <div ref={scrollRef} style={{maxHeight:"60vh",overflowY:"auto",display:"flex",flexDirection:"column",gap:14,paddingRight:4}}>
         {conversation.length===0&&<div>
           <div style={{fontSize:14,color:C.textSecondary,marginBottom:12,lineHeight:1.6}}>
-            Hi! I'm Gabbi. I can analyse your CV, suggest improvements, help you build search profiles, or discuss your job pipeline. What would you like to work on?
+            Hi! I'm Gabbi. I can analyse your CV, suggest improvements, help you build search profiles, discuss your pipeline, or update job statuses and notes. What would you like to work on?
           </div>
           <div style={{fontSize:12,color:C.textHint,fontWeight:600,letterSpacing:"0.5px",marginBottom:8}}>TRY ONE OF THESE:</div>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             {starters.map(function(s,i){
-              var isSmart=s.indexOf("highest-scoring")>=0||s.indexOf("Analyse")>=0||s.indexOf("missing")>=0;
+              var isSmart=s.indexOf("30+ days")>=0||s.indexOf("Review my CV")>=0||s.indexOf("highest-scoring")>=0||s.indexOf("missing")>=0;
               return <button key={i} onClick={function(){send(s);}} disabled={loading||!anthropicKey}
                 style={{textAlign:"left",padding:"12px 14px",borderRadius:10,
                   border:"1.5px solid "+(isSmart?C.primary:C.border),
@@ -3644,7 +3741,7 @@ function ProfileAssistant({cv,setCv,profiles,setProfiles,anthropicKey,conversati
         <Inp value={input} onChange={function(e){setInput(e.target.value);}}
           onKeyDown={function(e){if(e.key==="Enter"&&!e.shiftKey&&input.trim()&&!loading&&anthropicKey){e.preventDefault();send();}}}
           enterKeyHint="send"
-          placeholder="Ask Gabbi anything about your search or CV…"
+          placeholder="Ask Gabbi anything about your search, CV or pipeline…"
           style={{flex:1}} />
         <Btn variant="primary" onClick={function(){send();}} disabled={loading||!input.trim()||!anthropicKey} style={{padding:"10px 20px"}}>Send</Btn>
       </div>
@@ -4105,6 +4202,7 @@ function Reports({jobs,cv,anthropicKey}){
 
 
 // app.js
+// Rev: 2026-06-15 — Pass setJobs to ProfileAssistant for Gabbi job write access.
 // Rev: 2026-06-04 — Pass setCv to ProfileAssistant (Gabbi CV write-back).
 // Rev: 2026-06-10 — BUG2: fix added counter in runAllProfiles (pre-filter before setJobs);
 //                   BUG8: applyScores uses String() comparison for id matching.
@@ -4530,7 +4628,7 @@ function AppShell({user,onSignOut}){
       {key==="dashboard"&&<Dashboard jobs={jobs} schedule={schedule} setActiveTab={setActiveTab} navigateToJobs={navigateToJobs} rescoreAll={rescoreAll} scoringStatus={scoringStatus} onRunAllProfiles={runAllProfiles} profiles={profiles} cv={cv} anthropicKey={anthropicKey} importSummary={importSummary} onDismissImportSummary={function(){setImportSummary(null);}} />}
       {key==="jobs"&&<Jobs jobs={jobs} setJobs={setJobs} rescoreAll={rescoreAll} rescoreJob={rescoreJob} scoringStatus={scoringStatus} scoringError={scoringError} cv={cv} sort={sort} setSort={setSort} dismissJob={dismissJob} tombstoneIds={tombstoneIds} startCoverLetter={startCoverLetter} pendingJobsView={pendingJobsView} setPendingJobsView={setPendingJobsView} />}
       {key==="profiles"&&<SearchProfiles profiles={profiles} setProfiles={setProfiles} setJobs={setJobs} afKey={afKey} setAfKey={setAfKey} jsKey={jsKey} setJsKey={setJsKey} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} pendingProfileRun={pendingProfileRun} setPendingProfileRun={setPendingProfileRun} dismissedIds={dismissedIds} />}
-      {key==="assistant"&&<ProfileAssistant cv={cv} setCv={setCv} profiles={profiles} setProfiles={setProfiles} anthropicKey={anthropicKey} conversation={assistantConv} setConversation={setAssistantConv} setActiveTab={setActiveTab} setPendingProfileRun={setPendingProfileRun} jobs={jobs} />}
+      {key==="assistant"&&<ProfileAssistant cv={cv} setCv={setCv} jobs={jobs} setJobs={setJobs} profiles={profiles} setProfiles={setProfiles} anthropicKey={anthropicKey} conversation={assistantConv} setConversation={setAssistantConv} setActiveTab={setActiveTab} setPendingProfileRun={setPendingProfileRun} />}
       {key==="cv"&&<CVProfile cv={cv} setCv={setCv} />}
       {key==="scheduler"&&<Scheduler schedule={schedule} setSchedule={setSchedule} profiles={profiles} log={log} resetAllData={resetAllData} exportData={exportData} importData={importData} validateImport={validateImport} dismissedIds={dismissedIds} clearDismissedIds={clearDismissedIds} />}
       {key==="covers"&&<CoverLetters jobs={jobs} setJobs={setJobs} cv={cv} anthropicKey={anthropicKey} setActiveTab={setActiveTab} pendingCoverLetterJob={pendingCoverLetterJob} setPendingCoverLetterJob={setPendingCoverLetterJob} />}
