@@ -1,131 +1,164 @@
-# Job Tracker
+# 🌿 Job Tracker
 
-A personal AI-powered job search assistant. Searches Swedish and international job boards, scores matches against your CV using Claude AI, tracks applications through a full pipeline, and helps draft cover letters. Built as a single HTML file with cloud sync across devices.
+A personal, AI-powered job search application. Track applications, score job matches against your CV, generate cover letters, and get coaching from Gabbi — your built-in AI assistant.
 
-**Live app:** https://mats-create.github.io/job-tracker/
-
----
-
-## What it does
-
-- **Job ingestion** from Arbetsförmedlingen (Sweden) and JSearch (Indeed/LinkedIn/Glassdoor via RapidAPI)
-- **AI match scoring** of every job against your CV, tools, skills and achievements — with a one-line rationale
-- **Search profiles** — saved queries that run on a schedule or on demand
-- **Profile Assistant** — scoped AI chatbot that helps build high-quality search profiles; analyses your highest-scoring jobs to suggest new profiles
-- **Full pipeline tracking** — New → Reviewing → Applied → Interview → Offer → Rejected / No response
-- **Timestamps** on key transitions: `appliedAt`, `rejectedAt` — used in reports for response-rate and funnel analysis
-- **Cover letter generation** — grounded in your CV only, no invented skills or experience
-- **Structured CV** — tools, skills and achievements sections feed precise signal into all AI features
-- **Reports** — AI prose reports + tabular activity listings with CSV export
-- **Cloud sync** — sign in with Google, data syncs across all devices automatically
-- **Dark mode** — respects OS preference on first visit, toggle in sidebar / More menu
-- **Mobile-first** — bottom tab bar on mobile, left sidebar on desktop
+Hosted on GitHub Pages · Data stored privately in Firebase · Built with React + Babel (no build step required)
 
 ---
 
-## Tech stack
+## Features
 
-- React 18 + Babel standalone (CDN — no build step)
-- Firebase Auth (Google Sign-In) + Firestore (cloud database, `europe-west3`)
-- Anthropic Claude API — you supply your own key
-- pdf.js for CV PDF text extraction
-- GitHub Pages hosting
+### 📋 My Jobs
+- Import jobs automatically from Arbetsförmedlingen and JSearch (Indeed, LinkedIn, Glassdoor)
+- Add jobs manually
+- Track status through the full pipeline: New → Reviewing → Applied → Interview → Offer → Closed
+- Milestone date tracking: applied, interview, offer, rejected, no response — all auto-captured and editable
+- AI match scoring against your CV with rationale
+- Cover letter generation per job
+- Notes, deadline tracking, silent job detection (30+ days no response)
+- Bulk status changes, archive, dismiss
+
+### 🔍 Search Profiles
+- Save named search queries per job board
+- Auto-fetch on a schedule or manually
+- Location filtering, result limits, multi-source support
+- Per-run import summary with fetched/new/skipped counts
+
+### 💬 Gabbi — AI Assistant
+- Analyses your CV and pipeline, identifies gaps and patterns
+- Suggests and saves search profiles
+- Updates job statuses, adds notes, edits CV sections — all with confirmation
+- Coaches on recruitment assessments: personality tests (Big Five, DISC, Alva Labs, Hogan), cognitive tests (Matrigma, SHL, Watson-Glaser), situational judgement tests
+- Context-aware starter prompts based on your live pipeline data
+- Powered by Claude (Anthropic)
+
+### 📄 My CV
+- Upload PDF or paste text — extracted text stored, original file not retained
+- Structured sections: tools & software, skills & competencies, achievements
+- Job preferences: target roles, industries, locations, salary, work type
+- Email recipients for sending cover letters and reports
+- Clear all CV data with two-step confirmation
+
+### ✉️ Cover Letters
+- AI-generated, grounded strictly in your CV — no invented claims
+- Language auto-detection (Swedish/English)
+- Tone selection
+- Send via email, export as PDF or text
+
+### 📈 Reports
+- Weekly digest, top matches, status report, monthly summary
+- AI-generated with funnel statistics and response rate analysis
+- Activity listing with CSV export
+
+### ⏱ Scheduler
+- Automatic job fetching on configurable days, times, and intervals
+- Run log with 30-day history
+- Backup and restore (JSON export/import)
+- Reset all data
+
+### 📊 Dashboard
+- Pipeline overview: New, Reviewing, Applied, Interview, Offer
+- Closed outcomes: Rejected, No response, Ad removed, Not relevant
+- Hero tiles: Jobs tracked (all statuses excl. archived), New to review, Applications sent (Applied · Interview · Offer), Best match
+- Import summary overlay with per-profile results
+- Silent jobs alert for applications with no response after 30 days
 
 ---
 
-## Setup notes (for future me)
+## Tech Stack
 
-**Firebase project:** `job-tracker-mph` · Region: `europe-west3` (Frankfurt — permanent, cannot change)
-
-**Authorized domain:** `mats-create.github.io` whitelisted in Firebase Auth → Settings → Authorised domains
-
-**Firestore security rules:** each user can only read/write `users/{their-uid}` — locked per user
-
-**API keys** stored in Firestore (synced across devices) and localStorage (offline cache):
-- Anthropic: required for all AI features (scoring, cover letters, reports, assistant)
-- JSearch/RapidAPI: required for international job search (optional — AF works without it)
-- Arbetsförmedlingen: no key needed, free API
-
-**Theme:** device-local (not synced) — each device keeps its own light/dark preference
-
-**CV import:** pre-analysed into 22 tools, 20 skills and 11 achievements. One-click import button appears on My CV tab when those sections are empty.
-
----
-
-## Navigation
-
-| Platform | Pattern |
+| Layer | Technology |
 |---|---|
-| Desktop | Left sidebar — collapsed/expanded with `[` shortcut |
-| Mobile | Bottom tab bar with SVG icons |
-
-**Primary tabs:** Dashboard · My Jobs · Search · Assistant · My CV
-
-**Secondary (More menu on mobile / same sidebar on desktop):** Schedule · Letters · Reports
+| Frontend | React 18 + Babel standalone (CDN) |
+| Auth | Firebase Authentication (Google Sign-In) |
+| Database | Firebase Firestore (europe-west3) |
+| AI | Anthropic Claude API (claude-sonnet-4-6) |
+| Job sources | Arbetsförmedlingen JobSearch API · JSearch via RapidAPI |
+| PDF extraction | pdf.js |
+| Hosting | GitHub Pages |
+| Build | Python build.py + GitHub Actions |
 
 ---
 
-## Application pipeline
+## Architecture
+
+The app is a single-file React application (`index.html`) assembled from modular source files in `src/`. A GitHub Action rebuilds `index.html` automatically on every push to `src/`.
 
 ```
-New → Reviewing → Applied → Interview → Offer
-                     ↓           ↓
-                  Rejected    Rejected
-                     ↓
-               No response
+src/
+  shell.html        HTML shell, CDN scripts, Firebase init, CSS
+  constants.js      Theme, status colours, tab definitions, constants
+  utils.js          Cloud sync, API calls, scoring, filtering, mapping
+  components.js     Shared UI components (Card, Btn, Sidebar, MobileBottomNav…)
+  dashboard.js      Dashboard with pipeline overview and import summary
+  jobs.js           Job list, job row, filters, bulk actions
+  profiles.js       Search profiles, API keys
+  cv.js             CV upload/paste, structured sections, preferences
+  covers.js         Cover letter generation and delivery
+  assistant.js      Gabbi AI assistant
+  scheduler.js      Scheduler, reports, activity listings
+  app.js            App shell, state, cloud sync, auth
+build.py            Assembles src/ into index.html
+.github/workflows/
+  build.yml         GitHub Action: build on push → deploy via Pages
 ```
 
-Closed outcomes shown separately below the active pipeline strip on the Dashboard. Dashboard tiles are deep-links to filtered job views.
+---
+
+## Data Privacy
+
+- All data is stored in **your personal Firestore document**, keyed by your Google user ID
+- No data is shared between users
+- API keys (Anthropic, RapidAPI) are stored encrypted in your Firestore document, never shared
+- Uploaded PDF files are **not stored** — only the extracted text is saved
+- The original PDF is discarded immediately after text extraction
 
 ---
 
-## Deploying updates
+## API Keys Required
 
-1. Replace `index.html` in this repo with the new version (drag-drop in GitHub web UI)
-2. Commit with a short description
-3. GitHub Pages auto-redeploys in ~30 seconds
+| Key | Purpose | Where to get it |
+|---|---|---|
+| Anthropic API key | AI scoring, cover letters, Gabbi, reports | console.anthropic.com |
+| RapidAPI key | JSearch (Indeed, LinkedIn, Glassdoor) | rapidapi.com → JSearch by OpenWeb Ninja |
+| AF API key | Arbetsförmedlingen | Optional — the API is open and free without a key |
 
----
-
-## Backup
-
-Scheduler → Backup & restore → Export JSON. Cloud sync via Firestore is the primary backup; JSON export is the manual escape hatch if migrating away from cloud.
+Add keys in the app under **Search Profiles → API keys**.
 
 ---
 
-## What is intentionally not built
+## Setup
 
-| Feature | Reason |
-|---|---|
-| Apple Sign-In | Requires $99/yr Apple Developer account |
-| True background scheduling | Needs server-side code; scheduler runs while tab is open |
-| More job board APIs | Current coverage sufficient; more = more noise |
-| Translations | Deprioritized |
-| Collaboration / sharing | Single-user tool by design |
+See the full setup guide in `docs/` for step-by-step instructions in English and Swedish.
 
----
+### Quick start
 
-## Backlog
-
-| Feature | Notes |
-|---|---|
-| Demo mode | Fake data, no auth required, "Try demo" on sign-in screen |
-| Invite-only access | Firestore email allowlist, managed in Firebase Console |
-| LinkedIn paste input | Third CV input tab — paste profile text from LinkedIn |
-| Consulting/freelance sibling app | Separate repo, same Firebase, Upwork API |
+1. Fork or clone this repository
+2. Enable GitHub Pages (Settings → Pages → Deploy from branch: `main`, folder: `/root`)
+3. Push any change to `src/` — the Action will build and deploy automatically
+4. Open your Pages URL and sign in with Google
+5. Add your API keys under Search Profiles → API keys
+6. Add your CV under My CV
+7. Create search profiles and run your first fetch
 
 ---
 
-## Privacy
+## Build Locally
 
-- Data stored in your personal Firestore document, accessible only when signed in as you
-- API keys stored alongside your data under the same access controls
-- Anthropic processes prompts when AI features are triggered
-- No analytics, no tracking, no third-party cookies
-- Network calls: Firebase, Anthropic API, AF API, JSearch API, React/Babel/pdf.js CDNs
+```bash
+python3 build.py
+```
+
+Output: `index.html` — open directly in a browser or deploy to any static host.
+
+---
+
+## Contributing
+
+This is a personal project. Issues and suggestions welcome via GitHub Issues.
 
 ---
 
 ## License
 
-Personal project. No license granted for reuse.
+MIT
