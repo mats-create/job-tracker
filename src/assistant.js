@@ -1,9 +1,12 @@
 // assistant.js
 // Rev: 2026-06-04 — Gabbi rename; CV write-back; <<<ACTION>>> protocol; CV edit starter.
 // Rev: 2026-06-15 — Job status + notes write access (job_update action type);
+//                   interviewAt/offerAt/noResponseAt auto-set in job_update setStatus;
 //                   CV preferences write access (cv_pref action type);
 //                   Profile edit/toggle/delete (profile_update action type);
 //                   jobsSummaryText adds appliedAt/rejectedAt dates;
+// Rev: 2026-06-15 — Gabbi fully date-aware: interviewAt/offerAt/noResponseAt in pipeline
+//                   summary; setDate op for manual date correction; analysis guidance.
 //                   smarter context-aware starter prompts;
 //                   updated intro description and scope;
 //                   softer off-topic redirect tone.
@@ -33,9 +36,12 @@ function jobsSummaryText(jobs){
       var rat=j.rationale?" | AI: "+j.rationale:"";
       // Include key dates for pipeline analysis
       var dates=[];
-      if(j.appliedAt) dates.push("applied:"+j.appliedAt.slice(0,10));
-      if(j.rejectedAt) dates.push("rejected:"+j.rejectedAt.slice(0,10));
       if(j.date) dates.push("added:"+j.date.slice(0,10));
+      if(j.appliedAt) dates.push("applied:"+j.appliedAt.slice(0,10));
+      if(j.interviewAt) dates.push("interview:"+j.interviewAt.slice(0,10));
+      if(j.offerAt) dates.push("offer:"+j.offerAt.slice(0,10));
+      if(j.rejectedAt) dates.push("rejected:"+j.rejectedAt.slice(0,10));
+      if(j.noResponseAt) dates.push("no-response:"+j.noResponseAt.slice(0,10));
       var dateStr=dates.length?" | "+dates.join(", "):"";
       var notes=j.notes?" | notes: "+j.notes.slice(0,100):"";
       lines.push("• id:"+j.id+" "+score+" — "+j.title+" @ "+j.company+loc+emp+tags+rat+dateStr+notes+desc);
@@ -103,8 +109,9 @@ function buildAssistantSystem(cv,profiles,jobs){
     "  setStatus — value must be one of: New, Reviewing, Applied, Interview, Offer, Rejected, No response, Ad removed, Not relevant",
     "  setNotes  — value is a string (replaces existing notes)",
     "  appendNote — value is appended to existing notes with a newline separator",
+    "  setDate   — manually set or correct a milestone date. field must be one of: appliedAt, interviewAt, offerAt, rejectedAt, noResponseAt. value must be an ISO date string (YYYY-MM-DD) or null to clear.",
     "jobId must exactly match the id shown in the pipeline list below.",
-    "When setting status to Applied, also set appliedAt to today's date (ISO format).",
+    "When setting status, the app auto-sets the corresponding date automatically. Use setDate only when the user wants to correct a date that was set wrong.",
     "For job updates: if the user says a company or title name rather than an id, find the matching job in the pipeline and use its id.",
     "",
     "── 4. PROFILE UPDATES ──",
@@ -139,7 +146,13 @@ function buildAssistantSystem(cv,profiles,jobs){
     "",
     "═══ PIPELINE ANALYSIS GUIDANCE ═══",
     "Use the pipeline to identify patterns, mismatches, response rates, and strategic advice.",
-    "The pipeline includes applied/rejected dates — use these for response rate and time-to-rejection analysis.",
+    "Milestone dates available: added, appliedAt, interviewAt, offerAt, rejectedAt, noResponseAt.",
+    "Use these dates to calculate and reason about:",
+    "  • Time from application to interview (interviewAt - appliedAt) — interview conversion speed",
+    "  • Time from application to rejection (rejectedAt - appliedAt) — rejection speed patterns",
+    "  • Interview-to-offer conversion rate (jobs reaching Offer / jobs reaching Interview)",
+    "  • Response rate (any response / total applied)",
+    "  • Silent applications (Applied with no response after 30+ days — noResponseAt not set)",
     "Ground all observations in actual data. Be cautious with <10 jobs.",
     "For silent jobs (Applied 30+ days, no response), proactively suggest marking them as No response.",
     "",
@@ -265,7 +278,7 @@ function ActionCard({action,onAccept,onReject,accepted,rejected}){
   var typeLabel="";
   var opLabel=a.op==="add"?"Add":a.op==="edit"?"Edit":a.op==="delete"?"Delete":
     a.op==="setStatus"?"Set status":a.op==="setNotes"?"Set notes":
-    a.op==="appendNote"?"Add note":a.op==="setActive"?"Toggle":
+    a.op==="appendNote"?"Add note":a.op==="setDate"?"Set date":a.op==="setActive"?"Toggle":
     a.op==="setQuery"?"Edit query":a.op==="setLimit"?"Edit limit":"Update";
   var opColor=C.success;
   var opBg=C.successBg;
@@ -298,7 +311,8 @@ function ActionCard({action,onAccept,onReject,accepted,rejected}){
   } else if(a.type==="cv_pref"){
     summary=(a.field||"")+" → "+(typeof a.value==="string"?a.value.slice(0,100):String(a.value));
   } else if(a.type==="job_update"){
-    summary="Job #"+a.jobId+" → "+(typeof a.value==="string"?a.value.slice(0,120):String(a.value||""));
+    if(a.op==="setDate") summary="Job #"+a.jobId+" → "+a.field+": "+(a.value||"clear");
+    else summary="Job #"+a.jobId+" → "+(typeof a.value==="string"?a.value.slice(0,120):String(a.value||""));
   } else if(a.type==="profile_update"){
     summary="Profile #"+a.profileId+" → "+(a.op==="delete"?"DELETE":typeof a.value!=="undefined"?String(a.value).slice(0,80):"");
   }
@@ -458,11 +472,26 @@ function ProfileAssistant({cv,setCv,jobs,setJobs,profiles,setProfiles,anthropicK
           if(action.op==="setStatus"){
             patch.status=action.value;
             if(action.value==="Applied"&&!j.appliedAt) patch.appliedAt=new Date().toISOString();
+            if(action.value==="Interview"&&!j.interviewAt) patch.interviewAt=new Date().toISOString();
+            if(action.value==="Offer"&&!j.offerAt) patch.offerAt=new Date().toISOString();
             if(action.value==="Rejected"&&!j.rejectedAt) patch.rejectedAt=new Date().toISOString();
+            if(action.value==="No response"&&!j.noResponseAt) patch.noResponseAt=new Date().toISOString();
+            if(action.value==="Ad removed"&&!j.adRemovedAt) patch.adRemovedAt=new Date().toISOString();
           } else if(action.op==="setNotes"){
             patch.notes=String(action.value||"");
           } else if(action.op==="appendNote"){
             patch.notes=((j.notes||"").trim()+(j.notes?"\n":"")+String(action.value||"")).trim();
+          } else if(action.op==="setDate"){
+            var allowed=["appliedAt","interviewAt","offerAt","rejectedAt","noResponseAt"];
+            if(allowed.indexOf(action.field)!==-1){
+              // Accept YYYY-MM-DD and convert to ISO, or null to clear
+              if(action.value){
+                var d=new Date(action.value+"T12:00:00");
+                patch[action.field]=isNaN(d.getTime())?null:d.toISOString();
+              } else {
+                patch[action.field]=null;
+              }
+            }
           }
           return Object.assign({},j,patch);
         });

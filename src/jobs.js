@@ -2,6 +2,8 @@
 // Rev: 2026-06-11 — Silent jobs: auto-filter, badge, clearable filter.
 // Rev: 2026-06-11 — Individual re-score button in JobRow expanded view.
 // Rev: 2026-06-15 — Added inProgress statusGroup filter (Applied+Interview+Offer only).
+// Rev: 2026-06-15 — Key milestone dates: interviewAt, offerAt, noResponseAt auto-captured
+//                   on status change; editable date fields in expanded job row.
 
 // ─── StatusSheet — mobile bottom sheet for status picking ────────────────────
 function StatusSheet({current,onSelect,onClose}){
@@ -27,7 +29,7 @@ function StatusSheet({current,onSelect,onClose}){
 }
 
 // ─── Job Row ──────────────────────────────────────────────────────────────────
-function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,onNotesChange,onArchiveToggle,onDismiss,onWriteCoverLetter,onRescore,rescoring}){
+function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,onNotesChange,onDateChange,onArchiveToggle,onDismiss,onWriteCoverLetter,onRescore,rescoring}){
   var src=SOURCES[j.sourceType]||SOURCES.manual;
   var hasNotes=!!(j.notes&&j.notes.trim());
   var todayStr=new Date().toISOString().slice(0,10);
@@ -127,6 +129,43 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
         {j.salary&&<span>💰 {j.salary}</span>}
         {!deadlinePast&&!deadlineSoon&&j.deadline&&<span>📅 {j.deadline}</span>}
       </div>
+
+      {/* Key milestone dates */}
+      {(function(){
+        var dateFields=[
+          {key:"date",      label:"Added",       readOnly:true,  show:true},
+          {key:"appliedAt", label:"Applied",     readOnly:false, show:!!(j.appliedAt||["Applied","Interview","Offer","Rejected","No response"].includes(j.status))},
+          {key:"interviewAt",label:"Interview",  readOnly:false, show:!!(j.interviewAt||["Interview","Offer","Rejected","No response"].includes(j.status))},
+          {key:"offerAt",   label:"Offer",       readOnly:false, show:!!(j.offerAt||j.status==="Offer")},
+          {key:"rejectedAt",label:"Rejected",    readOnly:false, show:!!(j.rejectedAt||j.status==="Rejected")},
+          {key:"noResponseAt",label:"No response",readOnly:false,show:!!(j.noResponseAt||j.status==="No response")},
+        ].filter(function(f){return f.show;});
+        if(dateFields.length===0) return null;
+        return <div style={{padding:"10px 14px 0"}}>
+          <div style={{fontSize:mob()?13:12,fontWeight:600,color:C.textHint,letterSpacing:"0.5px",marginBottom:8}}>KEY DATES</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:8}}>
+            {dateFields.map(function(f){
+              var raw=f.key==="date"?j.date:(j[f.key]?j[f.key].slice(0,10):"");
+              return <div key={f.key}>
+                <div style={{fontSize:11,color:C.textHint,fontWeight:600,marginBottom:3}}>{f.label.toUpperCase()}</div>
+                {f.readOnly
+                  ?<div style={{fontSize:13,color:C.textPrimary,padding:"6px 0"}}>{raw||"—"}</div>
+                  :<input type="date" value={raw} max={new Date().toISOString().slice(0,10)}
+                    onChange={function(e){
+                      var iso=e.target.value?new Date(e.target.value+"T12:00:00").toISOString():"";
+                      if(onDateChange) onDateChange(f.key,iso);
+                    }}
+                    style={{fontSize:13,padding:"6px 8px",borderRadius:8,
+                      border:"1.5px solid "+C.border,background:C.surface,
+                      color:raw?C.textPrimary:C.textHint,
+                      fontFamily:"inherit",width:"100%",boxSizing:"border-box",
+                      colorScheme:"light dark"}}
+                  />}
+              </div>;
+            })}
+          </div>
+        </div>;
+      })()}
 
       {/* AI rationale */}
       {j.rationale&&j.scored!==false&&<div style={{margin:"10px 14px 0",fontSize:mob()?15:13,color:C.textSecondary,fontStyle:"italic",background:C.surface,borderRadius:8,padding:"8px 12px",lineHeight:1.55,borderLeft:"3px solid "+C.primary}}>
@@ -322,7 +361,10 @@ function Jobs({jobs,setJobs,rescoreAll,rescoreJob,scoringStatus,scoringError,cv,
       if(!selectedIds.has(String(j.id))) return j;
       var patch={status:newStatus};
       if(newStatus==="Applied"&&!j.appliedAt) patch.appliedAt=nowIso;
+      if(newStatus==="Interview"&&!j.interviewAt) patch.interviewAt=nowIso;
+      if(newStatus==="Offer"&&!j.offerAt) patch.offerAt=nowIso;
       if(newStatus==="Rejected"&&!j.rejectedAt) patch.rejectedAt=nowIso;
+      if(newStatus==="No response"&&!j.noResponseAt) patch.noResponseAt=nowIso;
       if(newStatus==="Ad removed"&&!j.adRemovedAt) patch.adRemovedAt=nowIso;
       return Object.assign({},j,patch);
     });});
@@ -538,7 +580,10 @@ function Jobs({jobs,setJobs,rescoreAll,rescoreJob,scoringStatus,scoringError,cv,
               if(x.id!==j.id) return x;
               var patch={status:val};
               if(val==="Applied"&&!x.appliedAt) patch.appliedAt=new Date().toISOString();
+              if(val==="Interview"&&!x.interviewAt) patch.interviewAt=new Date().toISOString();
+              if(val==="Offer"&&!x.offerAt) patch.offerAt=new Date().toISOString();
               if(val==="Rejected"&&!x.rejectedAt) patch.rejectedAt=new Date().toISOString();
+              if(val==="No response"&&!x.noResponseAt) patch.noResponseAt=new Date().toISOString();
               if(val==="Ad removed"&&!x.adRemovedAt) patch.adRemovedAt=new Date().toISOString();
               return Object.assign({},x,patch);
             });});}}
@@ -546,6 +591,7 @@ function Jobs({jobs,setJobs,rescoreAll,rescoreJob,scoringStatus,scoringError,cv,
             onArchiveToggle={function(){toggleArchive(j.id);}}
             onDismiss={dismissJob?function(){dismissJob(j.id);}:null}
             onWriteCoverLetter={startCoverLetter?function(){startCoverLetter(j.id);}:null}
+            onDateChange={function(field,iso){setJobs(function(prev){return prev.map(function(x){if(x.id!==j.id) return x;var patch={};patch[field]=iso||null;return Object.assign({},x,patch);});});}}
             onRescore={rescoreJob?function(){
               setRescoringId(j.id);
               rescoreJob(j.id).then(function(){setRescoringId(null);}).catch(function(){setRescoringId(null);});
