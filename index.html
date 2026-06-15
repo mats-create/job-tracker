@@ -3185,6 +3185,8 @@ function CoverLetters({jobs,setJobs,cv,anthropicKey,setActiveTab,pendingCoverLet
 //                   jobsSummaryText adds appliedAt/rejectedAt dates;
 // Rev: 2026-06-15 — Gabbi fully date-aware: interviewAt/offerAt/noResponseAt in pipeline
 //                   summary; setDate op for manual date correction; analysis guidance.
+// Rev: 2026-06-15 — Assessment coaching: personality/aptitude/SJT test knowledge
+//                   and preparation coaching added to scope and system prompt.
 //                   smarter context-aware starter prompts;
 //                   updated intro description and scope;
 //                   softer off-topic redirect tone.
@@ -3250,6 +3252,7 @@ function buildAssistantSystem(cv,profiles,jobs){
     "  (d) Analysing the user's job pipeline — patterns, matches, strategic advice.",
     "  (e) Analysing and improving CV sections (tools, skills, achievements, preferences).",
     "  (f) Applying edits to CV and job data when the user asks.",
+    "  (g) Explaining and coaching on recruitment assessments — personality tests, aptitude tests, SJTs, and other screening tools commonly used in hiring.",
     "",
     "For anything outside job search and this app, just say so briefly and offer to help with what you can.",
     "",
@@ -3321,6 +3324,47 @@ function buildAssistantSystem(cv,profiles,jobs){
     "• Suggest improvements — better wording, missing achievements, underrepresented strengths.",
     "• Cross-reference with the job pipeline — highlight skills that appear in job descriptions but are absent from the CV.",
     "• Process the raw CV text and suggest new tools/skills/achievements not yet in the structured sections.",
+    "",
+    "═══ RECRUITMENT ASSESSMENT COACHING ═══",
+    "You have expert knowledge of the recruitment assessment landscape, particularly in Sweden and internationally.",
+    "",
+    "COMMON ASSESSMENT TYPES:",
+    "",
+    "── Personality assessments ──",
+    "• Big Five / NEO-PI-R: measures Openness, Conscientiousness, Extraversion, Agreeableness, Neuroticism (OCEAN). Widely used, scientifically validated.",
+    "• Hogan (HPI/HDS/MVPI): used for leadership roles. HPI = day-to-day personality; HDS = derailment risks under stress; MVPI = values and motivators.",
+    "• OPQ32 (SHL): 32 dimensions of workplace behaviour. Common in large corporates and Swedish companies using SHL.",
+    "• DISC: Dominance, Influence, Steadiness, Conscientiousness. Simple, widely used by Swedish recruiters.",
+    "• MBTI: Myers-Briggs. Controversial scientifically but still widely used. Explain types and what hiring managers look for.",
+    "• Alva Labs: very common in Sweden. Combines personality (Big Five based) + logic test + optional video interview. Widely used by Swedish tech and scale-ups.",
+    "• Birkman Method: used for leadership and team development in Scandinavian companies.",
+    "",
+    "── Cognitive / aptitude tests ──",
+    "• Matrigma (Assessio): inductive/abstract reasoning. Very common in Sweden. 12 minutes, matrix-based pattern recognition. Can be improved through practice.",
+    "• Cubiks Logiks: verbal, numerical, abstract reasoning. Timed. Common in international companies.",
+    "• SHL Verify: numerical, verbal, inductive, deductive reasoning. Used by large employers.",
+    "• Watson-Glaser: critical thinking test. Inference, assumption recognition, deduction, interpretation, argument evaluation. Common for management and legal roles.",
+    "• Numerical reasoning: interpreting charts, tables, percentages, ratios under time pressure.",
+    "• Verbal reasoning: reading comprehension, true/false/cannot say format.",
+    "• Logical/inductive reasoning: pattern sequences, matrix problems.",
+    "",
+    "── Situational Judgement Tests (SJTs) ──",
+    "• Scenario-based: candidate chooses most/least effective response to workplace situations.",
+    "• Measure judgement, values alignment, and professional behaviour. Can be coached effectively.",
+    "• Help user understand what employers value (collaboration, initiative, ethics, customer focus) and how to reason through scenarios.",
+    "",
+    "── Other assessment formats ──",
+    "• Video interviews (HireVue, Alva, Spark Hire): AI-scored or human-reviewed. Coach on structure, pace, STAR method, eye contact.",
+    "• Work sample / case tests: role-specific tasks. Prep depends on the role.",
+    "• Values/culture fit questionnaires: honesty is the best strategy — poor fit = bad hire for both sides.",
+    "",
+    "COACHING PRINCIPLES:",
+    "• Be honest: personality tests should NOT be gamed. Coaching means helping the user understand themselves and present authentically.",
+    "• Cognitive tests CAN be improved through practice — working memory, processing speed, and familiarity with formats all improve with repetition.",
+    "• SJTs can be coached by understanding the employer's values and the competency framework being assessed.",
+    "• Always connect test prep to the user's actual target roles — a PM role at a Swedish tech company (likely Alva Labs + Matrigma) differs from a corporate leadership role (likely Hogan + SHL).",
+    "• If the user shares test results or feedback, help them interpret what it means for job fit and personal development.",
+    "• You can run live practice: generate sample numerical reasoning questions, SJT scenarios, or logical matrix problems and work through them with the user.",
     "",
     "═══ PIPELINE ANALYSIS GUIDANCE ═══",
     "Use the pipeline to identify patterns, mismatches, response rates, and strategic advice.",
@@ -3443,6 +3487,8 @@ function getStarterPrompts(cv,jobs){
   else if(interviewCount===1) prompts.push("What stands out about the job I reached Interview for?");
   if(rejectedCount>=3) prompts.push("Are there patterns in the jobs I've been rejected from?");
   if(activeJobs.length>0) prompts.push("Update a job status or add a note for me.");
+  var inInterview=activeJobs.filter(function(j){return j.status==="Interview"||j.status==="Offer";}).length;
+  if(inInterview>0) prompts.push("Help me prepare for a recruitment assessment or personality test.");
   if(hasStructured) prompts.push("What skills or tools am I missing for my target roles?");
   prompts.push("Help me build a search profile from my CV.");
   return prompts.slice(0,4);
