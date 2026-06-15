@@ -7,11 +7,11 @@
 //                   jobsSummaryText adds appliedAt/rejectedAt dates;
 // Rev: 2026-06-15 — Gabbi fully date-aware: interviewAt/offerAt/noResponseAt in pipeline
 //                   summary; setDate op for manual date correction; analysis guidance.
-// Rev: 2026-06-15 — Assessment coaching: personality/aptitude/SJT test knowledge
-//                   and preparation coaching added to scope and system prompt.
 //                   smarter context-aware starter prompts;
 //                   updated intro description and scope;
 //                   softer off-topic redirect tone.
+// Rev: 2026-06-15 — Tier 1+2 CV extraction: batch extraction rules in system prompt;
+//                   cv_bulk_edit action type for bulk apply; extraction starter prompt.
 
 // ─── Job summary for system prompt ───────────────────────────────────────────
 function jobsSummaryText(jobs){
@@ -74,7 +74,6 @@ function buildAssistantSystem(cv,profiles,jobs){
     "  (d) Analysing the user's job pipeline — patterns, matches, strategic advice.",
     "  (e) Analysing and improving CV sections (tools, skills, achievements, preferences).",
     "  (f) Applying edits to CV and job data when the user asks.",
-    "  (g) Explaining and coaching on recruitment assessments — personality tests, aptitude tests, SJTs, and other screening tools commonly used in hiring.",
     "",
     "For anything outside job search and this app, just say so briefly and offer to help with what you can.",
     "",
@@ -97,6 +96,15 @@ function buildAssistantSystem(cv,profiles,jobs){
     "Ops: add | edit (match by name for tools/skills, description substring for achievements) | delete",
     "Tool/Skill fields: name (string), years (number), level (Beginner|Intermediate|Advanced|Expert), employers (string)",
     "Achievement fields: description (string), employer (string), year (string)",
+    "",
+    "── 1b. CV BULK EXTRACTION (use this when extracting from CV text) ──",
+    "<<<ACTION>>>",
+    "{\"type\":\"cv_bulk_edit\",\"section\":\"tools\",\"op\":\"add\",\"items\":[{\"name\":\"Figma\",\"years\":4,\"level\":\"Advanced\",\"employers\":\"Spotify\"},{\"name\":\"Jira\",\"years\":8,\"level\":\"Expert\",\"employers\":\"Spotify, IKEA\"}]}",
+    "<<</ACTION>>>",
+    "Use cv_bulk_edit (not cv_edit) whenever you are extracting multiple entries at once.",
+    "Fields: same as cv_edit. section: tools | skills | achievements. op: always add for bulk extraction.",
+    "items: array of ALL entries for that section in one block. One block per section.",
+    "NEVER use cv_bulk_edit with fewer than 2 items — use cv_edit for single entries.",
     "",
     "── 2. CV PREFERENCES ──",
     "<<<ACTION>>>",
@@ -145,48 +153,35 @@ function buildAssistantSystem(cv,profiles,jobs){
     "• Spot weak entries — vague descriptions, missing years/level/employers.",
     "• Suggest improvements — better wording, missing achievements, underrepresented strengths.",
     "• Cross-reference with the job pipeline — highlight skills that appear in job descriptions but are absent from the CV.",
-    "• Process the raw CV text and suggest new tools/skills/achievements not yet in the structured sections.",
     "",
-    "═══ RECRUITMENT ASSESSMENT COACHING ═══",
-    "You have expert knowledge of the recruitment assessment landscape, particularly in Sweden and internationally.",
+    "═══ CV EXTRACTION — IMPORTANT INSTRUCTIONS ═══",
+    "When the user asks you to extract tools, skills, or achievements from their CV text, follow these rules exactly:",
     "",
-    "COMMON ASSESSMENT TYPES:",
+    "RULE 1 — RESPOND WITH A COMPLETE BATCH, NOT INDIVIDUAL ITEMS.",
+    "Never suggest entries one at a time. Always extract ALL entries for a section in a single cv_bulk_edit action block.",
+    "The user should not need to ask multiple times to get all their data out.",
     "",
-    "── Personality assessments ──",
-    "• Big Five / NEO-PI-R: measures Openness, Conscientiousness, Extraversion, Agreeableness, Neuroticism (OCEAN). Widely used, scientifically validated.",
-    "• Hogan (HPI/HDS/MVPI): used for leadership roles. HPI = day-to-day personality; HDS = derailment risks under stress; MVPI = values and motivators.",
-    "• OPQ32 (SHL): 32 dimensions of workplace behaviour. Common in large corporates and Swedish companies using SHL.",
-    "• DISC: Dominance, Influence, Steadiness, Conscientiousness. Simple, widely used by Swedish recruiters.",
-    "• MBTI: Myers-Briggs. Controversial scientifically but still widely used. Explain types and what hiring managers look for.",
-    "• Alva Labs: very common in Sweden. Combines personality (Big Five based) + logic test + optional video interview. Widely used by Swedish tech and scale-ups.",
-    "• Birkman Method: used for leadership and team development in Scandinavian companies.",
+    "RULE 2 — EXTRACT FROM THE RAW CV TEXT FIRST, THEN COMPARE.",
+    "Read the full CV text carefully. Extract every tool, skill, and achievement you can identify.",
+    "Then compare against the existing structured sections — only include entries that are NOT already present.",
+    "If a section already has entries, you are adding to it, not replacing it.",
     "",
-    "── Cognitive / aptitude tests ──",
-    "• Matrigma (Assessio): inductive/abstract reasoning. Very common in Sweden. 12 minutes, matrix-based pattern recognition. Can be improved through practice.",
-    "• Cubiks Logiks: verbal, numerical, abstract reasoning. Timed. Common in international companies.",
-    "• SHL Verify: numerical, verbal, inductive, deductive reasoning. Used by large employers.",
-    "• Watson-Glaser: critical thinking test. Inference, assumption recognition, deduction, interpretation, argument evaluation. Common for management and legal roles.",
-    "• Numerical reasoning: interpreting charts, tables, percentages, ratios under time pressure.",
-    "• Verbal reasoning: reading comprehension, true/false/cannot say format.",
-    "• Logical/inductive reasoning: pattern sequences, matrix problems.",
+    "RULE 3 — DEDUPLICATE.",
+    "Do not suggest an entry that already exists in the structured section (match by name for tools/skills, description substring for achievements).",
     "",
-    "── Situational Judgement Tests (SJTs) ──",
-    "• Scenario-based: candidate chooses most/least effective response to workplace situations.",
-    "• Measure judgement, values alignment, and professional behaviour. Can be coached effectively.",
-    "• Help user understand what employers value (collaboration, initiative, ethics, customer focus) and how to reason through scenarios.",
+    "RULE 4 — FILL IN ALL FIELDS.",
+    "For every entry, populate all fields as accurately as possible from the CV text:",
+    "• Tools/Skills: name, years (estimate from CV dates if not explicit), level (Beginner/Intermediate/Advanced/Expert based on context), employers (company names where used)",
+    "• Achievements: description (specific, concrete, outcome-focused), employer, year",
     "",
-    "── Other assessment formats ──",
-    "• Video interviews (HireVue, Alva, Spark Hire): AI-scored or human-reviewed. Coach on structure, pace, STAR method, eye contact.",
-    "• Work sample / case tests: role-specific tasks. Prep depends on the role.",
-    "• Values/culture fit questionnaires: honesty is the best strategy — poor fit = bad hire for both sides.",
+    "RULE 5 — BE COMPLETE, THEN ASK.",
+    "Give a brief one-line intro (e.g. 'Here is what I found in your CV:'), then emit all three bulk action blocks (tools, skills, achievements) in one reply.",
+    "After the blocks, add a brief note about what you excluded or were uncertain about.",
+    "Never ask clarifying questions BEFORE extracting — extract first, clarify after.",
     "",
-    "COACHING PRINCIPLES:",
-    "• Be honest: personality tests should NOT be gamed. Coaching means helping the user understand themselves and present authentically.",
-    "• Cognitive tests CAN be improved through practice — working memory, processing speed, and familiarity with formats all improve with repetition.",
-    "• SJTs can be coached by understanding the employer's values and the competency framework being assessed.",
-    "• Always connect test prep to the user's actual target roles — a PM role at a Swedish tech company (likely Alva Labs + Matrigma) differs from a corporate leadership role (likely Hogan + SHL).",
-    "• If the user shares test results or feedback, help them interpret what it means for job fit and personal development.",
-    "• You can run live practice: generate sample numerical reasoning questions, SJT scenarios, or logical matrix problems and work through them with the user.",
+    "RULE 6 — QUALITY OVER QUANTITY FOR ACHIEVEMENTS.",
+    "Achievements should be specific and measurable where possible. Prefer concrete outcomes ('Reduced onboarding time by 40%') over vague statements ('Improved processes').",
+    "Extract achievements from the CV narrative even if not explicitly labelled as achievements.",
     "",
     "═══ PIPELINE ANALYSIS GUIDANCE ═══",
     "Use the pipeline to identify patterns, mismatches, response rates, and strategic advice.",
@@ -302,6 +297,7 @@ function getStarterPrompts(cv,jobs){
   var prompts=[];
   // Context-aware: most urgent/actionable first
   if(silentCount>0) prompts.push("I have "+silentCount+" application"+(silentCount>1?"s":"")+" with no response for 30+ days — what should I do?");
+  if(hasCv(cv)&&!hasStructured) prompts.push("Extract my tools, skills and achievements from my CV text.");
   if(hasStructured) prompts.push("Review my CV sections and add anything important that's missing.");
   if(scoredCount>=10) prompts.push("Suggest a new profile based on my highest-scoring jobs.");
   if(lowestScored) prompts.push("Why is my match score low for "+lowestScored.title+" at "+lowestScored.company+"?");
@@ -309,8 +305,6 @@ function getStarterPrompts(cv,jobs){
   else if(interviewCount===1) prompts.push("What stands out about the job I reached Interview for?");
   if(rejectedCount>=3) prompts.push("Are there patterns in the jobs I've been rejected from?");
   if(activeJobs.length>0) prompts.push("Update a job status or add a note for me.");
-  var inInterview=activeJobs.filter(function(j){return j.status==="Interview"||j.status==="Offer";}).length;
-  if(inInterview>0) prompts.push("Help me prepare for a recruitment assessment or personality test.");
   if(hasStructured) prompts.push("What skills or tools am I missing for my target roles?");
   prompts.push("Help me build a search profile from my CV.");
   return prompts.slice(0,4);
@@ -322,7 +316,7 @@ function ActionCard({action,onAccept,onReject,accepted,rejected}){
 
   // Determine label and colours based on action type
   var typeLabel="";
-  var opLabel=a.op==="add"?"Add":a.op==="edit"?"Edit":a.op==="delete"?"Delete":
+  var opLabel=a.type==="cv_bulk_edit"?"Add all":a.op==="add"?"Add":a.op==="edit"?"Edit":a.op==="delete"?"Delete":
     a.op==="setStatus"?"Set status":a.op==="setNotes"?"Set notes":
     a.op==="appendNote"?"Add note":a.op==="setDate"?"Set date":a.op==="setActive"?"Toggle":
     a.op==="setQuery"?"Edit query":a.op==="setLimit"?"Edit limit":"Update";
@@ -333,6 +327,10 @@ function ActionCard({action,onAccept,onReject,accepted,rejected}){
     typeLabel=a.section==="tools"?"CV Tool":a.section==="skills"?"CV Skill":"CV Achievement";
     opColor=a.op==="delete"?C.error:a.op==="edit"?C.warning:C.success;
     opBg=a.op==="delete"?C.errorBg:a.op==="edit"?C.warningBg:C.successBg;
+  } else if(a.type==="cv_bulk_edit"){
+    var secName=a.section==="tools"?"Tools":a.section==="skills"?"Skills":"Achievements";
+    typeLabel="CV "+secName+" (bulk)";
+    opColor=C.success; opBg=C.successBg;
   } else if(a.type==="cv_pref"){
     typeLabel="CV Preference";
     opColor=C.info; opBg=C.infoBg;
@@ -348,7 +346,13 @@ function ActionCard({action,onAccept,onReject,accepted,rejected}){
 
   // Build summary text
   var summary="";
-  if(a.type==="cv_edit"){
+  if(a.type==="cv_bulk_edit"){
+    var items=a.items||[];
+    var secName=a.section==="tools"?"tools":a.section==="skills"?"skills":"achievements";
+    var preview=items.slice(0,3).map(function(it){return it.name||it.description||"";}).filter(Boolean).join(", ");
+    var more=items.length>3?" + "+(items.length-3)+" more":"";
+    summary=items.length+" "+secName+": "+preview+more;
+  } else if(a.type==="cv_edit"){
     if(a.section==="achievements"){
       summary=(a.item.description||"").slice(0,120)+(a.item.employer?" — "+a.item.employer:"")+(a.item.year?" ("+a.item.year+")":"");
     } else {
@@ -493,6 +497,29 @@ function ProfileAssistant({cv,setCv,jobs,setJobs,profiles,setProfiles,anthropicK
             list=list.filter(function(x){return !(x.name&&x.name.toLowerCase()===(item.name||"").toLowerCase());});
           }
         }
+        return Object.assign({},prev,{[sec]:list});
+      });
+    }
+
+    // ── cv_bulk_edit ─────────────────────────────────────────────────────────
+    else if(action.type==="cv_bulk_edit"){
+      var sec=action.section;
+      var items=action.items||[];
+      if(!items.length) return;
+      setCv(function(prev){
+        var list=(prev[sec]||[]).slice();
+        items.forEach(function(item){
+          if(sec==="achievements"){
+            // Deduplicate by description substring
+            var matchDesc=(item.description||"").toLowerCase().slice(0,60);
+            var exists=list.some(function(x){return x.description&&x.description.toLowerCase().includes(matchDesc);});
+            if(!exists) list=list.concat([Object.assign({id:Date.now()+Math.random()},item)]);
+          } else {
+            // Deduplicate by name
+            var exists=list.some(function(x){return x.name&&x.name.toLowerCase()===(item.name||"").toLowerCase();});
+            if(!exists) list=list.concat([Object.assign({id:Date.now()+Math.random()},item)]);
+          }
+        });
         return Object.assign({},prev,{[sec]:list});
       });
     }
