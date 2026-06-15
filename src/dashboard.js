@@ -3,6 +3,7 @@
 // Rev: 2026-06-11 — Silent jobs link now navigates with filter:"silent" for auto-filter.
 // Rev: 2026-06-12 — Import summary card: persistent dismissable card after each run.
 // Rev: 2026-06-12 — Import summary moved to overlay triggered by button; auto-card removed.
+// Rev: 2026-06-15 — Per-profile rows now show fetched/new/skipped counts; source removed.
 
 
 // ─── ImportSummaryOverlay ─────────────────────────────────────────────────────
@@ -67,26 +68,33 @@ function ImportSummaryOverlay({summary,onClose,onClear}){
       {(summary.profiles||[]).length>0&&<div style={{padding:m?"12px 16px":"16px 24px"}}>
         <div style={{fontSize:11,fontWeight:700,color:C.textHint,
           letterSpacing:"0.5px",textTransform:"uppercase",marginBottom:10}}>Per profile</div>
-        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
           {summary.profiles.map(function(p,i){
-            var src=SOURCES[p.source]||SOURCES.manual;
+            var isNew=p.added>0;
+            var isFailed=p.failed;
+            var rowBg=isFailed?C.errorBg:isNew?C.successBg:C.surfaceAlt;
+
+            // Build the numbers string
+            var nums=[];
+            if(isFailed){
+              nums.push("API error");
+            } else {
+              if(p.fetched!=null) nums.push(p.fetched+" fetched");
+              if(isNew) nums.push(p.added+" new");
+              else nums.push("0 new");
+              if(p.skipped>0) nums.push(p.skipped+" dismissed");
+            }
+
             return <div key={i} style={{display:"flex",alignItems:"center",gap:10,
-              flexWrap:"wrap",padding:"10px 14px",borderRadius:12,
-              background:p.failed?C.errorBg:p.added>0?C.successBg:C.surfaceAlt}}>
-              <span style={{fontSize:12,fontWeight:600,padding:"2px 8px",borderRadius:6,
-                border:"1px solid "+(p.failed?C.error:p.added>0?C.success:C.border),
-                color:p.failed?C.error:p.added>0?C.success:C.textHint,
-                background:p.failed?C.errorBg:p.added>0?C.successBg:C.surfaceAlt,
-                whiteSpace:"nowrap"}}>
-                {src.label}
-              </span>
-              <span style={{fontSize:m?14:15,fontWeight:600,color:C.textPrimary,
+              padding:"9px 14px",borderRadius:10,background:rowBg}}>
+              <span style={{fontSize:m?13:14,fontWeight:600,color:C.textPrimary,
                 flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                 {p.name}
               </span>
-              <span style={{fontSize:m?14:15,fontWeight:700,whiteSpace:"nowrap",flexShrink:0,
-                color:p.failed?C.error:p.added>0?C.success:C.textHint}}>
-                {p.failed?"API error":p.added>0?"+"+p.added+" new":"Up to date"}
+              <span style={{fontSize:m?12:13,fontWeight:isFailed||isNew?700:400,
+                whiteSpace:"nowrap",flexShrink:0,
+                color:isFailed?C.error:isNew?C.success:C.textHint}}>
+                {nums.join(" · ")}
               </span>
             </div>;
           })}

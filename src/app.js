@@ -11,6 +11,7 @@
 // Rev: 2026-06-11 — FIX: rescoreJob uses synchronous ref guard to prevent
 //                   concurrent calls; reads job from jobs closure (not no-op updater).
 // Rev: 2026-06-13 — Added extractedAt field to CV initial state and resetAllData.
+// Rev: 2026-06-15 — importSummary per-profile now includes fetched+skipped counts.
 // Rev: 2026-06-12 — importSummary: persistent dismissable card on Dashboard
 //                   showing per-profile results after each run.
 
@@ -242,13 +243,16 @@ function AppShell({user,onSignOut}){
           var data=await out.response.json();
           var ads=src==="af"?(data.hits||[]):(data.data||[]).slice(0,p.limit);
           // Pre-filter (tombstone + location) before setJobs so count is synchronous
+          var fetchedCount=ads.length;
+          var skippedCount=0;
           var preFiltered=ads.filter(function(a){
             var aid=src==="af"?(a.id?a.id.toString():""):(a.job_id?String(a.job_id):"");
-            if(!aid||tombstones.has(aid)) return false;
+            if(!aid) return false;
+            if(tombstones.has(aid)){ skippedCount++; return false; }
             return true;
           }).map(function(a){return src==="af"?mapAfJob(a,p.name):mapJsJob(a,p.name);});
           preFiltered=filterByLocation(preFiltered,p.locations||[]);
-          // countRef[0] = count, countRef[1] = the new jobs array (for auto-scoring)
+          // countRef[0]=added count, countRef[1]=new jobs array (for auto-scoring)
           var countRef=[0,[]];
           setJobs(function(prev){
             var ex=new Set(prev.map(function(j){return j.id?j.id.toString():""; }));
@@ -262,7 +266,7 @@ function AppShell({user,onSignOut}){
           });
           totalAdded+=countRef[0];
           if(countRef[1].length>0) newJobsBuffer=newJobsBuffer.concat(countRef[1]);
-          profileResults.push({name:p.name,source:src,added:countRef[0],skipped:0,failed:false});
+          profileResults.push({name:p.name,source:src,fetched:fetchedCount,added:countRef[0],skipped:skippedCount,failed:false});
         }catch(e){ console.error("Profile fetch error:",e); profileResults.push({name:p.name,source:srcs[si]||"af",added:0,skipped:0,failed:true}); }
       }
     }
