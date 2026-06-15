@@ -1,6 +1,7 @@
 // jobs.js
 // Rev: 2026-06-11 — Silent jobs: auto-filter, badge, clearable filter.
 // Rev: 2026-06-11 — Individual re-score button in JobRow expanded view.
+// Rev: 2026-06-15 — Added inProgress statusGroup filter (Applied+Interview+Offer only).
 
 // ─── StatusSheet — mobile bottom sheet for status picking ────────────────────
 function StatusSheet({current,onSelect,onClose}){
@@ -279,6 +280,7 @@ function Jobs({jobs,setJobs,rescoreAll,rescoreJob,scoringStatus,scoringError,cv,
     .filter(function(j){
       if(!statusGroupFilter) return true;
       if(statusGroupFilter==="applied") return APPLIED_STATUSES.includes(j.status);
+      if(statusGroupFilter==="inProgress") return ["Applied","Interview","Offer"].includes(j.status);
       return true;
     })
     .filter(function(j){return sourceFilter==="all"||j.sourceType===sourceFilter;})
@@ -418,6 +420,10 @@ function Jobs({jobs,setJobs,rescoreAll,rescoreJob,scoringStatus,scoringError,cv,
         {/* Status filter */}
         <div>
           <div style={{fontSize:12,color:C.textHint,fontWeight:700,letterSpacing:"0.5px",marginBottom:8}}>STATUS</div>
+          {statusGroupFilter==="inProgress"&&<div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"6px 12px",borderRadius:20,background:C.primaryLight,border:"1.5px dashed "+C.primary,color:C.primary,fontSize:12,fontWeight:600,marginBottom:10}}>
+            Active applications (Applied · Interview · Offer)
+            <button onClick={function(){setStatusGroupFilter(null);}} style={{background:"none",border:"none",cursor:"pointer",color:C.primary,fontSize:14,fontWeight:700,padding:0,lineHeight:1,minHeight:"auto"}}>×</button>
+          </div>}
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
             {["All"].concat(STATUSES).map(function(s){
               var on=filter===s&&!statusGroupFilter;

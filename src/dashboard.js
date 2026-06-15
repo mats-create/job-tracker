@@ -4,6 +4,8 @@
 // Rev: 2026-06-12 — Import summary card: persistent dismissable card after each run.
 // Rev: 2026-06-12 — Import summary moved to overlay triggered by button; auto-card removed.
 // Rev: 2026-06-15 — Per-profile rows now show fetched/new/skipped counts; source removed.
+// Rev: 2026-06-15 — Fix navigation mismatch on "Applications sent" tile (inProgress group);
+//                   "Jobs tracked" sub-label clarified to show it includes closed jobs.
 
 
 // ─── ImportSummaryOverlay ─────────────────────────────────────────────────────
@@ -176,9 +178,9 @@ function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoring
       <div style={{fontSize:14,opacity:0.85,marginBottom:20}}>Here's your job search summary for today.</div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12}}>
         {[
-          {label:"Jobs tracked",value:total,sub:"total in pipeline",nav:total>0?{}:null},
+          {label:"Jobs tracked",value:total,sub:"all statuses, excl. archived",nav:total>0?{}:null},
           {label:"New to review",value:newCount,sub:"waiting for you",nav:newCount>0?{status:"New"}:null},
-          {label:"Applications sent",value:applied,sub:"active applications",nav:applied>0?{statusGroup:"applied"}:null},
+          {label:"Applications sent",value:applied,sub:"Applied · Interview · Offer",nav:applied>0?{statusGroup:"inProgress"}:null},
           {label:"Best match",value:topMatch?topMatch.score+"%":"—",sub:topMatch?topMatch.company:"no jobs yet",nav:topMatch?{expandId:topMatch.id}:null},
         ].map(function(s){
           var clickable=!!(s.nav&&navigateToJobs);
