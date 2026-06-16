@@ -277,6 +277,10 @@ function Sidebar({activeTab,setActiveTab,collapsed,setCollapsed,mobileOpen,setMo
           <span style={{fontSize:14,lineHeight:1,flexShrink:0,width:24,textAlign:"center"}}>↩</span>
           {!collapsed&&<span>Sign out</span>}
         </button>
+        {user&&user.email==="mats@hultgrensaksi.com"&&<a href="admin.html" target="_blank" rel="noopener noreferrer" title={collapsed?"Admin":""} style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"7px 10px",borderRadius:8,textDecoration:"none",color:C.textHint,justifyContent:collapsed?"center":"flex-start",fontSize:12}}>
+          <span style={{fontSize:14,lineHeight:1,flexShrink:0,width:24,textAlign:"center"}}>⚙️</span>
+          {!collapsed&&<span>Admin</span>}
+        </a>}
       </div>}
 
       <div style={{borderTop:"1px solid "+C.border,padding:"8px"}}>

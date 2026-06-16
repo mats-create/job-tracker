@@ -523,10 +523,31 @@ function SignInScreen({onSignIn}){
   </div>;
 }
 
+// ─── AccessDeniedScreen ───────────────────────────────────────────────────────
+function AccessDeniedScreen({email,onSignOut}){
+  return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.bg,padding:24}}>
+    <div style={{width:"100%",maxWidth:420,textAlign:"center"}}>
+      <div style={{width:64,height:64,borderRadius:20,background:C.surfaceAlt,display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,margin:"0 auto 24px",border:"2px solid "+C.border}}>🔒</div>
+      <h1 style={{fontSize:22,fontWeight:800,color:C.textPrimary,marginBottom:8}}>Access restricted</h1>
+      <p style={{fontSize:15,color:C.textSecondary,lineHeight:1.6,marginBottom:8}}>
+        <strong>{email}</strong> is not on the access list.
+      </p>
+      <p style={{fontSize:14,color:C.textHint,lineHeight:1.6,marginBottom:32}}>
+        If you received an invitation, make sure you're signing in with the correct Google account.
+      </p>
+      <button onClick={onSignOut} style={{fontSize:14,fontWeight:600,padding:"12px 28px",borderRadius:12,border:"1.5px solid "+C.border,background:C.surface,color:C.textSecondary,cursor:"pointer",fontFamily:"inherit"}}>
+        Sign out and try another account
+      </button>
+    </div>
+  </div>;
+}
+
 // ─── App root ─────────────────────────────────────────────────────────────────
 function App(){
   var [user,setUser]=useState(undefined);
   var [authChecked,setAuthChecked]=useState(false);
+  var [accessGranted,setAccessGranted]=useState(false);
+  var [accessChecked,setAccessChecked]=useState(false);
 
   useEffect(function(){
     function init(){
@@ -541,6 +562,42 @@ function App(){
     return function(){ window.removeEventListener("firebase-ready",onReady); };
   },[]);
 
+  // Check allowlist and write firstSeen/lastSeen when user logs in
+  useEffect(function(){
+    if(!user){ setAccessGranted(false); setAccessChecked(false); return; }
+    var sdk=window.firebaseSdk;
+    if(!sdk){ setAccessGranted(true); setAccessChecked(true); return; }
+    // Admin always has access
+    if(user.email==="mats@hultgrensaksi.com"){
+      setAccessGranted(true); setAccessChecked(true);
+      writeUserMeta(sdk, user);
+      return;
+    }
+    // Check allowlist
+    var allowRef=sdk.doc(sdk.db,"allowlist",user.email);
+    sdk.getDoc(allowRef).then(function(snap){
+      var granted=snap.exists();
+      setAccessGranted(granted);
+      setAccessChecked(true);
+      if(granted) writeUserMeta(sdk, user);
+    }).catch(function(){
+      // On error, deny access
+      setAccessGranted(false);
+      setAccessChecked(true);
+    });
+  },[user]);
+
+  function writeUserMeta(sdk, user){
+    var metaRef=sdk.doc(sdk.db,"users",user.uid);
+    sdk.getDoc(metaRef).then(function(snap){
+      var now=new Date().toISOString();
+      var existing=snap.exists()?snap.data():{};
+      var meta={lastSeen:now,email:user.email};
+      if(!existing.firstSeen) meta.firstSeen=now;
+      sdk.setDoc(metaRef,meta,{merge:true}).catch(function(){});
+    }).catch(function(){});
+  }
+
   async function signIn(){
     var sdk=window.firebaseSdk;
     var provider=new sdk.GoogleAuthProvider();
@@ -554,6 +611,8 @@ function App(){
 
   if(!authChecked) return <AuthSplash />;
   if(!user) return <SignInScreen onSignIn={signIn} />;
+  if(!accessChecked) return <AuthSplash />;
+  if(!accessGranted) return <AccessDeniedScreen email={user.email} onSignOut={signOut} />;
   return <AppShell key={user.uid} user={user} onSignOut={signOut} />;
 }
 
