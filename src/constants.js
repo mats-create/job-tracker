@@ -1,3 +1,6 @@
+// constants.js
+// Rev: 2026-06-16 — Assistant tab renamed to Gabbi; icon updated to SVG avatar in components.js.
+
 // ─── Theme palettes ───────────────────────────────────────────────────────────
 const LIGHT = {
   primary:"#5C8A7A", primaryLight:"#EAF2EF", primaryDark:"#3D6B5C",
@@ -89,7 +92,7 @@ const TABS = [
   {id:"dashboard",label:"Dashboard",icon:"📊",group:"overview"},
   {id:"jobs",label:"My Jobs",icon:"📋",group:"jobs"},
   {id:"profiles",label:"Search Profiles",icon:"🔍",group:"jobs"},
-  {id:"assistant",label:"Profile Assistant",icon:"💬",group:"jobs"},
+  {id:"assistant",label:"Gabbi",icon:"gabbi",group:"jobs"},
   {id:"scheduler",label:"Scheduler",icon:"⏱",group:"jobs"},
   {id:"covers",label:"Cover Letters",icon:"✉️",group:"outputs"},
   {id:"reports",label:"Reports",icon:"📈",group:"outputs"},
