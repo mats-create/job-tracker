@@ -361,6 +361,9 @@ html[data-theme="dark"] .jt-sb-item.active{background:#1F3530;color:#7AAD9C}
 <div id="root"></div>
 
 <script type="text/babel">
+// constants.js
+// Rev: 2026-06-16 — Assistant tab renamed to Gabbi; icon updated to SVG avatar in components.js.
+
 // ─── Theme palettes ───────────────────────────────────────────────────────────
 const LIGHT = {
   primary:"#5C8A7A", primaryLight:"#EAF2EF", primaryDark:"#3D6B5C",
@@ -452,7 +455,7 @@ const TABS = [
   {id:"dashboard",label:"Dashboard",icon:"📊",group:"overview"},
   {id:"jobs",label:"My Jobs",icon:"📋",group:"jobs"},
   {id:"profiles",label:"Search Profiles",icon:"🔍",group:"jobs"},
-  {id:"assistant",label:"Profile Assistant",icon:"💬",group:"jobs"},
+  {id:"assistant",label:"Gabbi",icon:"gabbi",group:"jobs"},
   {id:"scheduler",label:"Scheduler",icon:"⏱",group:"jobs"},
   {id:"covers",label:"Cover Letters",icon:"✉️",group:"outputs"},
   {id:"reports",label:"Reports",icon:"📈",group:"outputs"},
@@ -1105,6 +1108,10 @@ function weekEnd(dateStr){
 }
 
 
+// components.js
+// Rev: 2026-06-16 — Gabbi SVG avatar icon in sidebar and mobile nav;
+//                   NAV_LABELS updated; sidebar renders SVG icons for assistant tab.
+
 const { useState, useRef, useEffect, useCallback } = React;
 
 // ─── Mobile helper ────────────────────────────────────────────────────────────
@@ -1132,6 +1139,25 @@ class TabErrorBoundary extends React.Component {
     }
     return this.props.children;
   }
+}
+
+
+// ─── Gabbi avatar SVG ─────────────────────────────────────────────────────────
+function GabbiAvatar({size,active}){
+  var s=size||24;
+  var fill=active?"#FFFFFF":"#5C8A7A";
+  var bg=active?"#5C8A7A":"#EAF2EF";
+  // In dark mode C.primary is lighter — use currentColor approach via fill prop
+  return <svg width={s} height={s} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    {/* Face circle */}
+    <circle cx="12" cy="12" r="11" fill={bg}/>
+    {/* Left eye */}
+    <ellipse cx="9" cy="10.5" rx="1.3" ry="1.5" fill={fill}/>
+    {/* Right eye */}
+    <ellipse cx="15" cy="10.5" rx="1.3" ry="1.5" fill={fill}/>
+    {/* Smile */}
+    <path d="M8.5 14.5 Q12 17.5 15.5 14.5" stroke={fill} strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+  </svg>;
 }
 
 // ─── Primitive UI components ──────────────────────────────────────────────────
@@ -1341,7 +1367,9 @@ function Sidebar({activeTab,setActiveTab,collapsed,setCollapsed,mobileOpen,setMo
             {gp.tabs.map(function(t){
               var on=activeTab===t.id;
               return <button key={t.id} className={"jt-sb-item"+(on?" active":"")} onClick={function(){pickTab(t.id);}} title={collapsed?t.label:""} style={{display:"flex",alignItems:"center",gap:12,width:"calc(100% - 12px)",margin:"2px 6px",padding:collapsed?"10px":"10px 12px",border:"none",borderRadius:8,background:on?C.primaryLight:"transparent",color:on?C.primary:C.textSecondary,fontWeight:on?700:500,fontSize:13,cursor:"pointer",textAlign:"left",justifyContent:collapsed?"center":"flex-start"}}>
-                <span style={{fontSize:18,lineHeight:1,flexShrink:0,width:24,textAlign:"center"}}>{t.icon}</span>
+                <span style={{fontSize:18,lineHeight:1,flexShrink:0,width:24,textAlign:"center",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  {t.icon==="gabbi"?<GabbiAvatar size={20} active={on} />:t.icon}
+                </span>
                 {!collapsed&&<span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.label}</span>}
               </button>;
             })}
@@ -1384,7 +1412,7 @@ const NAV_ICONS = {
   dashboard: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>,
   jobs:      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>,
   profiles:  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="22" y2="22"/></svg>,
-  assistant: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
+  assistant: <GabbiAvatar size={24} />,
   cv:        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>,
   scheduler: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
   covers:    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>,
@@ -1394,7 +1422,7 @@ const NAV_ICONS = {
 
 const NAV_LABELS = {
   dashboard:"Dashboard",jobs:"My Jobs",profiles:"Search",
-  assistant:"Assistant",cv:"My CV",scheduler:"Schedule",
+  assistant:"Gabbi",cv:"My CV",scheduler:"Schedule",
   covers:"Letters",reports:"Reports",
 };
 
@@ -1458,7 +1486,9 @@ function MobileBottomNav({activeTab,setActiveTab,user,onSignOut,theme,setTheme})
       {primaryTabs.map(function(t){
         var active=activeTab===t.id&&!moreOpen;
         return <button key={t.id} className={"jt-bottom-nav-item"+(active?" active":"")} onClick={function(){go(t.id);}}>
-          <span className="jt-bottom-nav-icon">{NAV_ICONS[t.id]||null}</span>
+          <span className="jt-bottom-nav-icon">
+            {t.id==="assistant"?<GabbiAvatar size={24} active={active} />:(NAV_ICONS[t.id]||null)}
+          </span>
           <span className="jt-bottom-nav-label">{NAV_LABELS[t.id]||t.label}</span>
         </button>;
       })}
