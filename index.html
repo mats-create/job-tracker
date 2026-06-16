@@ -5447,12 +5447,15 @@ function SignInScreen({onSignIn}){
       </button>
       {error&&<div style={{marginTop:16,fontSize:13,color:C.error,background:C.errorBg,borderRadius:10,padding:"10px 14px"}}>{error}</div>}
       <p style={{fontSize:12,color:C.textHint,marginTop:24,lineHeight:1.6}}>Your data is stored privately in the cloud, accessible only to you. API keys are encrypted and never shared.</p>
+      <p style={{fontSize:12,color:C.textHint,marginTop:16}}>No access yet? <a href="mailto:mats@hultgrensaksi.com?subject=Job%20Tracker%20%E2%80%94%20Request%20access&body=Hi%20Mats%2C%0A%0AI%27d%20like%20to%20request%20access%20to%20Job%20Tracker.%0A%0AMy%20Google%20email%20is%3A%20" style={{color:C.primary,textDecoration:"none",fontWeight:600}}>Request access →</a></p>
     </div>
   </div>;
 }
 
 // ─── AccessDeniedScreen ───────────────────────────────────────────────────────
 function AccessDeniedScreen({email,onSignOut}){
+  var mailBody="Hi Mats,%0A%0AI'd like to request access to Job Tracker.%0A%0AMy Google email is: "+encodeURIComponent(email||"");
+  var mailHref="mailto:mats@hultgrensaksi.com?subject=Job%20Tracker%20%E2%80%94%20Request%20access&body="+mailBody;
   return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.bg,padding:24}}>
     <div style={{width:"100%",maxWidth:420,textAlign:"center"}}>
       <div style={{width:64,height:64,borderRadius:20,background:C.surfaceAlt,display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,margin:"0 auto 24px",border:"2px solid "+C.border}}>🔒</div>
@@ -5460,10 +5463,13 @@ function AccessDeniedScreen({email,onSignOut}){
       <p style={{fontSize:15,color:C.textSecondary,lineHeight:1.6,marginBottom:8}}>
         <strong>{email}</strong> is not on the access list.
       </p>
-      <p style={{fontSize:14,color:C.textHint,lineHeight:1.6,marginBottom:32}}>
+      <p style={{fontSize:14,color:C.textHint,lineHeight:1.6,marginBottom:24}}>
         If you received an invitation, make sure you're signing in with the correct Google account.
       </p>
-      <button onClick={onSignOut} style={{fontSize:14,fontWeight:600,padding:"12px 28px",borderRadius:12,border:"1.5px solid "+C.border,background:C.surface,color:C.textSecondary,cursor:"pointer",fontFamily:"inherit"}}>
+      <a href={mailHref} style={{display:"block",width:"100%",padding:"13px",borderRadius:12,background:C.primary,color:"#fff",fontWeight:700,fontSize:15,textDecoration:"none",marginBottom:12,boxSizing:"border-box"}}>
+        ✉ Request access
+      </a>
+      <button onClick={onSignOut} style={{fontSize:14,fontWeight:600,padding:"12px 28px",borderRadius:12,border:"1.5px solid "+C.border,background:C.surface,color:C.textSecondary,cursor:"pointer",fontFamily:"inherit",width:"100%"}}>
         Sign out and try another account
       </button>
     </div>
