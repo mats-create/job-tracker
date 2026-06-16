@@ -3,6 +3,8 @@
 //                   BUG5: filterByLocation remote keyword fallback.
 // Rev: 2026-06-11 — scoreJobs continues on batch failure instead of aborting;
 //                   returns {result, failedBatches} so callers can surface partial errors.
+// Rev: 2026-06-16 — cvSummaryText: numbered lists for tools, skills, achievements
+//                   so Gabbi can reference items by index number.
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
 const STORAGE_KEY = "jobTracker.v1";
@@ -311,20 +313,20 @@ function cvSummaryText(cv){
   if(cv.workType&&cv.workType!=="Any") parts.push("Work type preference: "+cv.workType);
   if(cv.salary) parts.push("Salary expectation: "+cv.salary);
   if(cv.tools&&cv.tools.length){
-    parts.push("TOOLS & SOFTWARE:\n"+cv.tools.map(function(t){
-      var base="- "+t.name+" ("+t.years+" yr"+(t.years!==1?"s":"")+", "+t.level+")";
+    parts.push("TOOLS & SOFTWARE (reference by number):\n"+cv.tools.map(function(t,i){
+      var base=(i+1)+". "+t.name+" ("+t.years+" yr"+(t.years!==1?"s":"")+", "+t.level+")";
       return t.employers?base+" — "+t.employers:base;
     }).join("\n"));
   }
   if(cv.skills&&cv.skills.length){
-    parts.push("SKILLS & COMPETENCIES:\n"+cv.skills.map(function(s){
-      var base="- "+s.name+" ("+s.years+" yr"+(s.years!==1?"s":"")+", "+s.level+")";
+    parts.push("SKILLS & COMPETENCIES (reference by number):\n"+cv.skills.map(function(s,i){
+      var base=(i+1)+". "+s.name+" ("+s.years+" yr"+(s.years!==1?"s":"")+", "+s.level+")";
       return s.employers?base+" — "+s.employers:base;
     }).join("\n"));
   }
   if(cv.achievements&&cv.achievements.length){
-    parts.push("KEY ACHIEVEMENTS:\n"+cv.achievements.map(function(a){
-      var line="- "+a.description;
+    parts.push("KEY ACHIEVEMENTS (reference by number):\n"+cv.achievements.map(function(a,i){
+      var line=(i+1)+". "+a.description;
       if(a.employer) line+=" @ "+a.employer;
       if(a.year) line+=" ("+a.year+")";
       return line;

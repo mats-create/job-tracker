@@ -1,5 +1,6 @@
 // cv.js
 // Rev: 2026-06-13 — Removed hardcoded CV_IMPORT data and import banner.
+// Rev: 2026-06-16 — Row numbers in InlineListEditor (stable, storage-order based).
 //   CV_IMPORT contained personal data (tools/skills/achievements) visible
 //   to all users. All new users now start with empty CV sections.
 // Rev: 2026-06-13 — Added "Clear all CV data" button with two-step confirmation.
@@ -93,7 +94,9 @@ function InlineListEditor({items,onChange,fields,addLabel,sortFields,defaultSort
     {displayed.length>0&&<div style={{marginBottom:8}}>
       {displayed.map(function(item){
         if(editId===item.id){
+          var stableIdx=items.indexOf(item);
           return <div key={item.id} style={{display:"flex",gap:8,alignItems:"flex-start",padding:"6px 8px",background:C.primaryLight,borderRadius:8,marginBottom:4}}>
+            <div style={{fontSize:11,fontWeight:700,color:C.primary,minWidth:22,paddingTop:5,flexShrink:0,userSelect:"none",textAlign:"right"}}>{stableIdx>=0?stableIdx+1:"—"}</div>
             {fields.map(function(f){
               if(isMobile&&f.mobileHide) return null;
               return <div key={f.key} style={{flex:f.flex||1,minWidth:isMobile?0:(f.minWidth||0)}}>
@@ -106,7 +109,9 @@ function InlineListEditor({items,onChange,fields,addLabel,sortFields,defaultSort
             </div>
           </div>;
         }
+        var stableIdx=items.indexOf(item);
         return <div key={item.id} style={{display:"flex",gap:8,alignItems:"flex-start",padding:"7px 8px",borderRadius:8,marginBottom:3,background:C.surfaceAlt}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.textHint,minWidth:22,paddingTop:3,flexShrink:0,userSelect:"none",textAlign:"right"}}>{stableIdx>=0?stableIdx+1:"—"}</div>
           {fields.map(function(f){
             if(isMobile&&f.mobileHide) return null;
             var val=item[f.key];

@@ -14,6 +14,8 @@
 //                   cv_bulk_edit action type for bulk apply; extraction starter prompt.
 // Rev: 2026-06-16 — cv_bulk_edit op:replace to replace entire section; Gabbi asks
 //                   add-vs-replace before acting on update/refresh requests.
+// Rev: 2026-06-16 — Index-based item referencing: Gabbi can use index number
+//                   to identify tools/skills/achievements instead of name matching.
 
 // ─── Job summary for system prompt ───────────────────────────────────────────
 function jobsSummaryText(jobs){
@@ -95,7 +97,13 @@ function buildAssistantSystem(cv,profiles,jobs){
     "{\"type\":\"cv_edit\",\"section\":\"tools\",\"op\":\"add\",\"item\":{\"name\":\"Notion\",\"years\":2,\"level\":\"Intermediate\",\"employers\":\"\"}}",
     "<<</ACTION>>>",
     "Sections: \"tools\", \"skills\", \"achievements\"",
-    "Ops: add | edit (match by name for tools/skills, description substring for achievements) | delete",
+    "Ops: add | edit | delete",
+    "Identifying existing entries (for edit/delete): use index (preferred) OR name match.",
+    "  index: 1-based number shown in the CV sections and in the numbered list below. Use this whenever the user refers to an item by number.",
+    "  name: exact name match for tools/skills (fallback when no index given).",
+    "  description: substring match for achievements (fallback when no index given).",
+    "Example edit by index: {\"type\":\"cv_edit\",\"section\":\"tools\",\"op\":\"edit\",\"index\":3,\"item\":{\"level\":\"Expert\"}}",
+    "Example delete by index: {\"type\":\"cv_edit\",\"section\":\"tools\",\"op\":\"delete\",\"index\":5}",
     "Tool/Skill fields: name (string), years (number), level (Beginner|Intermediate|Advanced|Expert), employers (string)",
     "Achievement fields: description (string), employer (string), year (string)",
     "",
@@ -368,10 +376,12 @@ function ActionCard({action,onAccept,onReject,accepted,rejected}){
     var more=items.length>3?" + "+(items.length-3)+" more":"";
     summary=items.length+" "+secName+": "+preview+more;
   } else if(a.type==="cv_edit"){
+    var idxLabel=a.index!=null?"#"+a.index+" ":"";
+    var itm=a.item||{};
     if(a.section==="achievements"){
-      summary=(a.item.description||"").slice(0,120)+(a.item.employer?" — "+a.item.employer:"")+(a.item.year?" ("+a.item.year+")":"");
+      summary=idxLabel+(itm.description||"").slice(0,120)+(itm.employer?" — "+itm.employer:"")+(itm.year?" ("+itm.year+")":"");
     } else {
-      summary=(a.item.name||"")+(a.item.years?" · "+a.item.years+" yr":"")+(a.item.level?" · "+a.item.level:"")+(a.item.employers?" · "+a.item.employers:"");
+      summary=idxLabel+(itm.name||"(by index)")+(itm.years?" · "+itm.years+" yr":"")+(itm.level?" · "+itm.level:"")+(itm.employers?" · "+itm.employers:"");
     }
   } else if(a.type==="cv_pref"){
     summary=(a.field||"")+" → "+(typeof a.value==="string"?a.value.slice(0,100):String(a.value));
@@ -489,26 +499,35 @@ function ProfileAssistant({cv,setCv,jobs,setJobs,profiles,setProfiles,anthropicK
     if(action.type==="cv_edit"){
       var sec=action.section;
       var op=action.op;
-      var item=action.item;
+      var item=action.item||{};
+      // Index is 1-based (as shown in UI and cvSummaryText); convert to 0-based
+      var idx=action.index!=null?Number(action.index)-1:-1;
       setCv(function(prev){
         var list=(prev[sec]||[]).slice();
-        if(sec==="achievements"){
-          if(op==="add"){
+        if(op==="add"){
+          if(sec==="achievements"){
             list=list.concat([Object.assign({id:Date.now()},item)]);
-          } else if(op==="edit"){
-            var md=(item.description||"").toLowerCase().slice(0,60);
-            list=list.map(function(x){return x.description&&x.description.toLowerCase().includes(md)?Object.assign({},x,item):x;});
-          } else if(op==="delete"){
-            var md2=(item.description||"").toLowerCase().slice(0,60);
-            list=list.filter(function(x){return !(x.description&&x.description.toLowerCase().includes(md2));});
-          }
-        } else {
-          if(op==="add"){
+          } else {
             var exists=list.some(function(x){return x.name&&x.name.toLowerCase()===(item.name||"").toLowerCase();});
             if(!exists) list=list.concat([Object.assign({id:Date.now()},item)]);
-          } else if(op==="edit"){
+          }
+        } else if(op==="edit"){
+          // Index match takes priority; fall back to name/description match
+          if(idx>=0&&idx<list.length){
+            list=list.map(function(x,i){return i===idx?Object.assign({},x,item):x;});
+          } else if(sec==="achievements"){
+            var md=(item.description||"").toLowerCase().slice(0,60);
+            list=list.map(function(x){return x.description&&x.description.toLowerCase().includes(md)?Object.assign({},x,item):x;});
+          } else {
             list=list.map(function(x){return x.name&&x.name.toLowerCase()===(item.name||"").toLowerCase()?Object.assign({},x,item):x;});
-          } else if(op==="delete"){
+          }
+        } else if(op==="delete"){
+          if(idx>=0&&idx<list.length){
+            list=list.filter(function(x,i){return i!==idx;});
+          } else if(sec==="achievements"){
+            var md2=(item.description||"").toLowerCase().slice(0,60);
+            list=list.filter(function(x){return !(x.description&&x.description.toLowerCase().includes(md2));});
+          } else {
             list=list.filter(function(x){return !(x.name&&x.name.toLowerCase()===(item.name||"").toLowerCase());});
           }
         }
