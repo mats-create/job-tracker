@@ -12,6 +12,8 @@
 //                   softer off-topic redirect tone.
 // Rev: 2026-06-15 — Tier 1+2 CV extraction: batch extraction rules in system prompt;
 //                   cv_bulk_edit action type for bulk apply; extraction starter prompt.
+// Rev: 2026-06-16 — cv_bulk_edit op:replace to replace entire section; Gabbi asks
+//                   add-vs-replace before acting on update/refresh requests.
 
 // ─── Job summary for system prompt ───────────────────────────────────────────
 function jobsSummaryText(jobs){
@@ -102,9 +104,13 @@ function buildAssistantSystem(cv,profiles,jobs){
     "{\"type\":\"cv_bulk_edit\",\"section\":\"tools\",\"op\":\"add\",\"items\":[{\"name\":\"Figma\",\"years\":4,\"level\":\"Advanced\",\"employers\":\"Spotify\"},{\"name\":\"Jira\",\"years\":8,\"level\":\"Expert\",\"employers\":\"Spotify, IKEA\"}]}",
     "<<</ACTION>>>",
     "Use cv_bulk_edit (not cv_edit) whenever you are extracting multiple entries at once.",
-    "Fields: same as cv_edit. section: tools | skills | achievements. op: always add for bulk extraction.",
+    "Fields: same as cv_edit. section: tools | skills | achievements.",
+    "op values for cv_bulk_edit:",
+    "  add     — adds items not already present (deduplicates). Use for extraction when user wants to keep existing entries.",
+    "  replace — replaces the ENTIRE section with the new items list. Use when user wants to update/refresh/overwrite a section.",
     "items: array of ALL entries for that section in one block. One block per section.",
     "NEVER use cv_bulk_edit with fewer than 2 items — use cv_edit for single entries.",
+    "IMPORTANT: Before using op:replace, confirm with the user that they want to overwrite existing entries.",
     "",
     "── 2. CV PREFERENCES ──",
     "<<<ACTION>>>",
@@ -160,6 +166,14 @@ function buildAssistantSystem(cv,profiles,jobs){
     "RULE 1 — RESPOND WITH A COMPLETE BATCH, NOT INDIVIDUAL ITEMS.",
     "Never suggest entries one at a time. Always extract ALL entries for a section in a single cv_bulk_edit action block.",
     "The user should not need to ask multiple times to get all their data out.",
+    "",
+    "RULE 1b — CLARIFY ADD VS REPLACE WHEN UPDATING.",
+    "When the user asks to 'update', 'refresh', 'replace', or 'redo' their tools/skills/achievements:",
+    "  Ask first: 'Do you want to ADD the new entries to your existing list, or REPLACE the entire section?'",
+    "  If ADD: use op:add (deduplicates, keeps existing entries).",
+    "  If REPLACE: use op:replace (overwrites the entire section with the new list).",
+    "  If the section is empty, always use op:add — no need to ask.",
+    "  If the user says 'extract from my CV' with no existing entries, always use op:add.",
     "",
     "RULE 2 — EXTRACT FROM THE RAW CV TEXT FIRST, THEN COMPARE.",
     "Read the full CV text carefully. Extract every tool, skill, and achievement you can identify.",
@@ -316,7 +330,7 @@ function ActionCard({action,onAccept,onReject,accepted,rejected}){
 
   // Determine label and colours based on action type
   var typeLabel="";
-  var opLabel=a.type==="cv_bulk_edit"?"Add all":a.op==="add"?"Add":a.op==="edit"?"Edit":a.op==="delete"?"Delete":
+  var opLabel=a.type==="cv_bulk_edit"?(a.op==="replace"?"Replace all":"Add all"):a.op==="add"?"Add":a.op==="edit"?"Edit":a.op==="delete"?"Delete":
     a.op==="setStatus"?"Set status":a.op==="setNotes"?"Set notes":
     a.op==="appendNote"?"Add note":a.op==="setDate"?"Set date":a.op==="setActive"?"Toggle":
     a.op==="setQuery"?"Edit query":a.op==="setLimit"?"Edit limit":"Update";
@@ -330,7 +344,8 @@ function ActionCard({action,onAccept,onReject,accepted,rejected}){
   } else if(a.type==="cv_bulk_edit"){
     var secName=a.section==="tools"?"Tools":a.section==="skills"?"Skills":"Achievements";
     typeLabel="CV "+secName+" (bulk)";
-    opColor=C.success; opBg=C.successBg;
+    opColor=a.op==="replace"?C.warning:C.success;
+    opBg=a.op==="replace"?C.warningBg:C.successBg;
   } else if(a.type==="cv_pref"){
     typeLabel="CV Preference";
     opColor=C.info; opBg=C.infoBg;
@@ -506,20 +521,28 @@ function ProfileAssistant({cv,setCv,jobs,setJobs,profiles,setProfiles,anthropicK
       var sec=action.section;
       var items=action.items||[];
       if(!items.length) return;
+      var op=action.op||"add";
       setCv(function(prev){
-        var list=(prev[sec]||[]).slice();
-        items.forEach(function(item){
-          if(sec==="achievements"){
-            // Deduplicate by description substring
-            var matchDesc=(item.description||"").toLowerCase().slice(0,60);
-            var exists=list.some(function(x){return x.description&&x.description.toLowerCase().includes(matchDesc);});
-            if(!exists) list=list.concat([Object.assign({id:Date.now()+Math.random()},item)]);
-          } else {
-            // Deduplicate by name
-            var exists=list.some(function(x){return x.name&&x.name.toLowerCase()===(item.name||"").toLowerCase();});
-            if(!exists) list=list.concat([Object.assign({id:Date.now()+Math.random()},item)]);
-          }
-        });
+        var list;
+        if(op==="replace"){
+          // Replace entire section — assign fresh IDs to all incoming items
+          list=items.map(function(item){
+            return Object.assign({id:Date.now()+Math.random()},item);
+          });
+        } else {
+          // Add — deduplicate against existing entries
+          list=(prev[sec]||[]).slice();
+          items.forEach(function(item){
+            if(sec==="achievements"){
+              var matchDesc=(item.description||"").toLowerCase().slice(0,60);
+              var exists=list.some(function(x){return x.description&&x.description.toLowerCase().includes(matchDesc);});
+              if(!exists) list=list.concat([Object.assign({id:Date.now()+Math.random()},item)]);
+            } else {
+              var exists=list.some(function(x){return x.name&&x.name.toLowerCase()===(item.name||"").toLowerCase();});
+              if(!exists) list=list.concat([Object.assign({id:Date.now()+Math.random()},item)]);
+            }
+          });
+        }
         return Object.assign({},prev,{[sec]:list});
       });
     }
