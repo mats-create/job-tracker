@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Job Tracker — Admin</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#F7F9F7;color:#1A2E26;font-size:15px;-webkit-font-smoothing:antialiased}
+.container{max-width:860px;margin:0 auto;padding:32px 24px}
+h1{font-size:22px;font-weight:800;color:#1A2E26;margin-bottom:4px}
+.subtitle{font-size:14px;color:#8FA89F;margin-bottom:32px}
+.card{background:#fff;border:1px solid #D8E4DF;border-radius:16px;padding:24px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.06)}
+.card-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#8FA89F;margin-bottom:16px}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:#8FA89F;padding:0 12px 10px 0;border-bottom:1px solid #D8E4DF}
+td{padding:12px 12px 12px 0;border-bottom:1px solid #F0F5F2;font-size:14px;color:#1A2E26;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:12px;font-weight:600}
+.badge-yes{background:#E8F5EE;color:#2E7D5A}
+.badge-no{background:#F0F0F0;color:#8A8A8A}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;border:none;font-family:inherit;transition:opacity 0.15s}
+.btn:disabled{opacity:0.5;cursor:not-allowed}
+.btn-primary{background:#5C8A7A;color:#fff}
+.btn-danger{background:#FDECEA;color:#C0392B}
+.btn-sm{padding:5px 12px;font-size:12px;border-radius:7px}
+.add-row{display:flex;gap:10px;margin-top:4px}
+input[type=email]{flex:1;padding:10px 14px;border:1.5px solid #D8E4DF;border-radius:10px;font-size:14px;font-family:inherit;color:#1A2E26;background:#fff;outline:none}
+input[type=email]:focus{border-color:#5C8A7A}
+.empty{color:#8FA89F;font-size:14px;padding:12px 0}
+.error{background:#FDECEA;color:#C0392B;padding:10px 14px;border-radius:10px;font-size:13px;margin-bottom:16px}
+.signin-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center}
+.signin-box{background:#fff;border:1px solid #D8E4DF;border-radius:20px;padding:40px;text-align:center;max-width:360px;width:100%;box-shadow:0 2px 16px rgba(0,0,0,0.08)}
+.spinner{width:20px;height:20px;border:2.5px solid rgba(255,255,255,0.4);border-top-color:#fff;border-radius:50%;animation:spin 0.7s linear infinite;display:inline-block;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px}
+.user-pill{display:flex;align-items:center;gap:8px;background:#F0F5F2;padding:6px 12px;border-radius:10px;font-size:13px;color:#5A7168}
+</style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+  from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs }
+  from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
+
+const ADMIN_EMAIL = "mats@hultgrensaksi.com";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCDYh7BlNb63sOpy8Hje8YYjdBq6f-JD0Y",
+  authDomain: "job-tracker-mph.firebaseapp.com",
+  projectId: "job-tracker-mph",
+  storageBucket: "job-tracker-mph.firebasestorage.app",
+  messagingSenderId: "974850553892",
+  appId: "1:974850553892:web:241c47cd27051df9b700b1"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let currentUser = null;
+let allowlist = []; // [{email, addedAt}]
+let userMeta  = {}; // {uid: {firstSeen, lastSeen, hasAnthropicKey, hasJsKey, email}}
+let newEmail  = "";
+let loading   = true;
+let addLoading = false;
+let error     = "";
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function render(){
+  const root = document.getElementById("root");
+  if(loading && !currentUser){
+    root.innerHTML = `<div class="signin-wrap"><div class="signin-box">
+      <div style="font-size:40px;margin-bottom:16px">🔒</div>
+      <h2 style="font-size:18px;font-weight:800;margin-bottom:8px">Job Tracker Admin</h2>
+      <p style="font-size:14px;color:#8FA89F;margin-bottom:24px">Sign in with your admin Google account</p>
+      <button id="signin-btn" class="btn btn-primary" style="width:100%;justify-content:center;padding:12px">Sign in with Google</button>
+    </div></div>`;
+    document.getElementById("signin-btn").onclick = doSignIn;
+    return;
+  }
+  if(loading){
+    root.innerHTML = `<div class="signin-wrap"><div style="font-size:14px;color:#8FA89F">Loading…</div></div>`;
+    return;
+  }
+  if(!currentUser || currentUser.email !== ADMIN_EMAIL){
+    root.innerHTML = `<div class="signin-wrap"><div class="signin-box">
+      <div style="font-size:40px;margin-bottom:16px">⛔</div>
+      <h2 style="font-size:18px;font-weight:800;margin-bottom:8px">Access denied</h2>
+      <p style="font-size:14px;color:#8FA89F;margin-bottom:24px">${currentUser ? currentUser.email + " is not an admin." : ""}</p>
+      <button id="signout-btn" class="btn" style="background:#F0F5F2;color:#5A7168;width:100%;justify-content:center">Sign out</button>
+    </div></div>`;
+    document.getElementById("signout-btn").onclick = doSignOut;
+    return;
+  }
+
+  // Build user lookup by email
+  const metaByEmail = {};
+  Object.values(userMeta).forEach(m => { if(m.email) metaByEmail[m.email] = m; });
+
+  const rows = allowlist.map(entry => {
+    const meta = metaByEmail[entry.email] || {};
+    const hasC = meta.hasAnthropicKey ? '<span class="badge badge-yes">✓ Claude</span>' : '<span class="badge badge-no">✗ Claude</span>';
+    const hasJ = meta.hasJsKey ? '<span class="badge badge-yes">✓ JSearch</span>' : '<span class="badge badge-no">✗ JSearch</span>';
+    const first = meta.firstSeen ? fmtDate(meta.firstSeen) : '<span style="color:#ccc">—</span>';
+    const last  = meta.lastSeen  ? fmtDate(meta.lastSeen)  : '<span style="color:#ccc">—</span>';
+    return `<tr>
+      <td style="font-weight:500">${esc(entry.email)}</td>
+      <td>${fmtDate(entry.addedAt)}</td>
+      <td>${first}</td>
+      <td>${last}</td>
+      <td style="display:flex;gap:6px;flex-wrap:wrap">${hasC}${hasJ}</td>
+      <td><button class="btn btn-danger btn-sm remove-btn" data-email="${esc(entry.email)}">Remove</button></td>
+    </tr>`;
+  }).join("");
+
+  root.innerHTML = `
+    <div class="container">
+      <div class="topbar">
+        <div>
+          <h1>Job Tracker Admin</h1>
+          <div class="subtitle">Manage user access and monitor onboarding</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div class="user-pill">⚙️ ${esc(currentUser.email)}</div>
+          <button id="signout-btn" class="btn btn-sm" style="background:#F0F5F2;color:#5A7168">Sign out</button>
+        </div>
+      </div>
+
+      ${error ? `<div class="error">${esc(error)}</div>` : ""}
+
+      <div class="card">
+        <div class="card-title">Add user to allowlist</div>
+        <div class="add-row">
+          <input type="email" id="new-email" placeholder="user@example.com" value="${esc(newEmail)}" />
+          <button id="add-btn" class="btn btn-primary" ${addLoading?"disabled":""}>
+            ${addLoading?'<span class="spinner"></span> Adding…':"+ Add user"}
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Allowlist — ${allowlist.length} user${allowlist.length!==1?"s":""}</div>
+        ${allowlist.length===0
+          ? '<div class="empty">No users yet. Add the first one above.</div>'
+          : `<table>
+              <thead><tr>
+                <th>Email</th>
+                <th>Added</th>
+                <th>First login</th>
+                <th>Last login</th>
+                <th>API keys</th>
+                <th></th>
+              </tr></thead>
+              <tbody>${rows}</tbody>
+            </table>`
+        }
+      </div>
+    </div>`;
+
+  document.getElementById("signout-btn").onclick = doSignOut;
+  document.getElementById("new-email").oninput = e => { newEmail = e.target.value; };
+  document.getElementById("new-email").onkeydown = e => { if(e.key==="Enter") doAdd(); };
+  document.getElementById("add-btn").onclick = doAdd;
+  document.querySelectorAll(".remove-btn").forEach(btn => {
+    btn.onclick = () => doRemove(btn.dataset.email);
+  });
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function fmtDate(iso){
+  if(!iso) return "—";
+  try{
+    return new Date(iso).toLocaleDateString("sv-SE",{year:"numeric",month:"short",day:"numeric"});
+  }catch(e){ return iso; }
+}
+function esc(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+// ── Data ──────────────────────────────────────────────────────────────────────
+async function loadData(){
+  // Load allowlist
+  const snap = await getDocs(collection(db,"allowlist"));
+  allowlist = [];
+  snap.forEach(d => allowlist.push({email: d.id, ...d.data()}));
+  allowlist.sort((a,b) => (b.addedAt||"").localeCompare(a.addedAt||""));
+
+  // Load user meta (all users — admin Security Rule allows this)
+  const userSnap = await getDocs(collection(db,"users"));
+  userMeta = {};
+  userSnap.forEach(d => {
+    const data = d.data();
+    userMeta[d.id] = {
+      firstSeen: data.firstSeen || null,
+      lastSeen:  data.lastSeen  || null,
+      hasAnthropicKey: !!(data.anthropicKey && data.anthropicKey.trim()),
+      hasJsKey:        !!(data.jsKey && data.jsKey.trim()),
+      email: data.email || null,
+    };
+  });
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────────
+async function doSignIn(){
+  try{
+    const provider = new GoogleAuthProvider();
+    await signInWithPopup(auth, provider);
+  }catch(e){ error = e.message; render(); }
+}
+
+async function doSignOut(){
+  await signOut(auth);
+}
+
+async function doAdd(){
+  const email = newEmail.trim().toLowerCase();
+  if(!email || !email.includes("@")){ error = "Please enter a valid email address."; render(); return; }
+  if(allowlist.some(e => e.email === email)){ error = email+" is already on the allowlist."; render(); return; }
+  addLoading = true; error = ""; render();
+  try{
+    await setDoc(doc(db,"allowlist",email),{email, addedAt: new Date().toISOString()});
+    newEmail = "";
+    await loadData();
+  }catch(e){ error = "Failed to add user: "+e.message; }
+  addLoading = false; render();
+}
+
+async function doRemove(email){
+  if(!confirm("Remove "+email+" from the allowlist? They will lose access immediately.")) return;
+  try{
+    await deleteDoc(doc(db,"allowlist",email));
+    await loadData();
+    render();
+  }catch(e){ error = "Failed to remove: "+e.message; render(); }
+}
+
+// ── Auth listener ─────────────────────────────────────────────────────────────
+onAuthStateChanged(auth, async function(u){
+  currentUser = u || null;
+  if(u && u.email === ADMIN_EMAIL){
+    loading = true; render();
+    try{
+      // Write admin's own email to their user doc so it appears in meta lookups
+      await setDoc(doc(db,"users",u.uid),{email: u.email},{merge:true});
+      await loadData();
+    }catch(e){ error = e.message; }
+    loading = false;
+  } else {
+    loading = false;
+  }
+  render();
+});
+</script>
+</body>
+</html>
