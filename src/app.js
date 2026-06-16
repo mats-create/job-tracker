@@ -519,7 +519,7 @@ function SignInScreen({onSignIn}){
       </button>
       {error&&<div style={{marginTop:16,fontSize:13,color:C.error,background:C.errorBg,borderRadius:10,padding:"10px 14px"}}>{error}</div>}
       <p style={{fontSize:12,color:C.textHint,marginTop:24,lineHeight:1.6}}>Your data is stored privately in the cloud, accessible only to you. API keys are encrypted and never shared.</p>
-      <p style={{fontSize:12,color:C.textHint,marginTop:16}}>No access yet? <a href="mailto:mats@hultgrensaksi.com?subject=Job%20Tracker%20%E2%80%94%20Request%20access&body=Hi%20Mats%2C%0A%0AI%27d%20like%20to%20request%20access%20to%20Job%20Tracker.%0A%0AMy%20Google%20email%20is%3A%20" style={{color:C.primary,textDecoration:"none",fontWeight:600}}>Request access →</a></p>
+      <p style={{fontSize:12,color:C.textHint,marginTop:16}}>No access yet? <a href="mailto:noreply@hultgrensaksi.com?subject=Job%20Tracker%20%E2%80%94%20Request%20access&body=Hi%20Mats%2C%0A%0AI%27d%20like%20to%20request%20access%20to%20Job%20Tracker.%0A%0AMy%20Google%20email%20is%3A%20" style={{color:C.primary,textDecoration:"none",fontWeight:600}}>Request access →</a></p>
     </div>
   </div>;
 }
@@ -527,7 +527,7 @@ function SignInScreen({onSignIn}){
 // ─── AccessDeniedScreen ───────────────────────────────────────────────────────
 function AccessDeniedScreen({email,onSignOut}){
   var mailBody="Hi Mats,%0A%0AI'd like to request access to Job Tracker.%0A%0AMy Google email is: "+encodeURIComponent(email||"");
-  var mailHref="mailto:mats@hultgrensaksi.com?subject=Job%20Tracker%20%E2%80%94%20Request%20access&body="+mailBody;
+  var mailHref="mailto:noreply@hultgrensaksi.com?subject=Job%20Tracker%20%E2%80%94%20Request%20access&body="+mailBody;
   return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.bg,padding:24}}>
     <div style={{width:"100%",maxWidth:420,textAlign:"center"}}>
       <div style={{width:64,height:64,borderRadius:20,background:C.surfaceAlt,display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,margin:"0 auto 24px",border:"2px solid "+C.border}}>🔒</div>
