@@ -1,8 +1,8 @@
 // components.js
 // Rev: 2026-06-16 — Gabbi 🫶 icon; soft warm green tint in sidebar (lindbloom green),
-//                   same borderRadius:8 as other items, not pill-shaped.
+//                   same borderRadius:8 as other items, not pill-shaped
 // Rev: 2026-06-16 — Mobile nav: Gabbi moved to pos 2 (after Dashboard); monochrome
-//                   SVG hand-heart icon matches all other nav icons.
+//                   SVG hand-heart icon matches all other nav icons
 
 const { useState, useRef, useEffect, useCallback } = React;
 
