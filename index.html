@@ -1110,7 +1110,8 @@ function weekEnd(dateStr){
 
 
 // components.js
-// Rev: 2026-06-16 — Gabbi 🫶 icon; special green pill button in sidebar below Dashboard.
+// Rev: 2026-06-16 — Gabbi 🫶 icon; soft warm green tint in sidebar (lindbloom green),
+//                   same borderRadius:8 as other items, not pill-shaped.
 
 const { useState, useRef, useEffect, useCallback } = React;
 
@@ -1349,15 +1350,16 @@ function Sidebar({activeTab,setActiveTab,collapsed,setCollapsed,mobileOpen,setMo
             {gp.tabs.map(function(t){
               var on=activeTab===t.id;
               var isGabbi=t.id==="assistant";
-              var gabbiStyle=isGabbi?{
-                background:on?C.primaryDark:C.primary,
-                color:"#fff",
-                borderRadius:20,
+              // Gabbi: same shape as other items but with a soft warm green tint
+              // resting: slightly greener than active-tab bg; active: standard active style
+              var gabbiStyle=isGabbi&&!on?{
+                background:"#D4EAE2",
+                color:"#2E6B54",
+                fontWeight:600,
+              }:isGabbi&&on?{
+                background:C.primaryLight,
+                color:C.primary,
                 fontWeight:700,
-                margin:collapsed?"6px auto":"6px 10px",
-                width:collapsed?40:"calc(100% - 20px)",
-                padding:collapsed?"10px":"10px 14px",
-                boxShadow:on?"0 2px 8px rgba(0,0,0,0.18)":"0 1px 4px rgba(0,0,0,0.12)",
               }:{};
               return <button key={t.id} className={"jt-sb-item"+(on?" active":"")} onClick={function(){pickTab(t.id);}} title={collapsed?t.label:""} style={Object.assign({},{display:"flex",alignItems:"center",gap:12,width:"calc(100% - 12px)",margin:"2px 6px",padding:collapsed?"10px":"10px 12px",border:"none",borderRadius:8,background:on?C.primaryLight:"transparent",color:on?C.primary:C.textSecondary,fontWeight:on?700:500,fontSize:13,cursor:"pointer",textAlign:"left",justifyContent:collapsed?"center":"flex-start"},gabbiStyle)}>
                 <span style={{fontSize:18,lineHeight:1,flexShrink:0,width:24,textAlign:"center"}}>{t.icon}</span>
