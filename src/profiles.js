@@ -3,8 +3,111 @@
 // Rev: 2026-06-11 — BUG11: addedCount now reflects truly_new.length (post-dedup)
 //   not preFiltered.length, so re-running a profile correctly reports 0 new jobs.
 
+// profiles.js
+// Rev: 2026-06-16 — Portrait upload with Cropper.js pan/zoom; stored as base64 in Firestore.
+// Rev: 2026-06-10 — BUG2+3: fix added/skipped counters in fetchAF and fetchJS.
+// Rev: 2026-06-11 — BUG11: addedCount now reflects truly_new.length (post-dedup)
+//   not preFiltered.length, so re-running a profile correctly reports 0 new jobs.
+
+// ─── Portrait uploader with Cropper.js ───────────────────────────────────────
+function PortraitUploader({portrait,setPortrait}){
+  var [cropping,setCropping]=useState(false);
+  var [srcUrl,setSrcUrl]=useState(null);
+  var cropperRef=useRef(null);
+  var imgRef=useRef(null);
+  var fileRef=useRef(null);
+
+  function onFile(e){
+    var file=e.target.files&&e.target.files[0];
+    if(!file) return;
+    if(file.size>10*1024*1024){
+      alert("Photo is too large (max 10 MB). Please choose a smaller image.");
+      e.target.value=""; return;
+    }
+    var reader=new FileReader();
+    reader.onload=function(ev){
+      setSrcUrl(ev.target.result);
+      setCropping(true);
+    };
+    reader.readAsDataURL(file);
+    e.target.value="";
+  }
+
+  useEffect(function(){
+    if(!cropping||!srcUrl||!imgRef.current) return;
+    if(!window.Cropper){
+      alert("Image cropper failed to load. Check your internet connection and reload the page.");
+      setCropping(false); setSrcUrl(null); return;
+    }
+    if(cropperRef.current){ cropperRef.current.destroy(); cropperRef.current=null; }
+    cropperRef.current=new window.Cropper(imgRef.current,{
+      aspectRatio:1,
+      viewMode:1,
+      dragMode:"move",
+      autoCropArea:0.9,
+      movable:true,
+      zoomable:true,
+      rotatable:false,
+      scalable:false,
+      cropBoxResizable:false,
+      cropBoxMovable:false,
+      guides:false,
+      center:false,
+      highlight:false,
+      background:false,
+    });
+    return function(){
+      if(cropperRef.current){ cropperRef.current.destroy(); cropperRef.current=null; }
+    };
+  },[cropping,srcUrl]);
+
+  function applyPortrait(){
+    if(!cropperRef.current) return;
+    var canvas=cropperRef.current.getCroppedCanvas({width:240,height:240,imageSmoothingQuality:"high"});
+    setPortrait(canvas.toDataURL("image/jpeg",0.88));
+    setCropping(false);
+    setSrcUrl(null);
+  }
+
+  function cancelCrop(){
+    setCropping(false);
+    setSrcUrl(null);
+  }
+
+  return <div>
+    <Label>Profile portrait <span style={{fontWeight:400,color:C.textHint,fontSize:12}}>(optional — shown in cover letter PDF)</span></Label>
+    <div style={{display:"flex",alignItems:"center",gap:16,marginTop:8}}>
+      {portrait
+        ?<img src={portrait} style={{width:72,height:72,borderRadius:"50%",objectFit:"cover",border:"2px solid "+C.border,flexShrink:0}} />
+        :<div style={{width:72,height:72,borderRadius:"50%",background:C.surfaceAlt,border:"2px dashed "+C.border,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0,color:C.textHint}}>👤</div>
+      }
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <Btn onClick={function(){fileRef.current&&fileRef.current.click();}} style={{fontSize:13,padding:"8px 14px"}}>
+          {portrait?"Change photo":"Upload photo"}
+        </Btn>
+        {portrait&&<Btn variant="danger" onClick={function(){setPortrait("");}} style={{fontSize:13,padding:"8px 14px"}}>Remove</Btn>}
+      </div>
+      <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={onFile} />
+    </div>
+
+    {cropping&&srcUrl&&<div style={{position:"fixed",inset:0,zIndex:700,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div style={{background:C.surface,borderRadius:20,padding:24,width:"min(440px,96vw)",boxShadow:"0 8px 40px rgba(0,0,0,0.3)"}}>
+        <div style={{fontSize:15,fontWeight:700,color:C.textPrimary,marginBottom:14}}>Adjust photo</div>
+        <div style={{width:"100%",height:300,overflow:"hidden",borderRadius:12,background:"#111",marginBottom:16}}>
+          <img ref={imgRef} src={srcUrl} style={{maxWidth:"100%",display:"block"}} />
+        </div>
+        <div style={{fontSize:12,color:C.textHint,marginBottom:16,textAlign:"center"}}>Drag to reposition · Pinch or scroll to zoom</div>
+        <div style={{display:"flex",gap:10}}>
+          <Btn variant="primary" onClick={applyPortrait} style={{flex:1,fontSize:14,minHeight:46}}>✓ Use this photo</Btn>
+          <Btn onClick={cancelCrop} style={{fontSize:14,minHeight:46}}>Cancel</Btn>
+        </div>
+      </div>
+    </div>}
+  </div>;
+}
+
 // ─── Search Profiles ──────────────────────────────────────────────────────────
-function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJsKey,anthropicKey,setAnthropicKey,pendingProfileRun,setPendingProfileRun,dismissedIds}){
+function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJsKey,anthropicKey,setAnthropicKey,pendingProfileRun,setPendingProfileRun,dismissedIds,portrait,setPortrait}){
   var [showAfKey,setShowAfKey]=useState(false);
   var [showJsKey,setShowJsKey]=useState(false);
   var [showAnthropicKey,setShowAnthropicKey]=useState(false);
@@ -228,6 +331,10 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
         </div>
         <Alert type="info">🔒 Keys are stored encrypted in your Firestore account and are never shared with anyone. <InfoTip>Your API keys are only used when you explicitly trigger a fetch or AI action. They are stored in your personal Firestore document, accessible only when signed in as you.</InfoTip></Alert>
       </div>
+    </Card>
+    <Card>
+      <SectionTitle>Profile & portrait</SectionTitle>
+      <PortraitUploader portrait={portrait||""} setPortrait={setPortrait} />
     </Card>
   </div>;
 }

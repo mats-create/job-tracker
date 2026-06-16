@@ -1,10 +1,7 @@
 // utils.js
-// Rev: 2026-06-10 — BUG1+6: scoreJobs() now accepts object {jobs,cv,apiKey,onBatch};
-//                   BUG5: filterByLocation remote keyword fallback.
-// Rev: 2026-06-11 — scoreJobs continues on batch failure instead of aborting;
-//                   returns {result, failedBatches} so callers can surface partial errors.
+// Rev: 2026-06-16 — Cover letter template system: COVER_TEMPLATES, COVER_FONTS, COVER_COLORS,
+//                   buildLetterHtml(), exportLetterPdf() updated to accept portrait + settings.
 // Rev: 2026-06-16 — cvSummaryText: numbered lists for tools, skills, achievements
-//                   so Gabbi can reference items by index number.
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
 const STORAGE_KEY = "jobTracker.v1";
@@ -354,43 +351,133 @@ function extractApplicantName(cv){
   return first;
 }
 
-function exportLetterPdf({letter,cv,job}){
-  if(!letter||!letter.trim()) return;
-  var name=extractApplicantName(cv);
+// ─── Cover letter template definitions ────────────────────────────────────────
+var COVER_TEMPLATES=[
+  {id:"classic",  name:"Classic",  desc:"Traditional letterhead, serif font"},
+  {id:"modern",   name:"Modern",   desc:"Colour header banner, clean sans-serif"},
+  {id:"compact",  name:"Compact",  desc:"Minimalist, tight spacing, no decoration"},
+];
+
+var COVER_FONTS=[
+  {id:"georgia",  name:"Georgia",   css:"Georgia,'Times New Roman',serif"},
+  {id:"system",   name:"Modern",    css:"-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"},
+  {id:"garamond", name:"Elegant",   css:"Garamond,'EB Garamond',Georgia,serif"},
+];
+
+var COVER_COLORS=[
+  {id:"green", name:"Forest green", primary:"#3D6B5C", light:"#EAF2EF", border:"#B8D4CC"},
+  {id:"slate", name:"Slate blue",   primary:"#2C5282", light:"#EBF4FF", border:"#BEE3F8"},
+  {id:"mono",  name:"Monochrome",   primary:"#1a1a1a", light:"#F5F5F5", border:"#CCCCCC"},
+];
+
+function getTemplateDefaults(){
+  return {template:"classic", font:"georgia", color:"green"};
+}
+
+function buildLetterHtml({letter,cv,job,portrait,settings}){
+  var s=Object.assign({},getTemplateDefaults(),settings||{});
+  var name=extractApplicantName(cv)||"";
   var today=new Date().toLocaleDateString(undefined,{year:"numeric",month:"long",day:"numeric"});
   var recipient="";
   if(job){
-    recipient=job.company?job.company:"";
+    recipient=job.company||"";
     if(job.title) recipient+=(recipient?" — ":"")+"Re: "+job.title;
   }
-  function esc(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+  function esc(str){return String(str||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
   var paragraphs=letter.split(/\n\s*\n/).map(function(p){
     return "<p>"+esc(p).replace(/\n/g,"<br>")+"</p>";
   }).join("\n");
   var docTitle=(name?name+" — ":"")+"Cover letter"+(job&&job.company?" — "+job.company:"");
-  var html=
-    "<!doctype html><html><head><meta charset=\"utf-8\"><title>"+esc(docTitle)+"</title>"+
-    "<style>"+
-    "@page{size:A4;margin:22mm 22mm 22mm 22mm}"+
-    "html,body{background:#fff}"+
-    "body{font-family:Georgia,'Times New Roman',serif;font-size:11.5pt;line-height:1.55;color:#1a1a1a;margin:0;padding:0}"+
-    ".letterhead{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:36px;padding-bottom:14px;border-bottom:1px solid #d0d0d0}"+
-    ".letterhead .sender{font-weight:600;font-size:13pt;color:#1a1a1a}"+
-    ".letterhead .date{font-size:10.5pt;color:#555}"+
-    ".recipient{margin-bottom:28px;font-size:10.5pt;color:#555}"+
-    "p{margin:0 0 12px 0;text-align:left;hyphens:auto;word-break:normal;overflow-wrap:break-word}"+
+
+  var fontDef=COVER_FONTS.find(function(f){return f.id===s.font;})||COVER_FONTS[0];
+  var colorDef=COVER_COLORS.find(function(c){return c.id===s.color;})||COVER_COLORS[0];
+  var portraitTag=portrait?"<img src=\""+portrait+"\" style=\"width:72px;height:72px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid "+colorDef.border+"\" />":"";
+
+  var baseStyle=
+    "@page{size:A4;margin:20mm 22mm 22mm 22mm}"+
+    "html,body{background:#fff;margin:0;padding:0}"+
+    "body{font-family:"+fontDef.css+";font-size:11.5pt;line-height:1.6;color:#1a1a1a}"+
+    "p{margin:0 0 13px 0;text-align:left;word-break:normal;overflow-wrap:break-word}"+
     "p:last-child{margin-bottom:0}"+
-    "@media print{.no-print{display:none}}"+
-    ".no-print{position:fixed;top:10px;right:10px;background:#5C8A7A;color:#fff;padding:10px 16px;border-radius:8px;font-family:sans-serif;font-size:13px;cursor:pointer;border:none;box-shadow:0 2px 8px rgba(0,0,0,0.2)}"+
-    "</style></head><body>"+
-    "<button class=\"no-print\" onclick=\"window.print()\">Print / Save as PDF</button>"+
-    "<div class=\"letterhead\">"+
-    "<div class=\"sender\">"+esc(name||"")+"</div>"+
-    "<div class=\"date\">"+esc(today)+"</div>"+
-    "</div>"+
-    (recipient?"<div class=\"recipient\">"+esc(recipient)+"</div>":"")+
-    paragraphs+
-    "</body></html>";
+    "@media print{.no-print{display:none!important}}"+
+    ".no-print{position:fixed;top:12px;right:12px;background:"+colorDef.primary+";color:#fff;padding:10px 18px;border-radius:8px;font-family:sans-serif;font-size:13px;cursor:pointer;border:none;box-shadow:0 2px 8px rgba(0,0,0,0.2)}";
+
+  var html;
+
+  if(s.template==="classic"){
+    html=
+      "<!doctype html><html><head><meta charset=\"utf-8\"><title>"+esc(docTitle)+"</title><style>"+
+      baseStyle+
+      ".header{display:flex;align-items:center;gap:18px;margin-bottom:32px;padding-bottom:16px;border-bottom:2px solid "+colorDef.primary+"}"+
+      ".sender-name{font-size:15pt;font-weight:700;color:"+colorDef.primary+";margin-bottom:2px}"+
+      ".date{font-size:10pt;color:#666;margin-top:2px}"+
+      ".recipient{margin-bottom:28px;font-size:10.5pt;color:#555}"+
+      "</style></head><body>"+
+      "<button class=\"no-print\" onclick=\"window.print()\">Print / Save as PDF</button>"+
+      "<div class=\"header\">"+
+      portraitTag+
+      "<div style=\"flex:1\">"+
+      "<div class=\"sender-name\">"+esc(name)+"</div>"+
+      "<div class=\"date\">"+esc(today)+"</div>"+
+      "</div>"+
+      "</div>"+
+      (recipient?"<div class=\"recipient\">"+esc(recipient)+"</div>":"")+
+      paragraphs+
+      "</body></html>";
+  } else if(s.template==="modern"){
+    html=
+      "<!doctype html><html><head><meta charset=\"utf-8\"><title>"+esc(docTitle)+"</title><style>"+
+      baseStyle+
+      ".banner{background:"+colorDef.primary+";color:#fff;padding:28px 32px;display:flex;align-items:center;gap:20px;margin:-20mm -22mm 32px;padding-top:24px}"+
+      ".banner-name{font-size:16pt;font-weight:700;letter-spacing:0.3px}"+
+      ".banner-date{font-size:10pt;opacity:0.85;margin-top:4px}"+
+      ".body-wrap{padding:0}"+
+      ".recipient{margin-bottom:26px;font-size:10.5pt;color:#555;padding-left:2px}"+
+      ".portrait-modern{width:76px;height:76px;border-radius:50%;object-fit:cover;border:3px solid rgba(255,255,255,0.6);flex-shrink:0}"+
+      "</style></head><body>"+
+      "<button class=\"no-print\" onclick=\"window.print()\">Print / Save as PDF</button>"+
+      "<div class=\"banner\">"+
+      (portrait?"<img src=\""+portrait+"\" class=\"portrait-modern\" />":"")+
+      "<div>"+
+      "<div class=\"banner-name\">"+esc(name)+"</div>"+
+      "<div class=\"banner-date\">"+esc(today)+"</div>"+
+      "</div>"+
+      "</div>"+
+      "<div class=\"body-wrap\">"+
+      (recipient?"<div class=\"recipient\">"+esc(recipient)+"</div>":"")+
+      paragraphs+
+      "</div>"+
+      "</body></html>";
+  } else {
+    // compact
+    html=
+      "<!doctype html><html><head><meta charset=\"utf-8\"><title>"+esc(docTitle)+"</title><style>"+
+      baseStyle+
+      "body{font-size:11pt;line-height:1.5}"+
+      ".header{display:flex;align-items:center;gap:14px;margin-bottom:22px}"+
+      ".sender-name{font-size:12pt;font-weight:700;color:"+colorDef.primary+"}"+
+      ".date{font-size:9.5pt;color:#888}"+
+      ".recipient{margin-bottom:18px;font-size:10pt;color:#666}"+
+      "p{margin:0 0 10px 0}"+
+      "</style></head><body>"+
+      "<button class=\"no-print\" onclick=\"window.print()\">Print / Save as PDF</button>"+
+      "<div class=\"header\">"+
+      (portrait?"<img src=\""+portrait+"\" style=\"width:52px;height:52px;border-radius:50%;object-fit:cover;border:1.5px solid "+colorDef.border+"\" />":"")+
+      "<div>"+
+      "<div class=\"sender-name\">"+esc(name)+"</div>"+
+      "<div class=\"date\">"+esc(today)+"</div>"+
+      "</div>"+
+      "</div>"+
+      (recipient?"<div class=\"recipient\">"+esc(recipient)+"</div>":"")+
+      paragraphs+
+      "</body></html>";
+  }
+  return html;
+}
+
+function exportLetterPdf({letter,cv,job,portrait,settings}){
+  if(!letter||!letter.trim()) return;
+  var html=buildLetterHtml({letter:letter,cv:cv,job:job,portrait:portrait||"",settings:settings||{}});
   var w=window.open("","_blank");
   if(!w){
     alert("Your browser blocked the PDF window. Allow pop-ups for this page and try again.");
@@ -399,9 +486,7 @@ function exportLetterPdf({letter,cv,job}){
   w.document.open();
   w.document.write(html);
   w.document.close();
-  setTimeout(function(){
-    try{ w.focus(); w.print(); }catch(e){}
-  },250);
+  setTimeout(function(){ try{ w.focus(); w.print(); }catch(e){} },250);
 }
 
 // ─── Claude API helpers ───────────────────────────────────────────────────────

@@ -1,5 +1,7 @@
 // ─── Cover Letters ────────────────────────────────────────────────────────────
-function CoverLetters({jobs,setJobs,cv,anthropicKey,setActiveTab,pendingCoverLetterJob,setPendingCoverLetterJob}){
+// Rev: 2026-06-16 — Template selector (Classic/Modern/Compact), font and colour
+//                   pickers; portrait prop passed through to exportLetterPdf.
+function CoverLetters({jobs,setJobs,cv,anthropicKey,setActiveTab,pendingCoverLetterJob,setPendingCoverLetterJob,portrait}){
   var [showAllStatuses,setShowAllStatuses]=useState(false);
   var eligibleJobs=jobs.filter(function(j){
     if(j.archived) return false;
@@ -29,6 +31,9 @@ function CoverLetters({jobs,setJobs,cv,anthropicKey,setActiveTab,pendingCoverLet
   var [loading,setLoading]=useState(false);
   var [showEmail,setShowEmail]=useState(false);
   var [saved,setSaved]=useState(false);
+  var [tmpl,setTmpl]=useState("classic");
+  var [font,setFont]=useState("georgia");
+  var [color,setColor]=useState("green");
 
   function detectJobLanguage(job){
     if(!job) return "English";
@@ -135,6 +140,38 @@ function CoverLetters({jobs,setJobs,cv,anthropicKey,setActiveTab,pendingCoverLet
               </Sel>
             </div>
             <div>
+              <Label>Letter template</Label>
+              <div style={{display:"flex",gap:8,marginTop:4,flexWrap:"wrap"}}>
+                {COVER_TEMPLATES.map(function(t){
+                  var on=tmpl===t.id;
+                  return <button key={t.id} onClick={function(){setTmpl(t.id);}}
+                    style={{flex:1,minWidth:90,padding:"10px 12px",borderRadius:10,
+                      border:"2px solid "+(on?C.primary:C.border),
+                      background:on?C.primaryLight:"transparent",
+                      color:on?C.primary:C.textSecondary,
+                      cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:on?700:500,
+                      textAlign:"center",lineHeight:1.3}}>
+                    <div style={{fontWeight:700,marginBottom:2}}>{t.name}</div>
+                    <div style={{fontSize:11,opacity:0.8}}>{t.desc}</div>
+                  </button>;
+                })}
+              </div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div>
+                <Label>Font</Label>
+                <Sel className="jt-cover-select" value={font} onChange={function(e){setFont(e.target.value);}}>
+                  {COVER_FONTS.map(function(f){return <option key={f.id} value={f.id}>{f.name}</option>;})}
+                </Sel>
+              </div>
+              <div>
+                <Label>Colour</Label>
+                <Sel className="jt-cover-select" value={color} onChange={function(e){setColor(e.target.value);}}>
+                  {COVER_COLORS.map(function(c){return <option key={c.id} value={c.id}>{c.name}</option>;})}
+                </Sel>
+              </div>
+            </div>
+            <div>
               <Label hint="Auto-detect reads the job description language.">
                 Language
                 {language==="auto"&&currentJob&&<span style={{fontSize:12,color:C.textHint,fontWeight:400,marginLeft:6}}>→ {detectJobLanguage(currentJob)}</span>}
@@ -180,7 +217,7 @@ function CoverLetters({jobs,setJobs,cv,anthropicKey,setActiveTab,pendingCoverLet
           ✉ Send via email
         </button>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-          <Btn onClick={function(){exportLetterPdf({letter:letter,cv:cv,job:currentJob});}} style={{fontSize:14,minHeight:46}}>📄 PDF</Btn>
+          <Btn onClick={function(){exportLetterPdf({letter:letter,cv:cv,job:currentJob,portrait:portrait||"",settings:{template:tmpl,font:font,color:color}});}} style={{fontSize:14,minHeight:46}}>📄 PDF</Btn>
           <Btn onClick={function(){navigator.clipboard.writeText(letter);}} style={{fontSize:14,minHeight:46}}>Copy</Btn>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>

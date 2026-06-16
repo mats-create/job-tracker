@@ -1,4 +1,5 @@
 // app.js
+// Rev: 2026-06-16 — portrait state added; hydrated from Firestore; passed to SearchProfiles + CoverLetters.
 // Rev: 2026-06-15 — Pass setJobs to ProfileAssistant for Gabbi job write access.
 // Rev: 2026-06-04 — Pass setCv to ProfileAssistant (Gabbi CV write-back).
 // Rev: 2026-06-10 — BUG2: fix added counter in runAllProfiles (pre-filter before setJobs);
@@ -43,6 +44,7 @@ function AppShell({user,onSignOut}){
   var [importSummary,setImportSummary]=useState(null);
   var [pendingProfileRun,setPendingProfileRun]=useState(null);
   var [pendingCoverLetterJob,setPendingCoverLetterJob]=useState(null);
+  var [portrait,setPortraitRaw]=useState("");
   var [theme,setThemeRaw]=useState(getSavedTheme);
   var [isMobile,setIsMobile]=useState(typeof window!=="undefined"&&window.innerWidth<=767);
 
@@ -52,6 +54,7 @@ function AppShell({user,onSignOut}){
     return function(){ window.removeEventListener("resize",onResize); };
   },[]);
 
+  function setPortrait(v){ setPortraitRaw(v); scheduleSave({portrait:v}); }
   function setTheme(t){
     setThemeRaw(t);
     applyTheme(t);
@@ -137,6 +140,7 @@ function AppShell({user,onSignOut}){
         if(Array.isArray(data.assistantConv)) setAssistantConvRaw(data.assistantConv);
         if(Array.isArray(data.dismissedIds)) setDismissedIdsRaw(data.dismissedIds);
         if(typeof data.sidebarCollapsed==="boolean") setSidebarCollapsedRaw(data.sidebarCollapsed);
+        if(typeof data.portrait==="string") setPortraitRaw(data.portrait);
         latestState.current=data;
       }
       suppressWriteUntilRef.current=Date.now()+2000;
@@ -370,7 +374,7 @@ function AppShell({user,onSignOut}){
 
   // ── data export / import / reset ──────────────────────────────────────────
   function exportData(excludeKeys){
-    var payload={jobs:jobs,profiles:profiles,cv:cv,schedule:schedule,log:log,sort:sort,assistantConv:assistantConv,dismissedIds:dismissedIds};
+    var payload={jobs:jobs,profiles:profiles,cv:cv,schedule:schedule,log:log,sort:sort,assistantConv:assistantConv,dismissedIds:dismissedIds,portrait:portrait};
     if(!excludeKeys){ payload.afKey=afKey; payload.jsKey=jsKey; payload.anthropicKey=anthropicKey; }
     var out={version:2,exportedAt:new Date().toISOString(),data:payload};
     var b=new Blob([JSON.stringify(out,null,2)],{type:"application/json"});
@@ -399,6 +403,7 @@ function AppShell({user,onSignOut}){
     if(typeof d.sort==="string") setSort(d.sort);
     if(Array.isArray(d.assistantConv)) setAssistantConv(d.assistantConv);
     if(Array.isArray(d.dismissedIds)) setDismissedIds(d.dismissedIds);
+    if(typeof d.portrait==="string") setPortrait(d.portrait);
   }
 
   function resetAllData(){
@@ -407,7 +412,7 @@ function AppShell({user,onSignOut}){
     var uid=user.uid;
     cloudDelete(uid);
     setJobsRaw([]); setProfilesRaw([]); setCvRaw({text:"",roles:"",industries:"",locations:"",salary:"",workType:"Any",tools:[],skills:[],achievements:[],recipients:[],uploaded:false,fileName:"",extractedAt:""});
-    setAfKeyRaw(""); setJsKeyRaw(""); setAnthropicKeyRaw("");
+    setAfKeyRaw(""); setJsKeyRaw(""); setAnthropicKeyRaw(""); setPortraitRaw("");
     setScheduleRaw(DEFAULT_SCHEDULE); setLogRaw([]); setSortRaw("added_desc");
     setAssistantConvRaw([]); setDismissedIdsRaw([]); setSidebarCollapsedRaw(false);
     latestState.current={};
@@ -424,11 +429,11 @@ function AppShell({user,onSignOut}){
     return <TabErrorBoundary tabKey={key}>
       {key==="dashboard"&&<Dashboard jobs={jobs} schedule={schedule} setActiveTab={setActiveTab} navigateToJobs={navigateToJobs} rescoreAll={rescoreAll} scoringStatus={scoringStatus} onRunAllProfiles={runAllProfiles} profiles={profiles} cv={cv} anthropicKey={anthropicKey} importSummary={importSummary} onDismissImportSummary={function(){setImportSummary(null);}} />}
       {key==="jobs"&&<Jobs jobs={jobs} setJobs={setJobs} rescoreAll={rescoreAll} rescoreJob={rescoreJob} scoringStatus={scoringStatus} scoringError={scoringError} cv={cv} sort={sort} setSort={setSort} dismissJob={dismissJob} tombstoneIds={tombstoneIds} startCoverLetter={startCoverLetter} pendingJobsView={pendingJobsView} setPendingJobsView={setPendingJobsView} />}
-      {key==="profiles"&&<SearchProfiles profiles={profiles} setProfiles={setProfiles} setJobs={setJobs} afKey={afKey} setAfKey={setAfKey} jsKey={jsKey} setJsKey={setJsKey} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} pendingProfileRun={pendingProfileRun} setPendingProfileRun={setPendingProfileRun} dismissedIds={dismissedIds} />}
+      {key==="profiles"&&<SearchProfiles profiles={profiles} setProfiles={setProfiles} setJobs={setJobs} afKey={afKey} setAfKey={setAfKey} jsKey={jsKey} setJsKey={setJsKey} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} pendingProfileRun={pendingProfileRun} setPendingProfileRun={setPendingProfileRun} dismissedIds={dismissedIds} portrait={portrait} setPortrait={setPortrait} />}
       {key==="assistant"&&<ProfileAssistant cv={cv} setCv={setCv} jobs={jobs} setJobs={setJobs} profiles={profiles} setProfiles={setProfiles} anthropicKey={anthropicKey} conversation={assistantConv} setConversation={setAssistantConv} setActiveTab={setActiveTab} setPendingProfileRun={setPendingProfileRun} />}
       {key==="cv"&&<CVProfile cv={cv} setCv={setCv} />}
       {key==="scheduler"&&<Scheduler schedule={schedule} setSchedule={setSchedule} profiles={profiles} log={log} resetAllData={resetAllData} exportData={exportData} importData={importData} validateImport={validateImport} dismissedIds={dismissedIds} clearDismissedIds={clearDismissedIds} />}
-      {key==="covers"&&<CoverLetters jobs={jobs} setJobs={setJobs} cv={cv} anthropicKey={anthropicKey} setActiveTab={setActiveTab} pendingCoverLetterJob={pendingCoverLetterJob} setPendingCoverLetterJob={setPendingCoverLetterJob} />}
+      {key==="covers"&&<CoverLetters jobs={jobs} setJobs={setJobs} cv={cv} anthropicKey={anthropicKey} setActiveTab={setActiveTab} pendingCoverLetterJob={pendingCoverLetterJob} setPendingCoverLetterJob={setPendingCoverLetterJob} portrait={portrait} />}
       {key==="reports"&&<Reports jobs={jobs} cv={cv} anthropicKey={anthropicKey} />}
     </TabErrorBoundary>;
   }
