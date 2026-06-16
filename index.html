@@ -3227,6 +3227,8 @@ function CoverLetters({jobs,setJobs,cv,anthropicKey,setActiveTab,pendingCoverLet
 // Rev: 2026-06-16 — Option C: ActionCard for cv_bulk_edit shows expandable item list
 //                   with per-item checkboxes; replace shows before/after diff;
 //                   onAccept receives filtered action with only selected items.
+// Rev: 2026-06-16 — Markdown renderer: headings (##/###), numbered lists, tables,
+//                   single linebreaks; system prompt formatting instructions.
 
 // ─── Job summary for system prompt ───────────────────────────────────────────
 function jobsSummaryText(jobs){
@@ -3293,6 +3295,15 @@ function buildAssistantSystem(cv,profiles,jobs){
     "For anything outside job search and this app, just say so briefly and offer to help with what you can.",
     "",
     "TONE: friendly, concise, practical. One clarifying question at a time max.",
+    "",
+    "FORMATTING: use markdown formatting to improve readability:",
+    "• Use ## for section headings and ### for sub-headings in longer responses.",
+    "• Use - bullet lists for unordered items; put each item on its own line.",
+    "• Use 1. 2. 3. numbered lists for steps, rankings, or ordered items.",
+    "• Use | col | col | markdown tables for comparisons, skill gaps, structured data.",
+    "• Use **bold** for key terms and *italic* for emphasis.",
+    "• Use single line breaks between list items for breathing room.",
+    "• Keep responses concise — use structure to replace length, not add to it.",
     "",
     "═══ WHAT GABBI CAN WRITE ═══",
     "You can make changes to: CV sections, job status/notes, search profiles.",
@@ -4023,19 +4034,106 @@ function ProfileAssistant({cv,setCv,jobs,setJobs,profiles,setProfiles,anthropicK
   // ── Markdown renderer ────────────────────────────────────────────────────
   function renderMarkdown(text){
     if(!text) return null;
-    var paragraphs=text.split(/\n{2,}/);
-    return paragraphs.map(function(para,pi){
-      var lines=para.split("\n");
-      var isList=lines.every(function(l){return !l.trim()||/^[-•*]\s/.test(l.trim());});
-      if(isList){
-        var items=lines.filter(function(l){return l.trim();}).map(function(l){return l.trim().replace(/^[-•*]\s+/,"");});
-        return <ul key={pi} style={{margin:"4px 0 4px 18px",padding:0,listStyleType:"disc"}}>
+
+    // Split into blocks on double newlines
+    var blocks=text.split(/\n{2,}/);
+
+    return blocks.map(function(block,bi){
+      var lines=block.split("\n");
+      var first=lines[0]?lines[0].trim():"";
+
+      // ── Heading ## ────────────────────────────────────────────────────────
+      if(/^##\s/.test(first)){
+        return <div key={bi} style={{fontSize:15,fontWeight:700,color:C.textPrimary,
+          marginBottom:6,marginTop:bi===0?0:10,lineHeight:1.4}}>
+          {inlineFormat(first.replace(/^##\s+/,""))}
+        </div>;
+      }
+
+      // ── Sub-heading ### ───────────────────────────────────────────────────
+      if(/^###\s/.test(first)){
+        return <div key={bi} style={{fontSize:14,fontWeight:700,color:C.primary,
+          marginBottom:4,marginTop:bi===0?0:8,lineHeight:1.4}}>
+          {inlineFormat(first.replace(/^###\s+/,""))}
+        </div>;
+      }
+
+      // ── Table (lines starting with |) ─────────────────────────────────────
+      if(lines.length>=2&&/^\|/.test(first)){
+        var tableLines=lines.filter(function(l){return l.trim()&&!/^[\|\s\-:]+$/.test(l.trim());});
+        if(tableLines.length>=1){
+          var parseRow=function(line){
+            return line.split("|").map(function(c){return c.trim();}).filter(function(c,i,a){return i>0&&i<a.length-1;});
+          };
+          var headers=parseRow(tableLines[0]);
+          var rows=tableLines.slice(1).map(parseRow);
+          return <table key={bi} style={{width:"100%",borderCollapse:"collapse",fontSize:13,
+            marginBottom:8,marginTop:4}}>
+            <thead>
+              <tr>{headers.map(function(h,hi){
+                return <th key={hi} style={{padding:"6px 10px",textAlign:"left",
+                  fontWeight:700,fontSize:12,color:C.textSecondary,
+                  borderBottom:"2px solid "+C.border,background:C.surfaceAlt}}>
+                  {inlineFormat(h)}
+                </th>;
+              })}</tr>
+            </thead>
+            <tbody>{rows.map(function(row,ri){
+              return <tr key={ri} style={{background:ri%2===0?"transparent":C.surfaceAlt}}>
+                {row.map(function(cell,ci){
+                  return <td key={ci} style={{padding:"6px 10px",
+                    borderBottom:"1px solid "+C.border,color:C.textPrimary,
+                    verticalAlign:"top"}}>
+                    {inlineFormat(cell)}
+                  </td>;
+                })}
+              </tr>;
+            })}</tbody>
+          </table>;
+        }
+      }
+
+      // ── Bullet list (- • *) ───────────────────────────────────────────────
+      if(lines.every(function(l){return !l.trim()||/^[-•*]\s/.test(l.trim());})){
+        var items=lines.filter(function(l){return l.trim();})
+          .map(function(l){return l.trim().replace(/^[-•*]\s+/,"");});
+        return <ul key={bi} style={{margin:"4px 0 8px 18px",padding:0,listStyleType:"disc"}}>
           {items.map(function(item,ii){
-            return <li key={ii} style={{fontSize:14,lineHeight:1.6,color:C.textPrimary,marginBottom:2}}>{inlineFormat(item)}</li>;
+            return <li key={ii} style={{fontSize:14,lineHeight:1.65,color:C.textPrimary,marginBottom:4}}>
+              {inlineFormat(item)}
+            </li>;
           })}
         </ul>;
       }
-      return <p key={pi} style={{margin:"0 0 6px 0",fontSize:14,lineHeight:1.6,color:C.textPrimary}}>{inlineFormat(para)}</p>;
+
+      // ── Numbered list (1. 2. 3.) ──────────────────────────────────────────
+      if(lines.every(function(l){return !l.trim()||/^\d+\.\s/.test(l.trim());})){
+        var items=lines.filter(function(l){return l.trim();})
+          .map(function(l){return l.trim().replace(/^\d+\.\s+/,"");});
+        return <ol key={bi} style={{margin:"4px 0 8px 20px",padding:0}}>
+          {items.map(function(item,ii){
+            return <li key={ii} style={{fontSize:14,lineHeight:1.65,color:C.textPrimary,marginBottom:4}}>
+              {inlineFormat(item)}
+            </li>;
+          })}
+        </ol>;
+      }
+
+      // ── Plain paragraph — preserve single linebreaks as <br/> ─────────────
+      var parts=block.split("\n");
+      if(parts.length===1){
+        return <p key={bi} style={{margin:"0 0 6px 0",fontSize:14,lineHeight:1.65,color:C.textPrimary}}>
+          {inlineFormat(block)}
+        </p>;
+      }
+      return <p key={bi} style={{margin:"0 0 6px 0",fontSize:14,lineHeight:1.65,color:C.textPrimary}}>
+        {parts.map(function(line,li){
+          return <React.Fragment key={li}>
+            {inlineFormat(line)}
+            {li<parts.length-1&&<br/>}
+          </React.Fragment>;
+        })}
+      </p>;
     });
   }
 
