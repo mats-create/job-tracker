@@ -961,12 +961,18 @@ function buildLetterHtml({letter,cv,job,portrait,settings}){
   } else if(s.template==="modern"){
     html=
       "<!doctype html><html><head><meta charset=\"utf-8\"><title>"+esc(docTitle)+"</title><style>"+
-      baseStyle+
-      ".banner{background:"+colorDef.primary+";color:#fff;padding:28px 32px;display:flex;align-items:center;gap:20px;margin:-20mm -22mm 32px;padding-top:24px}"+
+      "@page{size:A4;margin:0}"+
+      "html,body{background:#fff;margin:0;padding:0}"+
+      "body{font-family:"+fontDef.css+";font-size:11.5pt;line-height:1.6;color:#1a1a1a}"+
+      "p{margin:0 0 13px 0;word-break:normal;overflow-wrap:break-word}"+
+      "p:last-child{margin-bottom:0}"+
+      "@media print{.no-print{display:none!important}}"+
+      ".no-print{position:fixed;top:12px;right:12px;background:"+colorDef.primary+";color:#fff;padding:10px 18px;border-radius:8px;font-family:sans-serif;font-size:13px;cursor:pointer;border:none;box-shadow:0 2px 8px rgba(0,0,0,0.2)}"+
+      ".banner{background:"+colorDef.primary+";color:#fff;padding:28px 32px;display:flex;align-items:center;gap:20px;width:100%;box-sizing:border-box}"+
       ".banner-name{font-size:16pt;font-weight:700;letter-spacing:0.3px}"+
       ".banner-date{font-size:10pt;opacity:0.85;margin-top:4px}"+
-      ".body-wrap{padding:0}"+
-      ".recipient{margin-bottom:26px;font-size:10.5pt;color:#555;padding-left:2px}"+
+      ".body-wrap{padding:22mm 22mm 22mm 22mm;box-sizing:border-box}"+
+      ".recipient{margin-bottom:26px;font-size:10.5pt;color:#555}"+
       ".portrait-modern{width:76px;height:76px;border-radius:50%;object-fit:cover;border:3px solid rgba(255,255,255,0.6);flex-shrink:0}"+
       "</style></head><body>"+
       "<button class=\"no-print\" onclick=\"window.print()\">Print / Save as PDF</button>"+
@@ -1197,6 +1203,8 @@ function weekEnd(dateStr){
 
 
 // components.js
+// Rev: 2026-06-16 — Sidebar + MobileBottomNav accept portrait prop; shown as avatar
+//                   with fallback to Google photoURL, then initial letter.
 // Rev: 2026-06-16 — Gabbi 🫶 icon; soft warm green tint in sidebar (lindbloom green),
 //                   same borderRadius:8 as other items, not pill-shaped
 // Rev: 2026-06-16 — Mobile nav: Gabbi moved to pos 2 (after Dashboard); monochrome
@@ -1410,7 +1418,7 @@ function EmailDialog({recipients,subject,body,onClose,onCopy}){
 }
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
-function Sidebar({activeTab,setActiveTab,collapsed,setCollapsed,mobileOpen,setMobileOpen,user,onSignOut,theme,setTheme}){
+function Sidebar({activeTab,setActiveTab,collapsed,setCollapsed,mobileOpen,setMobileOpen,user,onSignOut,theme,setTheme,portrait}){
   function pickTab(id){
     setActiveTab(id);
     if(setMobileOpen) setMobileOpen(false);
@@ -1461,8 +1469,8 @@ function Sidebar({activeTab,setActiveTab,collapsed,setCollapsed,mobileOpen,setMo
 
       {user&&<div style={{borderTop:"1px solid "+C.border,padding:"10px 8px"}}>
         <div style={{display:"flex",alignItems:"center",gap:10,padding:"6px 8px",borderRadius:8,background:C.surfaceAlt,marginBottom:6}}>
-          {user.photoURL
-            ?<img src={user.photoURL} alt="" referrerPolicy="no-referrer" style={{width:28,height:28,borderRadius:"50%",flexShrink:0,objectFit:"cover"}} />
+          {(portrait||user.photoURL)
+            ?<img src={portrait||user.photoURL} alt="" referrerPolicy="no-referrer" style={{width:28,height:28,borderRadius:"50%",flexShrink:0,objectFit:"cover"}} />
             :<div style={{width:28,height:28,borderRadius:"50%",background:C.primary,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,flexShrink:0}}>{(user.displayName||user.email||"?").slice(0,1).toUpperCase()}</div>}
           {!collapsed&&<div style={{flex:1,minWidth:0,overflow:"hidden"}}>
             <div style={{fontSize:12,fontWeight:600,color:C.textPrimary,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{user.displayName||"Signed in"}</div>
@@ -1512,7 +1520,7 @@ const PRIMARY_TABS = ["dashboard","assistant","jobs","covers","profiles"];
 const SECONDARY_TABS = ["scheduler","cv","reports"];
 
 // ─── MobileBottomNav ──────────────────────────────────────────────────────────
-function MobileBottomNav({activeTab,setActiveTab,user,onSignOut,theme,setTheme}){
+function MobileBottomNav({activeTab,setActiveTab,user,onSignOut,theme,setTheme,portrait}){
   var [moreOpen,setMoreOpen]=useState(false);
   var inMore=SECONDARY_TABS.includes(activeTab);
 
@@ -1543,8 +1551,8 @@ function MobileBottomNav({activeTab,setActiveTab,user,onSignOut,theme,setTheme})
         </div>
       </div>
       {user&&<div style={{padding:"10px 20px 16px",display:"flex",alignItems:"center",gap:12}}>
-        {user.photoURL
-          ?<img src={user.photoURL} alt="" referrerPolicy="no-referrer" style={{width:36,height:36,borderRadius:"50%",flexShrink:0}} />
+        {(portrait||user.photoURL)
+          ?<img src={portrait||user.photoURL} alt="" referrerPolicy="no-referrer" style={{width:36,height:36,borderRadius:"50%",flexShrink:0}} />
           :<div style={{width:36,height:36,borderRadius:"50%",background:C.primary,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,flexShrink:0}}>{(user.displayName||user.email||"?").slice(0,1).toUpperCase()}</div>}
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontSize:13,fontWeight:600,color:C.textPrimary,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.displayName||"Signed in"}</div>
@@ -2512,110 +2520,13 @@ function Jobs({jobs,setJobs,rescoreAll,rescoreJob,scoringStatus,scoringError,cv,
 //   not preFiltered.length, so re-running a profile correctly reports 0 new jobs.
 
 // profiles.js
-// Rev: 2026-06-16 — Portrait upload with Cropper.js pan/zoom; stored as base64 in Firestore.
+// Rev: 2026-06-16 — Portrait moved to My CV tab (cv.js). PortraitUploader removed from here.
 // Rev: 2026-06-10 — BUG2+3: fix added/skipped counters in fetchAF and fetchJS.
 // Rev: 2026-06-11 — BUG11: addedCount now reflects truly_new.length (post-dedup)
 //   not preFiltered.length, so re-running a profile correctly reports 0 new jobs.
 
-// ─── Portrait uploader with Cropper.js ───────────────────────────────────────
-function PortraitUploader({portrait,setPortrait}){
-  var [cropping,setCropping]=useState(false);
-  var [srcUrl,setSrcUrl]=useState(null);
-  var cropperRef=useRef(null);
-  var imgRef=useRef(null);
-  var fileRef=useRef(null);
-
-  function onFile(e){
-    var file=e.target.files&&e.target.files[0];
-    if(!file) return;
-    if(file.size>10*1024*1024){
-      alert("Photo is too large (max 10 MB). Please choose a smaller image.");
-      e.target.value=""; return;
-    }
-    var reader=new FileReader();
-    reader.onload=function(ev){
-      setSrcUrl(ev.target.result);
-      setCropping(true);
-    };
-    reader.readAsDataURL(file);
-    e.target.value="";
-  }
-
-  useEffect(function(){
-    if(!cropping||!srcUrl||!imgRef.current) return;
-    if(!window.Cropper){
-      alert("Image cropper failed to load. Check your internet connection and reload the page.");
-      setCropping(false); setSrcUrl(null); return;
-    }
-    if(cropperRef.current){ cropperRef.current.destroy(); cropperRef.current=null; }
-    cropperRef.current=new window.Cropper(imgRef.current,{
-      aspectRatio:1,
-      viewMode:1,
-      dragMode:"move",
-      autoCropArea:0.9,
-      movable:true,
-      zoomable:true,
-      rotatable:false,
-      scalable:false,
-      cropBoxResizable:false,
-      cropBoxMovable:false,
-      guides:false,
-      center:false,
-      highlight:false,
-      background:false,
-    });
-    return function(){
-      if(cropperRef.current){ cropperRef.current.destroy(); cropperRef.current=null; }
-    };
-  },[cropping,srcUrl]);
-
-  function applyPortrait(){
-    if(!cropperRef.current) return;
-    var canvas=cropperRef.current.getCroppedCanvas({width:240,height:240,imageSmoothingQuality:"high"});
-    setPortrait(canvas.toDataURL("image/jpeg",0.88));
-    setCropping(false);
-    setSrcUrl(null);
-  }
-
-  function cancelCrop(){
-    setCropping(false);
-    setSrcUrl(null);
-  }
-
-  return <div>
-    <Label>Profile portrait <span style={{fontWeight:400,color:C.textHint,fontSize:12}}>(optional — shown in cover letter PDF)</span></Label>
-    <div style={{display:"flex",alignItems:"center",gap:16,marginTop:8}}>
-      {portrait
-        ?<img src={portrait} style={{width:72,height:72,borderRadius:"50%",objectFit:"cover",border:"2px solid "+C.border,flexShrink:0}} />
-        :<div style={{width:72,height:72,borderRadius:"50%",background:C.surfaceAlt,border:"2px dashed "+C.border,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0,color:C.textHint}}>👤</div>
-      }
-      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-        <Btn onClick={function(){fileRef.current&&fileRef.current.click();}} style={{fontSize:13,padding:"8px 14px"}}>
-          {portrait?"Change photo":"Upload photo"}
-        </Btn>
-        {portrait&&<Btn variant="danger" onClick={function(){setPortrait("");}} style={{fontSize:13,padding:"8px 14px"}}>Remove</Btn>}
-      </div>
-      <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={onFile} />
-    </div>
-
-    {cropping&&srcUrl&&<div style={{position:"fixed",inset:0,zIndex:700,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-      <div style={{background:C.surface,borderRadius:20,padding:24,width:"min(440px,96vw)",boxShadow:"0 8px 40px rgba(0,0,0,0.3)"}}>
-        <div style={{fontSize:15,fontWeight:700,color:C.textPrimary,marginBottom:14}}>Adjust photo</div>
-        <div style={{width:"100%",height:300,overflow:"hidden",borderRadius:12,background:"#111",marginBottom:16}}>
-          <img ref={imgRef} src={srcUrl} style={{maxWidth:"100%",display:"block"}} />
-        </div>
-        <div style={{fontSize:12,color:C.textHint,marginBottom:16,textAlign:"center"}}>Drag to reposition · Pinch or scroll to zoom</div>
-        <div style={{display:"flex",gap:10}}>
-          <Btn variant="primary" onClick={applyPortrait} style={{flex:1,fontSize:14,minHeight:46}}>✓ Use this photo</Btn>
-          <Btn onClick={cancelCrop} style={{fontSize:14,minHeight:46}}>Cancel</Btn>
-        </div>
-      </div>
-    </div>}
-  </div>;
-}
-
 // ─── Search Profiles ──────────────────────────────────────────────────────────
-function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJsKey,anthropicKey,setAnthropicKey,pendingProfileRun,setPendingProfileRun,dismissedIds,portrait,setPortrait}){
+function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJsKey,anthropicKey,setAnthropicKey,pendingProfileRun,setPendingProfileRun,dismissedIds}){
   var [showAfKey,setShowAfKey]=useState(false);
   var [showJsKey,setShowJsKey]=useState(false);
   var [showAnthropicKey,setShowAnthropicKey]=useState(false);
@@ -2840,15 +2751,12 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
         <Alert type="info">🔒 Keys are stored encrypted in your Firestore account and are never shared with anyone. <InfoTip>Your API keys are only used when you explicitly trigger a fetch or AI action. They are stored in your personal Firestore document, accessible only when signed in as you.</InfoTip></Alert>
       </div>
     </Card>
-    <Card>
-      <SectionTitle>Profile & portrait</SectionTitle>
-      <PortraitUploader portrait={portrait||""} setPortrait={setPortrait} />
-    </Card>
   </div>;
 }
 
 
 // cv.js
+// Rev: 2026-06-16 — Portrait section moved here (top of My CV); portrait/setPortrait props added.
 // Rev: 2026-06-13 — Removed hardcoded CV_IMPORT data and import banner.
 // Rev: 2026-06-16 — Row numbers in InlineListEditor (stable, storage-order based).
 //   CV_IMPORT contained personal data (tools/skills/achievements) visible
@@ -2993,8 +2901,87 @@ function InlineListEditor({items,onChange,fields,addLabel,sortFields,defaultSort
   </div>;
 }
 
+// ─── Portrait uploader with Cropper.js ───────────────────────────────────────
+function PortraitUploader({portrait,setPortrait}){
+  var [cropping,setCropping]=useState(false);
+  var [srcUrl,setSrcUrl]=useState(null);
+  var cropperRef=useRef(null);
+  var imgRef=useRef(null);
+  var fileRef=useRef(null);
+
+  function onFile(e){
+    var file=e.target.files&&e.target.files[0];
+    if(!file) return;
+    if(file.size>10*1024*1024){
+      alert("Photo is too large (max 10 MB). Please choose a smaller image.");
+      e.target.value=""; return;
+    }
+    var reader=new FileReader();
+    reader.onload=function(ev){ setSrcUrl(ev.target.result); setCropping(true); };
+    reader.readAsDataURL(file);
+    e.target.value="";
+  }
+
+  useEffect(function(){
+    if(!cropping||!srcUrl||!imgRef.current) return;
+    if(!window.Cropper){
+      alert("Image cropper failed to load. Check your internet connection and reload the page.");
+      setCropping(false); setSrcUrl(null); return;
+    }
+    if(cropperRef.current){ cropperRef.current.destroy(); cropperRef.current=null; }
+    cropperRef.current=new window.Cropper(imgRef.current,{
+      aspectRatio:1,viewMode:1,dragMode:"move",autoCropArea:0.9,
+      movable:true,zoomable:true,rotatable:false,scalable:false,
+      cropBoxResizable:false,cropBoxMovable:false,
+      guides:false,center:false,highlight:false,background:false,
+    });
+    return function(){ if(cropperRef.current){ cropperRef.current.destroy(); cropperRef.current=null; } };
+  },[cropping,srcUrl]);
+
+  function applyPortrait(){
+    if(!cropperRef.current) return;
+    var canvas=cropperRef.current.getCroppedCanvas({width:240,height:240,imageSmoothingQuality:"high"});
+    setPortrait(canvas.toDataURL("image/jpeg",0.88));
+    setCropping(false); setSrcUrl(null);
+  }
+
+  return <div>
+    <div style={{display:"flex",alignItems:"center",gap:16}}>
+      {portrait
+        ?<img src={portrait} style={{width:80,height:80,borderRadius:"50%",objectFit:"cover",border:"2px solid "+C.border,flexShrink:0}} />
+        :<div style={{width:80,height:80,borderRadius:"50%",background:C.surfaceAlt,border:"2px dashed "+C.border,display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,flexShrink:0,color:C.textHint}}>👤</div>
+      }
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        <div style={{fontSize:13,color:C.textSecondary,lineHeight:1.5}}>
+          {portrait?"Your photo is shown as avatar in the app and included in cover letter PDFs.":"Add a photo to personalise your cover letters and app avatar."}
+        </div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <Btn onClick={function(){fileRef.current&&fileRef.current.click();}} style={{fontSize:13,padding:"8px 14px"}}>
+            {portrait?"Change photo":"Upload photo"}
+          </Btn>
+          {portrait&&<Btn variant="danger" onClick={function(){setPortrait("");}} style={{fontSize:13,padding:"8px 14px"}}>Remove</Btn>}
+        </div>
+      </div>
+      <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={onFile} />
+    </div>
+    {cropping&&srcUrl&&<div style={{position:"fixed",inset:0,zIndex:700,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div style={{background:C.surface,borderRadius:20,padding:24,width:"min(440px,96vw)",boxShadow:"0 8px 40px rgba(0,0,0,0.3)"}}>
+        <div style={{fontSize:15,fontWeight:700,color:C.textPrimary,marginBottom:14}}>Adjust photo</div>
+        <div style={{width:"100%",height:300,overflow:"hidden",borderRadius:12,background:"#111",marginBottom:16}}>
+          <img ref={imgRef} src={srcUrl} style={{maxWidth:"100%",display:"block"}} />
+        </div>
+        <div style={{fontSize:12,color:C.textHint,marginBottom:16,textAlign:"center"}}>Drag to reposition · Pinch or scroll to zoom</div>
+        <div style={{display:"flex",gap:10}}>
+          <Btn variant="primary" onClick={applyPortrait} style={{flex:1,fontSize:14,minHeight:46}}>✓ Use this photo</Btn>
+          <Btn onClick={function(){setCropping(false);setSrcUrl(null);}} style={{fontSize:14,minHeight:46}}>Cancel</Btn>
+        </div>
+      </div>
+    </div>}
+  </div>;
+}
+
 // ─── CVProfile ────────────────────────────────────────────────────────────────
-function CVProfile({cv,setCv}){
+function CVProfile({cv,setCv,portrait,setPortrait}){
   var [tab,setTab]=useState(cv.uploaded?"upload":"paste");
   var fileRef=useRef();
   var [uploadState,setUploadState]=useState({status:"idle",msg:""});
@@ -3063,6 +3050,11 @@ function CVProfile({cv,setCv}){
   var cvCharCount=hasText?cv.text.length:0;
 
   return <div style={{display:"flex",flexDirection:"column",gap:16}}>
+
+    <Card>
+      <SectionTitle>Profile portrait</SectionTitle>
+      <PortraitUploader portrait={portrait||""} setPortrait={setPortrait} />
+    </Card>
 
     <Card>
       <SectionTitle>Your CV <InfoTip>Text is extracted from your PDF and stored for AI match scoring and cover letter generation. The original PDF file is not retained — only the extracted text is saved. Text-based PDFs work best; scanned image PDFs may not extract correctly.</InfoTip></SectionTitle>
@@ -5361,9 +5353,9 @@ function AppShell({user,onSignOut}){
     return <TabErrorBoundary tabKey={key}>
       {key==="dashboard"&&<Dashboard jobs={jobs} schedule={schedule} setActiveTab={setActiveTab} navigateToJobs={navigateToJobs} rescoreAll={rescoreAll} scoringStatus={scoringStatus} onRunAllProfiles={runAllProfiles} profiles={profiles} cv={cv} anthropicKey={anthropicKey} importSummary={importSummary} onDismissImportSummary={function(){setImportSummary(null);}} />}
       {key==="jobs"&&<Jobs jobs={jobs} setJobs={setJobs} rescoreAll={rescoreAll} rescoreJob={rescoreJob} scoringStatus={scoringStatus} scoringError={scoringError} cv={cv} sort={sort} setSort={setSort} dismissJob={dismissJob} tombstoneIds={tombstoneIds} startCoverLetter={startCoverLetter} pendingJobsView={pendingJobsView} setPendingJobsView={setPendingJobsView} />}
-      {key==="profiles"&&<SearchProfiles profiles={profiles} setProfiles={setProfiles} setJobs={setJobs} afKey={afKey} setAfKey={setAfKey} jsKey={jsKey} setJsKey={setJsKey} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} pendingProfileRun={pendingProfileRun} setPendingProfileRun={setPendingProfileRun} dismissedIds={dismissedIds} portrait={portrait} setPortrait={setPortrait} />}
+      {key==="profiles"&&<SearchProfiles profiles={profiles} setProfiles={setProfiles} setJobs={setJobs} afKey={afKey} setAfKey={setAfKey} jsKey={jsKey} setJsKey={setJsKey} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} pendingProfileRun={pendingProfileRun} setPendingProfileRun={setPendingProfileRun} dismissedIds={dismissedIds} />}
       {key==="assistant"&&<ProfileAssistant cv={cv} setCv={setCv} jobs={jobs} setJobs={setJobs} profiles={profiles} setProfiles={setProfiles} anthropicKey={anthropicKey} conversation={assistantConv} setConversation={setAssistantConv} setActiveTab={setActiveTab} setPendingProfileRun={setPendingProfileRun} />}
-      {key==="cv"&&<CVProfile cv={cv} setCv={setCv} />}
+      {key==="cv"&&<CVProfile cv={cv} setCv={setCv} portrait={portrait} setPortrait={setPortrait} />}
       {key==="scheduler"&&<Scheduler schedule={schedule} setSchedule={setSchedule} profiles={profiles} log={log} resetAllData={resetAllData} exportData={exportData} importData={importData} validateImport={validateImport} dismissedIds={dismissedIds} clearDismissedIds={clearDismissedIds} />}
       {key==="covers"&&<CoverLetters jobs={jobs} setJobs={setJobs} cv={cv} anthropicKey={anthropicKey} setActiveTab={setActiveTab} pendingCoverLetterJob={pendingCoverLetterJob} setPendingCoverLetterJob={setPendingCoverLetterJob} portrait={portrait} />}
       {key==="reports"&&<Reports jobs={jobs} cv={cv} anthropicKey={anthropicKey} />}
@@ -5383,7 +5375,7 @@ function AppShell({user,onSignOut}){
   }
 
   return <div style={{display:"flex",minHeight:"100vh",background:C.bg}}>
-    {!isMobile&&<Sidebar activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} user={user} onSignOut={onSignOut} theme={theme} setTheme={setTheme} />}
+    {!isMobile&&<Sidebar activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} user={user} onSignOut={onSignOut} theme={theme} setTheme={setTheme} portrait={portrait} />}
 
     <div className={"jt-main"+(sidebarCollapsed?" sidebar-collapsed":"")} style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",paddingBottom:isMobile?"calc(80px + env(safe-area-inset-bottom, 0px))":0}}>
       {isMobile&&<div style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",background:C.surface,borderBottom:"1px solid "+C.border,position:"sticky",top:0,zIndex:100}}>
@@ -5404,7 +5396,7 @@ function AppShell({user,onSignOut}){
       </main>
     </div>
 
-    {isMobile&&<MobileBottomNav activeTab={activeTab} setActiveTab={setActiveTab} user={user} onSignOut={onSignOut} theme={theme} setTheme={setTheme} />}
+    {isMobile&&<MobileBottomNav activeTab={activeTab} setActiveTab={setActiveTab} user={user} onSignOut={onSignOut} theme={theme} setTheme={setTheme} portrait={portrait} />}
 
     {dismissToast&&<DismissToast job={dismissToast.job} onUndo={undoDismiss} />}
   </div>;
