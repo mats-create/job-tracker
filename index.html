@@ -3201,6 +3201,9 @@ function CoverLetters({jobs,setJobs,cv,anthropicKey,setActiveTab,pendingCoverLet
 //                   add-vs-replace before acting on update/refresh requests.
 // Rev: 2026-06-16 — Index-based item referencing: Gabbi can use index number
 //                   to identify tools/skills/achievements instead of name matching.
+// Rev: 2026-06-16 — Option C: ActionCard for cv_bulk_edit shows expandable item list
+//                   with per-item checkboxes; replace shows before/after diff;
+//                   onAccept receives filtered action with only selected items.
 
 // ─── Job summary for system prompt ───────────────────────────────────────────
 function jobsSummaryText(jobs){
@@ -3518,12 +3521,53 @@ function getStarterPrompts(cv,jobs){
 }
 
 // ─── ActionCard ───────────────────────────────────────────────────────────────
-function ActionCard({action,onAccept,onReject,accepted,rejected}){
+function ActionCard({action,onAccept,onReject,accepted,rejected,cv}){
   var a=action;
+  var isBulk=a.type==="cv_bulk_edit";
+  var allItems=isBulk?(a.items||[]):[];
 
-  // Determine label and colours based on action type
+  // For add op: pre-uncheck items already in the CV section
+  var currentSection=isBulk&&cv?(cv[a.section]||[]):[];
+  function alreadyExists(item){
+    if(a.section==="achievements"){
+      var md=(item.description||"").toLowerCase().slice(0,40);
+      return currentSection.some(function(x){return x.description&&x.description.toLowerCase().includes(md);});
+    }
+    return currentSection.some(function(x){return x.name&&x.name.toLowerCase()===(item.name||"").toLowerCase();});
+  }
+
+  // Checkbox state — false means unchecked
+  var initChecked={};
+  allItems.forEach(function(item,i){
+    initChecked[i]=a.op!=="add"||!alreadyExists(item);
+  });
+  var [checked,setChecked]=useState(initChecked);
+  var [expanded,setExpanded]=useState(false);
+  var m=mob();
+
+  var checkedCount=Object.values(checked).filter(Boolean).length;
+  var newCount=allItems.filter(function(it,i){return !alreadyExists(it);}).length;
+  var dupeCount=allItems.length-newCount;
+
+  function toggleItem(i){
+    setChecked(function(prev){return Object.assign({},prev,{[i]:!prev[i]});});
+  }
+  function toggleAll(val){
+    var next={};
+    allItems.forEach(function(_,i){ next[i]=val; });
+    setChecked(next);
+  }
+
+  function buildFilteredAction(){
+    if(!isBulk) return a;
+    var selectedItems=allItems.filter(function(_,i){return checked[i];});
+    return Object.assign({},a,{items:selectedItems});
+  }
+
+  // ── Type labels and colours ──────────────────────────────────────────────
   var typeLabel="";
-  var opLabel=a.type==="cv_bulk_edit"?(a.op==="replace"?"Replace all":"Add all"):a.op==="add"?"Add":a.op==="edit"?"Edit":a.op==="delete"?"Delete":
+  var opLabel=isBulk?(a.op==="replace"?"Replace all":checkedCount===allItems.length?"Add all":"Add selected ("+checkedCount+")"):
+    a.op==="add"?"Add":a.op==="edit"?"Edit":a.op==="delete"?"Delete":
     a.op==="setStatus"?"Set status":a.op==="setNotes"?"Set notes":
     a.op==="appendNote"?"Add note":a.op==="setDate"?"Set date":a.op==="setActive"?"Toggle":
     a.op==="setQuery"?"Edit query":a.op==="setLimit"?"Edit limit":"Update";
@@ -3534,9 +3578,9 @@ function ActionCard({action,onAccept,onReject,accepted,rejected}){
     typeLabel=a.section==="tools"?"CV Tool":a.section==="skills"?"CV Skill":"CV Achievement";
     opColor=a.op==="delete"?C.error:a.op==="edit"?C.warning:C.success;
     opBg=a.op==="delete"?C.errorBg:a.op==="edit"?C.warningBg:C.successBg;
-  } else if(a.type==="cv_bulk_edit"){
+  } else if(isBulk){
     var secName=a.section==="tools"?"Tools":a.section==="skills"?"Skills":"Achievements";
-    typeLabel="CV "+secName+" (bulk)";
+    typeLabel="CV "+secName;
     opColor=a.op==="replace"?C.warning:C.success;
     opBg=a.op==="replace"?C.warningBg:C.successBg;
   } else if(a.type==="cv_pref"){
@@ -3552,14 +3596,18 @@ function ActionCard({action,onAccept,onReject,accepted,rejected}){
     opBg=a.op==="delete"?C.errorBg:C.warningBg;
   }
 
-  // Build summary text
+  // ── Summary text (for non-bulk or collapsed view) ────────────────────────
+  function itemLabel(item){
+    if(a.section==="achievements") return (item.description||"").slice(0,80)+(item.employer?" @ "+item.employer:"");
+    return (item.name||"")+(item.years?" · "+item.years+" yr":"")+(item.level?" · "+item.level:"");
+  }
   var summary="";
-  if(a.type==="cv_bulk_edit"){
-    var items=a.items||[];
-    var secName=a.section==="tools"?"tools":a.section==="skills"?"skills":"achievements";
-    var preview=items.slice(0,3).map(function(it){return it.name||it.description||"";}).filter(Boolean).join(", ");
-    var more=items.length>3?" + "+(items.length-3)+" more":"";
-    summary=items.length+" "+secName+": "+preview+more;
+  if(isBulk){
+    if(a.op==="replace"){
+      summary="Replace "+currentSection.length+" existing → "+allItems.length+" new entries";
+    } else {
+      summary=newCount+" new"+(dupeCount>0?", "+dupeCount+" already in CV (pre-deselected)":"");
+    }
   } else if(a.type==="cv_edit"){
     var idxLabel=a.index!=null?"#"+a.index+" ":"";
     var itm=a.item||{};
@@ -3577,6 +3625,7 @@ function ActionCard({action,onAccept,onReject,accepted,rejected}){
     summary="Profile #"+a.profileId+" → "+(a.op==="delete"?"DELETE":typeof a.value!=="undefined"?String(a.value).slice(0,80):"");
   }
 
+  // ── Accepted / rejected states ───────────────────────────────────────────
   if(accepted){
     return <div style={{border:"1.5px solid "+C.success,borderRadius:12,padding:"12px 14px",background:C.successBg,display:"flex",alignItems:"center",gap:10}}>
       <span style={{fontSize:16}}>✓</span>
@@ -3589,15 +3638,135 @@ function ActionCard({action,onAccept,onReject,accepted,rejected}){
     </div>;
   }
 
-  return <div style={{border:"2px solid "+opColor,borderRadius:12,padding:"14px 16px",background:opBg}}>
-    <div style={{fontSize:11,fontWeight:700,color:opColor,letterSpacing:"0.5px",marginBottom:8}}>
-      {opLabel.toUpperCase()} {typeLabel.toUpperCase()}
+  // ── Main card ─────────────────────────────────────────────────────────────
+  return <div style={{border:"2px solid "+opColor,borderRadius:14,background:opBg,overflow:"hidden"}}>
+
+    {/* Header */}
+    <div style={{padding:"12px 14px 10px",borderBottom:isBulk?"1px solid "+(a.op==="replace"?C.warning+"44":C.success+"44"):"none"}}>
+      <div style={{fontSize:11,fontWeight:700,color:opColor,letterSpacing:"0.5px",marginBottom:6}}>
+        {(isBulk?(a.op==="replace"?"REPLACE":"ADD"):a.op.toUpperCase()).toUpperCase()} {typeLabel.toUpperCase()}
+      </div>
+      <div style={{fontSize:13,color:C.textSecondary,lineHeight:1.5}}>{summary}</div>
     </div>
-    <div style={{fontSize:14,fontWeight:600,color:C.textPrimary,marginBottom:10,lineHeight:1.45}}>{summary||"(no details)"}</div>
-    <div style={{display:"flex",gap:8}}>
-      <Btn variant="primary" onClick={onAccept} style={{fontSize:13,padding:"7px 16px"}}>✓ Apply</Btn>
+
+    {/* Bulk item list — add op */}
+    {isBulk&&a.op!=="replace"&&<div>
+      {/* Expand/collapse toggle */}
+      <button onClick={function(){setExpanded(function(v){return !v;});}}
+        style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",
+          padding:"8px 14px",border:"none",background:"transparent",
+          cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:600,
+          color:C.textSecondary,borderBottom:"1px solid "+C.success+"33"}}>
+        <span>{expanded?"▲ Hide items":"▼ Show all "+allItems.length+" items"}</span>
+        {!expanded&&<span style={{fontSize:11,color:C.textHint}}>
+          {checkedCount} of {allItems.length} selected
+        </span>}
+      </button>
+
+      {expanded&&<div style={{maxHeight:320,overflowY:"auto"}}>
+        {/* Select all / none controls */}
+        <div style={{display:"flex",gap:10,padding:"6px 14px",borderBottom:"1px solid "+C.success+"22",background:C.surface}}>
+          <button onClick={function(){toggleAll(true);}}
+            style={{fontSize:11,fontWeight:600,color:C.primary,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",padding:"2px 0"}}>
+            Select all
+          </button>
+          <span style={{color:C.border}}>·</span>
+          <button onClick={function(){toggleAll(false);}}
+            style={{fontSize:11,fontWeight:600,color:C.textHint,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",padding:"2px 0"}}>
+            Deselect all
+          </button>
+          <span style={{marginLeft:"auto",fontSize:11,color:C.textHint}}>{checkedCount} selected</span>
+        </div>
+
+        {/* New items */}
+        {allItems.filter(function(it){return !alreadyExists(it);}).length>0&&
+          <div style={{padding:"6px 14px 2px"}}>
+            <div style={{fontSize:10,fontWeight:700,color:C.success,letterSpacing:"0.5px",marginBottom:4}}>NEW</div>
+            {allItems.map(function(item,i){
+              if(alreadyExists(item)) return null;
+              return <label key={i} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"5px 0",cursor:"pointer",userSelect:"none"}}>
+                <input type="checkbox" checked={!!checked[i]} onChange={function(){toggleItem(i);}}
+                  style={{marginTop:2,flexShrink:0,width:15,height:15,accentColor:C.primary,cursor:"pointer"}} />
+                <span style={{fontSize:13,color:checked[i]?C.textPrimary:C.textHint,lineHeight:1.4}}>
+                  {itemLabel(item)}
+                </span>
+              </label>;
+            })}
+          </div>}
+
+        {/* Already-in-CV items */}
+        {dupeCount>0&&
+          <div style={{padding:"6px 14px 8px",borderTop:"1px solid "+C.border}}>
+            <div style={{fontSize:10,fontWeight:700,color:C.textHint,letterSpacing:"0.5px",marginBottom:4}}>ALREADY IN YOUR CV</div>
+            {allItems.map(function(item,i){
+              if(!alreadyExists(item)) return null;
+              return <label key={i} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"5px 0",cursor:"pointer",userSelect:"none",opacity:0.5}}>
+                <input type="checkbox" checked={!!checked[i]} onChange={function(){toggleItem(i);}}
+                  style={{marginTop:2,flexShrink:0,width:15,height:15,accentColor:C.primary,cursor:"pointer"}} />
+                <span style={{fontSize:13,color:C.textHint,lineHeight:1.4,textDecoration:"line-through"}}>
+                  {itemLabel(item)}
+                </span>
+              </label>;
+            })}
+          </div>}
+      </div>}
+    </div>}
+
+    {/* Replace op — show before/after diff */}
+    {isBulk&&a.op==="replace"&&<div>
+      <button onClick={function(){setExpanded(function(v){return !v;});}}
+        style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",
+          padding:"8px 14px",border:"none",background:"transparent",
+          cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:600,
+          color:C.textSecondary,borderBottom:"1px solid "+C.warning+"33"}}>
+        <span>{expanded?"▲ Hide details":"▼ Show before/after"}</span>
+      </button>
+
+      {expanded&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0}}>
+        {/* Current — being removed */}
+        <div style={{padding:"8px 14px",borderRight:"1px solid "+C.border,background:C.errorBg+"44"}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.error,letterSpacing:"0.5px",marginBottom:6}}>
+            CURRENT ({currentSection.length})
+          </div>
+          <div style={{maxHeight:200,overflowY:"auto"}}>
+            {currentSection.map(function(item,i){
+              return <div key={i} style={{fontSize:12,color:C.textHint,padding:"3px 0",lineHeight:1.4,textDecoration:"line-through"}}>
+                {a.section==="achievements"?(item.description||"").slice(0,60):(item.name||"")}
+              </div>;
+            })}
+          </div>
+        </div>
+        {/* New — replacing with */}
+        <div style={{padding:"8px 14px",background:C.successBg+"44"}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.success,letterSpacing:"0.5px",marginBottom:6}}>
+            NEW ({allItems.length})
+          </div>
+          <div style={{maxHeight:200,overflowY:"auto"}}>
+            {allItems.map(function(item,i){
+              return <div key={i} style={{fontSize:12,color:C.textPrimary,padding:"3px 0",lineHeight:1.4}}>
+                {itemLabel(item)}
+              </div>;
+            })}
+          </div>
+        </div>
+      </div>}
+    </div>}
+
+    {/* Action buttons */}
+    <div style={{padding:"10px 14px",display:"flex",gap:8,alignItems:"center",
+      borderTop:"1px solid "+opColor+"33",background:C.surface}}>
+      <Btn variant="primary"
+        onClick={function(){onAccept(buildFilteredAction());}}
+        disabled={isBulk&&a.op!=="replace"&&checkedCount===0}
+        style={{fontSize:13,padding:"7px 16px"}}>
+        ✓ {isBulk&&a.op!=="replace"?(checkedCount===allItems.length?"Apply all":"Apply selected ("+checkedCount+")"):"Apply"}
+      </Btn>
       <Btn onClick={onReject} style={{fontSize:13,padding:"7px 14px"}}>Skip</Btn>
+      {isBulk&&a.op!=="replace"&&<span style={{fontSize:11,color:C.textHint,marginLeft:4}}>
+        {checkedCount}/{allItems.length} selected
+      </span>}
     </div>
+
   </div>;
 }
 
@@ -3819,6 +3988,8 @@ function ProfileAssistant({cv,setCv,jobs,setJobs,profiles,setProfiles,anthropicK
   }
 
   function handleAccept(msgIdx,actionIdx,action){
+    // action may be a filtered version (e.g. only checked items from cv_bulk_edit)
+    if(action&&action.items&&action.items.length===0) return; // nothing selected
     applyAction(action);
     setActionStates(function(prev){return Object.assign({},prev,{[msgIdx+":"+actionIdx]:"accepted"});});
   }
@@ -3884,9 +4055,10 @@ function ProfileAssistant({cv,setCv,jobs,setJobs,profiles,setProfiles,anthropicK
         var key=msgIdx+":"+ai;
         var state=actionStates[key];
         return <ActionCard key={i} action={seg.value}
+          cv={cv}
           accepted={state==="accepted"}
           rejected={state==="rejected"}
-          onAccept={function(){handleAccept(msgIdx,ai,seg.value);}}
+          onAccept={function(filteredAction){handleAccept(msgIdx,ai,filteredAction||seg.value);}}
           onReject={function(){handleReject(msgIdx,ai);}} />;
       }
       return null;
