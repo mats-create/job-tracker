@@ -19,6 +19,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js"></script>
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
@@ -531,12 +533,9 @@ const PROF_ORDER = {Beginner:0,Intermediate:1,Advanced:2,Expert:3};
 
 
 // utils.js
-// Rev: 2026-06-10 — BUG1+6: scoreJobs() now accepts object {jobs,cv,apiKey,onBatch};
-//                   BUG5: filterByLocation remote keyword fallback.
-// Rev: 2026-06-11 — scoreJobs continues on batch failure instead of aborting;
-//                   returns {result, failedBatches} so callers can surface partial errors.
+// Rev: 2026-06-16 — Cover letter template system: COVER_TEMPLATES, COVER_FONTS, COVER_COLORS,
+//                   buildLetterHtml(), exportLetterPdf() updated to accept portrait + settings.
 // Rev: 2026-06-16 — cvSummaryText: numbered lists for tools, skills, achievements
-//                   so Gabbi can reference items by index number.
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
 const STORAGE_KEY = "jobTracker.v1";
@@ -886,43 +885,133 @@ function extractApplicantName(cv){
   return first;
 }
 
-function exportLetterPdf({letter,cv,job}){
-  if(!letter||!letter.trim()) return;
-  var name=extractApplicantName(cv);
+// ─── Cover letter template definitions ────────────────────────────────────────
+var COVER_TEMPLATES=[
+  {id:"classic",  name:"Classic",  desc:"Traditional letterhead, serif font"},
+  {id:"modern",   name:"Modern",   desc:"Colour header banner, clean sans-serif"},
+  {id:"compact",  name:"Compact",  desc:"Minimalist, tight spacing, no decoration"},
+];
+
+var COVER_FONTS=[
+  {id:"georgia",  name:"Georgia",   css:"Georgia,'Times New Roman',serif"},
+  {id:"system",   name:"Modern",    css:"-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"},
+  {id:"garamond", name:"Elegant",   css:"Garamond,'EB Garamond',Georgia,serif"},
+];
+
+var COVER_COLORS=[
+  {id:"green", name:"Forest green", primary:"#3D6B5C", light:"#EAF2EF", border:"#B8D4CC"},
+  {id:"slate", name:"Slate blue",   primary:"#2C5282", light:"#EBF4FF", border:"#BEE3F8"},
+  {id:"mono",  name:"Monochrome",   primary:"#1a1a1a", light:"#F5F5F5", border:"#CCCCCC"},
+];
+
+function getTemplateDefaults(){
+  return {template:"classic", font:"georgia", color:"green"};
+}
+
+function buildLetterHtml({letter,cv,job,portrait,settings}){
+  var s=Object.assign({},getTemplateDefaults(),settings||{});
+  var name=extractApplicantName(cv)||"";
   var today=new Date().toLocaleDateString(undefined,{year:"numeric",month:"long",day:"numeric"});
   var recipient="";
   if(job){
-    recipient=job.company?job.company:"";
+    recipient=job.company||"";
     if(job.title) recipient+=(recipient?" — ":"")+"Re: "+job.title;
   }
-  function esc(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+  function esc(str){return String(str||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
   var paragraphs=letter.split(/\n\s*\n/).map(function(p){
     return "<p>"+esc(p).replace(/\n/g,"<br>")+"</p>";
   }).join("\n");
   var docTitle=(name?name+" — ":"")+"Cover letter"+(job&&job.company?" — "+job.company:"");
-  var html=
-    "<!doctype html><html><head><meta charset=\"utf-8\"><title>"+esc(docTitle)+"</title>"+
-    "<style>"+
-    "@page{size:A4;margin:22mm 22mm 22mm 22mm}"+
-    "html,body{background:#fff}"+
-    "body{font-family:Georgia,'Times New Roman',serif;font-size:11.5pt;line-height:1.55;color:#1a1a1a;margin:0;padding:0}"+
-    ".letterhead{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:36px;padding-bottom:14px;border-bottom:1px solid #d0d0d0}"+
-    ".letterhead .sender{font-weight:600;font-size:13pt;color:#1a1a1a}"+
-    ".letterhead .date{font-size:10.5pt;color:#555}"+
-    ".recipient{margin-bottom:28px;font-size:10.5pt;color:#555}"+
-    "p{margin:0 0 12px 0;text-align:left;hyphens:auto;word-break:normal;overflow-wrap:break-word}"+
+
+  var fontDef=COVER_FONTS.find(function(f){return f.id===s.font;})||COVER_FONTS[0];
+  var colorDef=COVER_COLORS.find(function(c){return c.id===s.color;})||COVER_COLORS[0];
+  var portraitTag=portrait?"<img src=\""+portrait+"\" style=\"width:72px;height:72px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid "+colorDef.border+"\" />":"";
+
+  var baseStyle=
+    "@page{size:A4;margin:20mm 22mm 22mm 22mm}"+
+    "html,body{background:#fff;margin:0;padding:0}"+
+    "body{font-family:"+fontDef.css+";font-size:11.5pt;line-height:1.6;color:#1a1a1a}"+
+    "p{margin:0 0 13px 0;text-align:left;word-break:normal;overflow-wrap:break-word}"+
     "p:last-child{margin-bottom:0}"+
-    "@media print{.no-print{display:none}}"+
-    ".no-print{position:fixed;top:10px;right:10px;background:#5C8A7A;color:#fff;padding:10px 16px;border-radius:8px;font-family:sans-serif;font-size:13px;cursor:pointer;border:none;box-shadow:0 2px 8px rgba(0,0,0,0.2)}"+
-    "</style></head><body>"+
-    "<button class=\"no-print\" onclick=\"window.print()\">Print / Save as PDF</button>"+
-    "<div class=\"letterhead\">"+
-    "<div class=\"sender\">"+esc(name||"")+"</div>"+
-    "<div class=\"date\">"+esc(today)+"</div>"+
-    "</div>"+
-    (recipient?"<div class=\"recipient\">"+esc(recipient)+"</div>":"")+
-    paragraphs+
-    "</body></html>";
+    "@media print{.no-print{display:none!important}}"+
+    ".no-print{position:fixed;top:12px;right:12px;background:"+colorDef.primary+";color:#fff;padding:10px 18px;border-radius:8px;font-family:sans-serif;font-size:13px;cursor:pointer;border:none;box-shadow:0 2px 8px rgba(0,0,0,0.2)}";
+
+  var html;
+
+  if(s.template==="classic"){
+    html=
+      "<!doctype html><html><head><meta charset=\"utf-8\"><title>"+esc(docTitle)+"</title><style>"+
+      baseStyle+
+      ".header{display:flex;align-items:center;gap:18px;margin-bottom:32px;padding-bottom:16px;border-bottom:2px solid "+colorDef.primary+"}"+
+      ".sender-name{font-size:15pt;font-weight:700;color:"+colorDef.primary+";margin-bottom:2px}"+
+      ".date{font-size:10pt;color:#666;margin-top:2px}"+
+      ".recipient{margin-bottom:28px;font-size:10.5pt;color:#555}"+
+      "</style></head><body>"+
+      "<button class=\"no-print\" onclick=\"window.print()\">Print / Save as PDF</button>"+
+      "<div class=\"header\">"+
+      portraitTag+
+      "<div style=\"flex:1\">"+
+      "<div class=\"sender-name\">"+esc(name)+"</div>"+
+      "<div class=\"date\">"+esc(today)+"</div>"+
+      "</div>"+
+      "</div>"+
+      (recipient?"<div class=\"recipient\">"+esc(recipient)+"</div>":"")+
+      paragraphs+
+      "</body></html>";
+  } else if(s.template==="modern"){
+    html=
+      "<!doctype html><html><head><meta charset=\"utf-8\"><title>"+esc(docTitle)+"</title><style>"+
+      baseStyle+
+      ".banner{background:"+colorDef.primary+";color:#fff;padding:28px 32px;display:flex;align-items:center;gap:20px;margin:-20mm -22mm 32px;padding-top:24px}"+
+      ".banner-name{font-size:16pt;font-weight:700;letter-spacing:0.3px}"+
+      ".banner-date{font-size:10pt;opacity:0.85;margin-top:4px}"+
+      ".body-wrap{padding:0}"+
+      ".recipient{margin-bottom:26px;font-size:10.5pt;color:#555;padding-left:2px}"+
+      ".portrait-modern{width:76px;height:76px;border-radius:50%;object-fit:cover;border:3px solid rgba(255,255,255,0.6);flex-shrink:0}"+
+      "</style></head><body>"+
+      "<button class=\"no-print\" onclick=\"window.print()\">Print / Save as PDF</button>"+
+      "<div class=\"banner\">"+
+      (portrait?"<img src=\""+portrait+"\" class=\"portrait-modern\" />":"")+
+      "<div>"+
+      "<div class=\"banner-name\">"+esc(name)+"</div>"+
+      "<div class=\"banner-date\">"+esc(today)+"</div>"+
+      "</div>"+
+      "</div>"+
+      "<div class=\"body-wrap\">"+
+      (recipient?"<div class=\"recipient\">"+esc(recipient)+"</div>":"")+
+      paragraphs+
+      "</div>"+
+      "</body></html>";
+  } else {
+    // compact
+    html=
+      "<!doctype html><html><head><meta charset=\"utf-8\"><title>"+esc(docTitle)+"</title><style>"+
+      baseStyle+
+      "body{font-size:11pt;line-height:1.5}"+
+      ".header{display:flex;align-items:center;gap:14px;margin-bottom:22px}"+
+      ".sender-name{font-size:12pt;font-weight:700;color:"+colorDef.primary+"}"+
+      ".date{font-size:9.5pt;color:#888}"+
+      ".recipient{margin-bottom:18px;font-size:10pt;color:#666}"+
+      "p{margin:0 0 10px 0}"+
+      "</style></head><body>"+
+      "<button class=\"no-print\" onclick=\"window.print()\">Print / Save as PDF</button>"+
+      "<div class=\"header\">"+
+      (portrait?"<img src=\""+portrait+"\" style=\"width:52px;height:52px;border-radius:50%;object-fit:cover;border:1.5px solid "+colorDef.border+"\" />":"")+
+      "<div>"+
+      "<div class=\"sender-name\">"+esc(name)+"</div>"+
+      "<div class=\"date\">"+esc(today)+"</div>"+
+      "</div>"+
+      "</div>"+
+      (recipient?"<div class=\"recipient\">"+esc(recipient)+"</div>":"")+
+      paragraphs+
+      "</body></html>";
+  }
+  return html;
+}
+
+function exportLetterPdf({letter,cv,job,portrait,settings}){
+  if(!letter||!letter.trim()) return;
+  var html=buildLetterHtml({letter:letter,cv:cv,job:job,portrait:portrait||"",settings:settings||{}});
   var w=window.open("","_blank");
   if(!w){
     alert("Your browser blocked the PDF window. Allow pop-ups for this page and try again.");
@@ -931,9 +1020,7 @@ function exportLetterPdf({letter,cv,job}){
   w.document.open();
   w.document.write(html);
   w.document.close();
-  setTimeout(function(){
-    try{ w.focus(); w.print(); }catch(e){}
-  },250);
+  setTimeout(function(){ try{ w.focus(); w.print(); }catch(e){} },250);
 }
 
 // ─── Claude API helpers ───────────────────────────────────────────────────────
@@ -2424,8 +2511,111 @@ function Jobs({jobs,setJobs,rescoreAll,rescoreJob,scoringStatus,scoringError,cv,
 // Rev: 2026-06-11 — BUG11: addedCount now reflects truly_new.length (post-dedup)
 //   not preFiltered.length, so re-running a profile correctly reports 0 new jobs.
 
+// profiles.js
+// Rev: 2026-06-16 — Portrait upload with Cropper.js pan/zoom; stored as base64 in Firestore.
+// Rev: 2026-06-10 — BUG2+3: fix added/skipped counters in fetchAF and fetchJS.
+// Rev: 2026-06-11 — BUG11: addedCount now reflects truly_new.length (post-dedup)
+//   not preFiltered.length, so re-running a profile correctly reports 0 new jobs.
+
+// ─── Portrait uploader with Cropper.js ───────────────────────────────────────
+function PortraitUploader({portrait,setPortrait}){
+  var [cropping,setCropping]=useState(false);
+  var [srcUrl,setSrcUrl]=useState(null);
+  var cropperRef=useRef(null);
+  var imgRef=useRef(null);
+  var fileRef=useRef(null);
+
+  function onFile(e){
+    var file=e.target.files&&e.target.files[0];
+    if(!file) return;
+    if(file.size>10*1024*1024){
+      alert("Photo is too large (max 10 MB). Please choose a smaller image.");
+      e.target.value=""; return;
+    }
+    var reader=new FileReader();
+    reader.onload=function(ev){
+      setSrcUrl(ev.target.result);
+      setCropping(true);
+    };
+    reader.readAsDataURL(file);
+    e.target.value="";
+  }
+
+  useEffect(function(){
+    if(!cropping||!srcUrl||!imgRef.current) return;
+    if(!window.Cropper){
+      alert("Image cropper failed to load. Check your internet connection and reload the page.");
+      setCropping(false); setSrcUrl(null); return;
+    }
+    if(cropperRef.current){ cropperRef.current.destroy(); cropperRef.current=null; }
+    cropperRef.current=new window.Cropper(imgRef.current,{
+      aspectRatio:1,
+      viewMode:1,
+      dragMode:"move",
+      autoCropArea:0.9,
+      movable:true,
+      zoomable:true,
+      rotatable:false,
+      scalable:false,
+      cropBoxResizable:false,
+      cropBoxMovable:false,
+      guides:false,
+      center:false,
+      highlight:false,
+      background:false,
+    });
+    return function(){
+      if(cropperRef.current){ cropperRef.current.destroy(); cropperRef.current=null; }
+    };
+  },[cropping,srcUrl]);
+
+  function applyPortrait(){
+    if(!cropperRef.current) return;
+    var canvas=cropperRef.current.getCroppedCanvas({width:240,height:240,imageSmoothingQuality:"high"});
+    setPortrait(canvas.toDataURL("image/jpeg",0.88));
+    setCropping(false);
+    setSrcUrl(null);
+  }
+
+  function cancelCrop(){
+    setCropping(false);
+    setSrcUrl(null);
+  }
+
+  return <div>
+    <Label>Profile portrait <span style={{fontWeight:400,color:C.textHint,fontSize:12}}>(optional — shown in cover letter PDF)</span></Label>
+    <div style={{display:"flex",alignItems:"center",gap:16,marginTop:8}}>
+      {portrait
+        ?<img src={portrait} style={{width:72,height:72,borderRadius:"50%",objectFit:"cover",border:"2px solid "+C.border,flexShrink:0}} />
+        :<div style={{width:72,height:72,borderRadius:"50%",background:C.surfaceAlt,border:"2px dashed "+C.border,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0,color:C.textHint}}>👤</div>
+      }
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <Btn onClick={function(){fileRef.current&&fileRef.current.click();}} style={{fontSize:13,padding:"8px 14px"}}>
+          {portrait?"Change photo":"Upload photo"}
+        </Btn>
+        {portrait&&<Btn variant="danger" onClick={function(){setPortrait("");}} style={{fontSize:13,padding:"8px 14px"}}>Remove</Btn>}
+      </div>
+      <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={onFile} />
+    </div>
+
+    {cropping&&srcUrl&&<div style={{position:"fixed",inset:0,zIndex:700,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div style={{background:C.surface,borderRadius:20,padding:24,width:"min(440px,96vw)",boxShadow:"0 8px 40px rgba(0,0,0,0.3)"}}>
+        <div style={{fontSize:15,fontWeight:700,color:C.textPrimary,marginBottom:14}}>Adjust photo</div>
+        <div style={{width:"100%",height:300,overflow:"hidden",borderRadius:12,background:"#111",marginBottom:16}}>
+          <img ref={imgRef} src={srcUrl} style={{maxWidth:"100%",display:"block"}} />
+        </div>
+        <div style={{fontSize:12,color:C.textHint,marginBottom:16,textAlign:"center"}}>Drag to reposition · Pinch or scroll to zoom</div>
+        <div style={{display:"flex",gap:10}}>
+          <Btn variant="primary" onClick={applyPortrait} style={{flex:1,fontSize:14,minHeight:46}}>✓ Use this photo</Btn>
+          <Btn onClick={cancelCrop} style={{fontSize:14,minHeight:46}}>Cancel</Btn>
+        </div>
+      </div>
+    </div>}
+  </div>;
+}
+
 // ─── Search Profiles ──────────────────────────────────────────────────────────
-function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJsKey,anthropicKey,setAnthropicKey,pendingProfileRun,setPendingProfileRun,dismissedIds}){
+function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJsKey,anthropicKey,setAnthropicKey,pendingProfileRun,setPendingProfileRun,dismissedIds,portrait,setPortrait}){
   var [showAfKey,setShowAfKey]=useState(false);
   var [showJsKey,setShowJsKey]=useState(false);
   var [showAnthropicKey,setShowAnthropicKey]=useState(false);
@@ -2649,6 +2839,10 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
         </div>
         <Alert type="info">🔒 Keys are stored encrypted in your Firestore account and are never shared with anyone. <InfoTip>Your API keys are only used when you explicitly trigger a fetch or AI action. They are stored in your personal Firestore document, accessible only when signed in as you.</InfoTip></Alert>
       </div>
+    </Card>
+    <Card>
+      <SectionTitle>Profile & portrait</SectionTitle>
+      <PortraitUploader portrait={portrait||""} setPortrait={setPortrait} />
     </Card>
   </div>;
 }
@@ -3011,7 +3205,9 @@ function CVProfile({cv,setCv}){
 
 
 // ─── Cover Letters ────────────────────────────────────────────────────────────
-function CoverLetters({jobs,setJobs,cv,anthropicKey,setActiveTab,pendingCoverLetterJob,setPendingCoverLetterJob}){
+// Rev: 2026-06-16 — Template selector (Classic/Modern/Compact), font and colour
+//                   pickers; portrait prop passed through to exportLetterPdf.
+function CoverLetters({jobs,setJobs,cv,anthropicKey,setActiveTab,pendingCoverLetterJob,setPendingCoverLetterJob,portrait}){
   var [showAllStatuses,setShowAllStatuses]=useState(false);
   var eligibleJobs=jobs.filter(function(j){
     if(j.archived) return false;
@@ -3041,6 +3237,9 @@ function CoverLetters({jobs,setJobs,cv,anthropicKey,setActiveTab,pendingCoverLet
   var [loading,setLoading]=useState(false);
   var [showEmail,setShowEmail]=useState(false);
   var [saved,setSaved]=useState(false);
+  var [tmpl,setTmpl]=useState("classic");
+  var [font,setFont]=useState("georgia");
+  var [color,setColor]=useState("green");
 
   function detectJobLanguage(job){
     if(!job) return "English";
@@ -3147,6 +3346,38 @@ function CoverLetters({jobs,setJobs,cv,anthropicKey,setActiveTab,pendingCoverLet
               </Sel>
             </div>
             <div>
+              <Label>Letter template</Label>
+              <div style={{display:"flex",gap:8,marginTop:4,flexWrap:"wrap"}}>
+                {COVER_TEMPLATES.map(function(t){
+                  var on=tmpl===t.id;
+                  return <button key={t.id} onClick={function(){setTmpl(t.id);}}
+                    style={{flex:1,minWidth:90,padding:"10px 12px",borderRadius:10,
+                      border:"2px solid "+(on?C.primary:C.border),
+                      background:on?C.primaryLight:"transparent",
+                      color:on?C.primary:C.textSecondary,
+                      cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:on?700:500,
+                      textAlign:"center",lineHeight:1.3}}>
+                    <div style={{fontWeight:700,marginBottom:2}}>{t.name}</div>
+                    <div style={{fontSize:11,opacity:0.8}}>{t.desc}</div>
+                  </button>;
+                })}
+              </div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div>
+                <Label>Font</Label>
+                <Sel className="jt-cover-select" value={font} onChange={function(e){setFont(e.target.value);}}>
+                  {COVER_FONTS.map(function(f){return <option key={f.id} value={f.id}>{f.name}</option>;})}
+                </Sel>
+              </div>
+              <div>
+                <Label>Colour</Label>
+                <Sel className="jt-cover-select" value={color} onChange={function(e){setColor(e.target.value);}}>
+                  {COVER_COLORS.map(function(c){return <option key={c.id} value={c.id}>{c.name}</option>;})}
+                </Sel>
+              </div>
+            </div>
+            <div>
               <Label hint="Auto-detect reads the job description language.">
                 Language
                 {language==="auto"&&currentJob&&<span style={{fontSize:12,color:C.textHint,fontWeight:400,marginLeft:6}}>→ {detectJobLanguage(currentJob)}</span>}
@@ -3192,7 +3423,7 @@ function CoverLetters({jobs,setJobs,cv,anthropicKey,setActiveTab,pendingCoverLet
           ✉ Send via email
         </button>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-          <Btn onClick={function(){exportLetterPdf({letter:letter,cv:cv,job:currentJob});}} style={{fontSize:14,minHeight:46}}>📄 PDF</Btn>
+          <Btn onClick={function(){exportLetterPdf({letter:letter,cv:cv,job:currentJob,portrait:portrait||"",settings:{template:tmpl,font:font,color:color}});}} style={{fontSize:14,minHeight:46}}>📄 PDF</Btn>
           <Btn onClick={function(){navigator.clipboard.writeText(letter);}} style={{fontSize:14,minHeight:46}}>Copy</Btn>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
@@ -4700,6 +4931,7 @@ function Reports({jobs,cv,anthropicKey}){
 
 
 // app.js
+// Rev: 2026-06-16 — portrait state added; hydrated from Firestore; passed to SearchProfiles + CoverLetters.
 // Rev: 2026-06-15 — Pass setJobs to ProfileAssistant for Gabbi job write access.
 // Rev: 2026-06-04 — Pass setCv to ProfileAssistant (Gabbi CV write-back).
 // Rev: 2026-06-10 — BUG2: fix added counter in runAllProfiles (pre-filter before setJobs);
@@ -4744,6 +4976,7 @@ function AppShell({user,onSignOut}){
   var [importSummary,setImportSummary]=useState(null);
   var [pendingProfileRun,setPendingProfileRun]=useState(null);
   var [pendingCoverLetterJob,setPendingCoverLetterJob]=useState(null);
+  var [portrait,setPortraitRaw]=useState("");
   var [theme,setThemeRaw]=useState(getSavedTheme);
   var [isMobile,setIsMobile]=useState(typeof window!=="undefined"&&window.innerWidth<=767);
 
@@ -4753,6 +4986,7 @@ function AppShell({user,onSignOut}){
     return function(){ window.removeEventListener("resize",onResize); };
   },[]);
 
+  function setPortrait(v){ setPortraitRaw(v); scheduleSave({portrait:v}); }
   function setTheme(t){
     setThemeRaw(t);
     applyTheme(t);
@@ -4838,6 +5072,7 @@ function AppShell({user,onSignOut}){
         if(Array.isArray(data.assistantConv)) setAssistantConvRaw(data.assistantConv);
         if(Array.isArray(data.dismissedIds)) setDismissedIdsRaw(data.dismissedIds);
         if(typeof data.sidebarCollapsed==="boolean") setSidebarCollapsedRaw(data.sidebarCollapsed);
+        if(typeof data.portrait==="string") setPortraitRaw(data.portrait);
         latestState.current=data;
       }
       suppressWriteUntilRef.current=Date.now()+2000;
@@ -5071,7 +5306,7 @@ function AppShell({user,onSignOut}){
 
   // ── data export / import / reset ──────────────────────────────────────────
   function exportData(excludeKeys){
-    var payload={jobs:jobs,profiles:profiles,cv:cv,schedule:schedule,log:log,sort:sort,assistantConv:assistantConv,dismissedIds:dismissedIds};
+    var payload={jobs:jobs,profiles:profiles,cv:cv,schedule:schedule,log:log,sort:sort,assistantConv:assistantConv,dismissedIds:dismissedIds,portrait:portrait};
     if(!excludeKeys){ payload.afKey=afKey; payload.jsKey=jsKey; payload.anthropicKey=anthropicKey; }
     var out={version:2,exportedAt:new Date().toISOString(),data:payload};
     var b=new Blob([JSON.stringify(out,null,2)],{type:"application/json"});
@@ -5100,6 +5335,7 @@ function AppShell({user,onSignOut}){
     if(typeof d.sort==="string") setSort(d.sort);
     if(Array.isArray(d.assistantConv)) setAssistantConv(d.assistantConv);
     if(Array.isArray(d.dismissedIds)) setDismissedIds(d.dismissedIds);
+    if(typeof d.portrait==="string") setPortrait(d.portrait);
   }
 
   function resetAllData(){
@@ -5108,7 +5344,7 @@ function AppShell({user,onSignOut}){
     var uid=user.uid;
     cloudDelete(uid);
     setJobsRaw([]); setProfilesRaw([]); setCvRaw({text:"",roles:"",industries:"",locations:"",salary:"",workType:"Any",tools:[],skills:[],achievements:[],recipients:[],uploaded:false,fileName:"",extractedAt:""});
-    setAfKeyRaw(""); setJsKeyRaw(""); setAnthropicKeyRaw("");
+    setAfKeyRaw(""); setJsKeyRaw(""); setAnthropicKeyRaw(""); setPortraitRaw("");
     setScheduleRaw(DEFAULT_SCHEDULE); setLogRaw([]); setSortRaw("added_desc");
     setAssistantConvRaw([]); setDismissedIdsRaw([]); setSidebarCollapsedRaw(false);
     latestState.current={};
@@ -5125,11 +5361,11 @@ function AppShell({user,onSignOut}){
     return <TabErrorBoundary tabKey={key}>
       {key==="dashboard"&&<Dashboard jobs={jobs} schedule={schedule} setActiveTab={setActiveTab} navigateToJobs={navigateToJobs} rescoreAll={rescoreAll} scoringStatus={scoringStatus} onRunAllProfiles={runAllProfiles} profiles={profiles} cv={cv} anthropicKey={anthropicKey} importSummary={importSummary} onDismissImportSummary={function(){setImportSummary(null);}} />}
       {key==="jobs"&&<Jobs jobs={jobs} setJobs={setJobs} rescoreAll={rescoreAll} rescoreJob={rescoreJob} scoringStatus={scoringStatus} scoringError={scoringError} cv={cv} sort={sort} setSort={setSort} dismissJob={dismissJob} tombstoneIds={tombstoneIds} startCoverLetter={startCoverLetter} pendingJobsView={pendingJobsView} setPendingJobsView={setPendingJobsView} />}
-      {key==="profiles"&&<SearchProfiles profiles={profiles} setProfiles={setProfiles} setJobs={setJobs} afKey={afKey} setAfKey={setAfKey} jsKey={jsKey} setJsKey={setJsKey} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} pendingProfileRun={pendingProfileRun} setPendingProfileRun={setPendingProfileRun} dismissedIds={dismissedIds} />}
+      {key==="profiles"&&<SearchProfiles profiles={profiles} setProfiles={setProfiles} setJobs={setJobs} afKey={afKey} setAfKey={setAfKey} jsKey={jsKey} setJsKey={setJsKey} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} pendingProfileRun={pendingProfileRun} setPendingProfileRun={setPendingProfileRun} dismissedIds={dismissedIds} portrait={portrait} setPortrait={setPortrait} />}
       {key==="assistant"&&<ProfileAssistant cv={cv} setCv={setCv} jobs={jobs} setJobs={setJobs} profiles={profiles} setProfiles={setProfiles} anthropicKey={anthropicKey} conversation={assistantConv} setConversation={setAssistantConv} setActiveTab={setActiveTab} setPendingProfileRun={setPendingProfileRun} />}
       {key==="cv"&&<CVProfile cv={cv} setCv={setCv} />}
       {key==="scheduler"&&<Scheduler schedule={schedule} setSchedule={setSchedule} profiles={profiles} log={log} resetAllData={resetAllData} exportData={exportData} importData={importData} validateImport={validateImport} dismissedIds={dismissedIds} clearDismissedIds={clearDismissedIds} />}
-      {key==="covers"&&<CoverLetters jobs={jobs} setJobs={setJobs} cv={cv} anthropicKey={anthropicKey} setActiveTab={setActiveTab} pendingCoverLetterJob={pendingCoverLetterJob} setPendingCoverLetterJob={setPendingCoverLetterJob} />}
+      {key==="covers"&&<CoverLetters jobs={jobs} setJobs={setJobs} cv={cv} anthropicKey={anthropicKey} setActiveTab={setActiveTab} pendingCoverLetterJob={pendingCoverLetterJob} setPendingCoverLetterJob={setPendingCoverLetterJob} portrait={portrait} />}
       {key==="reports"&&<Reports jobs={jobs} cv={cv} anthropicKey={anthropicKey} />}
     </TabErrorBoundary>;
   }
