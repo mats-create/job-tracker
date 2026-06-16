@@ -5508,8 +5508,9 @@ function App(){
       setAccessGranted(granted);
       setAccessChecked(true);
       if(granted) writeUserMeta(sdk, user);
-    }).catch(function(){
-      // On error, deny access
+    }).catch(function(err){
+      // Log error for debugging — deny access on failure
+      console.error("Allowlist check failed:", err && err.message);
       setAccessGranted(false);
       setAccessChecked(true);
     });
