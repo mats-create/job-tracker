@@ -1,5 +1,6 @@
 // constants.js
-// Rev: 2026-06-16 — Assistant tab renamed to Gabbi; icon updated to SVG avatar in components.js.
+// Rev: 2026-06-16 — Assistant tab renamed to Gabbi; icon 🫶; moved to overview group
+//                   so it sits below Dashboard in sidebar with special green styling.
 
 // ─── Theme palettes ───────────────────────────────────────────────────────────
 const LIGHT = {
@@ -92,7 +93,7 @@ const TABS = [
   {id:"dashboard",label:"Dashboard",icon:"📊",group:"overview"},
   {id:"jobs",label:"My Jobs",icon:"📋",group:"jobs"},
   {id:"profiles",label:"Search Profiles",icon:"🔍",group:"jobs"},
-  {id:"assistant",label:"Gabbi",icon:"gabbi",group:"jobs"},
+  {id:"assistant",label:"Gabbi",icon:"🫶",group:"overview"},
   {id:"scheduler",label:"Scheduler",icon:"⏱",group:"jobs"},
   {id:"covers",label:"Cover Letters",icon:"✉️",group:"outputs"},
   {id:"reports",label:"Reports",icon:"📈",group:"outputs"},
