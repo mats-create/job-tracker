@@ -427,12 +427,18 @@ function buildLetterHtml({letter,cv,job,portrait,settings}){
   } else if(s.template==="modern"){
     html=
       "<!doctype html><html><head><meta charset=\"utf-8\"><title>"+esc(docTitle)+"</title><style>"+
-      baseStyle+
-      ".banner{background:"+colorDef.primary+";color:#fff;padding:28px 32px;display:flex;align-items:center;gap:20px;margin:-20mm -22mm 32px;padding-top:24px}"+
+      "@page{size:A4;margin:0}"+
+      "html,body{background:#fff;margin:0;padding:0}"+
+      "body{font-family:"+fontDef.css+";font-size:11.5pt;line-height:1.6;color:#1a1a1a}"+
+      "p{margin:0 0 13px 0;word-break:normal;overflow-wrap:break-word}"+
+      "p:last-child{margin-bottom:0}"+
+      "@media print{.no-print{display:none!important}}"+
+      ".no-print{position:fixed;top:12px;right:12px;background:"+colorDef.primary+";color:#fff;padding:10px 18px;border-radius:8px;font-family:sans-serif;font-size:13px;cursor:pointer;border:none;box-shadow:0 2px 8px rgba(0,0,0,0.2)}"+
+      ".banner{background:"+colorDef.primary+";color:#fff;padding:28px 32px;display:flex;align-items:center;gap:20px;width:100%;box-sizing:border-box}"+
       ".banner-name{font-size:16pt;font-weight:700;letter-spacing:0.3px}"+
       ".banner-date{font-size:10pt;opacity:0.85;margin-top:4px}"+
-      ".body-wrap{padding:0}"+
-      ".recipient{margin-bottom:26px;font-size:10.5pt;color:#555;padding-left:2px}"+
+      ".body-wrap{padding:22mm 22mm 22mm 22mm;box-sizing:border-box}"+
+      ".recipient{margin-bottom:26px;font-size:10.5pt;color:#555}"+
       ".portrait-modern{width:76px;height:76px;border-radius:50%;object-fit:cover;border:3px solid rgba(255,255,255,0.6);flex-shrink:0}"+
       "</style></head><body>"+
       "<button class=\"no-print\" onclick=\"window.print()\">Print / Save as PDF</button>"+

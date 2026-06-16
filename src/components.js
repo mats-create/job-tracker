@@ -1,4 +1,6 @@
 // components.js
+// Rev: 2026-06-16 — Sidebar + MobileBottomNav accept portrait prop; shown as avatar
+//                   with fallback to Google photoURL, then initial letter.
 // Rev: 2026-06-16 — Gabbi 🫶 icon; soft warm green tint in sidebar (lindbloom green),
 //                   same borderRadius:8 as other items, not pill-shaped
 // Rev: 2026-06-16 — Mobile nav: Gabbi moved to pos 2 (after Dashboard); monochrome
@@ -212,7 +214,7 @@ function EmailDialog({recipients,subject,body,onClose,onCopy}){
 }
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
-function Sidebar({activeTab,setActiveTab,collapsed,setCollapsed,mobileOpen,setMobileOpen,user,onSignOut,theme,setTheme}){
+function Sidebar({activeTab,setActiveTab,collapsed,setCollapsed,mobileOpen,setMobileOpen,user,onSignOut,theme,setTheme,portrait}){
   function pickTab(id){
     setActiveTab(id);
     if(setMobileOpen) setMobileOpen(false);
@@ -263,8 +265,8 @@ function Sidebar({activeTab,setActiveTab,collapsed,setCollapsed,mobileOpen,setMo
 
       {user&&<div style={{borderTop:"1px solid "+C.border,padding:"10px 8px"}}>
         <div style={{display:"flex",alignItems:"center",gap:10,padding:"6px 8px",borderRadius:8,background:C.surfaceAlt,marginBottom:6}}>
-          {user.photoURL
-            ?<img src={user.photoURL} alt="" referrerPolicy="no-referrer" style={{width:28,height:28,borderRadius:"50%",flexShrink:0,objectFit:"cover"}} />
+          {(portrait||user.photoURL)
+            ?<img src={portrait||user.photoURL} alt="" referrerPolicy="no-referrer" style={{width:28,height:28,borderRadius:"50%",flexShrink:0,objectFit:"cover"}} />
             :<div style={{width:28,height:28,borderRadius:"50%",background:C.primary,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,flexShrink:0}}>{(user.displayName||user.email||"?").slice(0,1).toUpperCase()}</div>}
           {!collapsed&&<div style={{flex:1,minWidth:0,overflow:"hidden"}}>
             <div style={{fontSize:12,fontWeight:600,color:C.textPrimary,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{user.displayName||"Signed in"}</div>
@@ -314,7 +316,7 @@ const PRIMARY_TABS = ["dashboard","assistant","jobs","covers","profiles"];
 const SECONDARY_TABS = ["scheduler","cv","reports"];
 
 // ─── MobileBottomNav ──────────────────────────────────────────────────────────
-function MobileBottomNav({activeTab,setActiveTab,user,onSignOut,theme,setTheme}){
+function MobileBottomNav({activeTab,setActiveTab,user,onSignOut,theme,setTheme,portrait}){
   var [moreOpen,setMoreOpen]=useState(false);
   var inMore=SECONDARY_TABS.includes(activeTab);
 
@@ -345,8 +347,8 @@ function MobileBottomNav({activeTab,setActiveTab,user,onSignOut,theme,setTheme})
         </div>
       </div>
       {user&&<div style={{padding:"10px 20px 16px",display:"flex",alignItems:"center",gap:12}}>
-        {user.photoURL
-          ?<img src={user.photoURL} alt="" referrerPolicy="no-referrer" style={{width:36,height:36,borderRadius:"50%",flexShrink:0}} />
+        {(portrait||user.photoURL)
+          ?<img src={portrait||user.photoURL} alt="" referrerPolicy="no-referrer" style={{width:36,height:36,borderRadius:"50%",flexShrink:0}} />
           :<div style={{width:36,height:36,borderRadius:"50%",background:C.primary,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,flexShrink:0}}>{(user.displayName||user.email||"?").slice(0,1).toUpperCase()}</div>}
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontSize:13,fontWeight:600,color:C.textPrimary,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.displayName||"Signed in"}</div>

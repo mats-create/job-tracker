@@ -429,9 +429,9 @@ function AppShell({user,onSignOut}){
     return <TabErrorBoundary tabKey={key}>
       {key==="dashboard"&&<Dashboard jobs={jobs} schedule={schedule} setActiveTab={setActiveTab} navigateToJobs={navigateToJobs} rescoreAll={rescoreAll} scoringStatus={scoringStatus} onRunAllProfiles={runAllProfiles} profiles={profiles} cv={cv} anthropicKey={anthropicKey} importSummary={importSummary} onDismissImportSummary={function(){setImportSummary(null);}} />}
       {key==="jobs"&&<Jobs jobs={jobs} setJobs={setJobs} rescoreAll={rescoreAll} rescoreJob={rescoreJob} scoringStatus={scoringStatus} scoringError={scoringError} cv={cv} sort={sort} setSort={setSort} dismissJob={dismissJob} tombstoneIds={tombstoneIds} startCoverLetter={startCoverLetter} pendingJobsView={pendingJobsView} setPendingJobsView={setPendingJobsView} />}
-      {key==="profiles"&&<SearchProfiles profiles={profiles} setProfiles={setProfiles} setJobs={setJobs} afKey={afKey} setAfKey={setAfKey} jsKey={jsKey} setJsKey={setJsKey} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} pendingProfileRun={pendingProfileRun} setPendingProfileRun={setPendingProfileRun} dismissedIds={dismissedIds} portrait={portrait} setPortrait={setPortrait} />}
+      {key==="profiles"&&<SearchProfiles profiles={profiles} setProfiles={setProfiles} setJobs={setJobs} afKey={afKey} setAfKey={setAfKey} jsKey={jsKey} setJsKey={setJsKey} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} pendingProfileRun={pendingProfileRun} setPendingProfileRun={setPendingProfileRun} dismissedIds={dismissedIds} />}
       {key==="assistant"&&<ProfileAssistant cv={cv} setCv={setCv} jobs={jobs} setJobs={setJobs} profiles={profiles} setProfiles={setProfiles} anthropicKey={anthropicKey} conversation={assistantConv} setConversation={setAssistantConv} setActiveTab={setActiveTab} setPendingProfileRun={setPendingProfileRun} />}
-      {key==="cv"&&<CVProfile cv={cv} setCv={setCv} />}
+      {key==="cv"&&<CVProfile cv={cv} setCv={setCv} portrait={portrait} setPortrait={setPortrait} />}
       {key==="scheduler"&&<Scheduler schedule={schedule} setSchedule={setSchedule} profiles={profiles} log={log} resetAllData={resetAllData} exportData={exportData} importData={importData} validateImport={validateImport} dismissedIds={dismissedIds} clearDismissedIds={clearDismissedIds} />}
       {key==="covers"&&<CoverLetters jobs={jobs} setJobs={setJobs} cv={cv} anthropicKey={anthropicKey} setActiveTab={setActiveTab} pendingCoverLetterJob={pendingCoverLetterJob} setPendingCoverLetterJob={setPendingCoverLetterJob} portrait={portrait} />}
       {key==="reports"&&<Reports jobs={jobs} cv={cv} anthropicKey={anthropicKey} />}
@@ -451,7 +451,7 @@ function AppShell({user,onSignOut}){
   }
 
   return <div style={{display:"flex",minHeight:"100vh",background:C.bg}}>
-    {!isMobile&&<Sidebar activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} user={user} onSignOut={onSignOut} theme={theme} setTheme={setTheme} />}
+    {!isMobile&&<Sidebar activeTab={activeTab} setActiveTab={setActiveTab} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} user={user} onSignOut={onSignOut} theme={theme} setTheme={setTheme} portrait={portrait} />}
 
     <div className={"jt-main"+(sidebarCollapsed?" sidebar-collapsed":"")} style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",paddingBottom:isMobile?"calc(80px + env(safe-area-inset-bottom, 0px))":0}}>
       {isMobile&&<div style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",background:C.surface,borderBottom:"1px solid "+C.border,position:"sticky",top:0,zIndex:100}}>
@@ -472,7 +472,7 @@ function AppShell({user,onSignOut}){
       </main>
     </div>
 
-    {isMobile&&<MobileBottomNav activeTab={activeTab} setActiveTab={setActiveTab} user={user} onSignOut={onSignOut} theme={theme} setTheme={setTheme} />}
+    {isMobile&&<MobileBottomNav activeTab={activeTab} setActiveTab={setActiveTab} user={user} onSignOut={onSignOut} theme={theme} setTheme={setTheme} portrait={portrait} />}
 
     {dismissToast&&<DismissToast job={dismissToast.job} onUndo={undoDismiss} />}
   </div>;
