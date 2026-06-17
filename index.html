@@ -357,6 +357,24 @@ html[data-theme="dark"] .jt-sb-item.active{background:#1F3530;color:#7AAD9C}
 }
 
 @keyframes spin{to{transform:rotate(360deg)}}
+
+/* Reusable "you've arrived here" pulse — used by onboarding's goToSection,
+   and any future navigation that needs to draw the eye to a specific element. */
+@keyframes jtHighlightPulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(92,138,122,0)}
+  50%{box-shadow:0 0 0 6px rgba(92,138,122,0.28)}
+}
+.jt-highlight-pulse{
+  animation:jtHighlightPulse 1.6s ease-in-out 2;
+  border-radius:14px;
+}
+html[data-theme="dark"] .jt-highlight-pulse{
+  animation-name:jtHighlightPulseDark;
+}
+@keyframes jtHighlightPulseDark{
+  0%,100%{box-shadow:0 0 0 0 rgba(122,173,156,0)}
+  50%{box-shadow:0 0 0 6px rgba(122,173,156,0.32)}
+}
 </style>
 </head>
 <body>
@@ -1732,7 +1750,7 @@ function ImportSummaryOverlay({summary,onClose,onClear,setActiveTab}){
 
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
-function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoringStatus,onRunAllProfiles,profiles,cv,anthropicKey,importSummary,onDismissImportSummary,user}){
+function Dashboard({jobs,schedule,setActiveTab,goToSection,navigateToJobs,rescoreAll,scoringStatus,onRunAllProfiles,profiles,cv,anthropicKey,importSummary,onDismissImportSummary,user}){
   var [fetchStatus,setFetchStatus]=useState(null);
   var [fetchMsg,setFetchMsg]=useState("");
   var [showSummaryOverlay,setShowSummaryOverlay]=useState(false);
@@ -1775,7 +1793,7 @@ function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoring
 
   return <div style={{display:"flex",flexDirection:"column",gap:20}}>
     {showSummaryOverlay&&<ImportSummaryOverlay summary={importSummary} onClose={function(){setShowSummaryOverlay(false);}} onClear={function(){setShowSummaryOverlay(false);if(onDismissImportSummary)onDismissImportSummary();}} setActiveTab={setActiveTab} />}
-    <OnboardingCards cv={cv} profiles={profiles} jobs={jobs} anthropicKey={anthropicKey} setActiveTab={setActiveTab} user={user} />
+    <OnboardingCards cv={cv} profiles={profiles} jobs={jobs} anthropicKey={anthropicKey} setActiveTab={setActiveTab} goToSection={goToSection} user={user} />
     <div style={{background:"linear-gradient(135deg,"+C.primary+" 0%,"+C.primaryDark+" 100%)",borderRadius:20,padding:"28px",color:"#fff",boxShadow:C.shadowMd}}>
       <div style={{fontSize:22,fontWeight:700,marginBottom:6}}>Good to see you! 👋</div>
       <div style={{fontSize:14,opacity:0.85,marginBottom:20}}>Here's your job search summary for today.</div>
@@ -1920,7 +1938,20 @@ function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoring
 
 
 // onboarding.js
-// Rev: 2026-06-17 — Admin-only "Preview onboarding" toggle added. Uses sessionStorage
+// Rev: 2026-06-17 — Visual + UX refinements based on direct feedback:
+//   1. Cards are collapsible (per-card, sessionStorage-backed) so a user who wants
+//      to explore the app first isn't forced to confront onboarding every time.
+//   2. Distinct visual identity: 2px accent border in the app's own primary colour
+//      (not a generic info-blue), a leading icon, and an inviting headline — so the
+//      cards read as "go here first", not just another card among many.
+//   3. Each not-yet-done step gets a one-sentence "what happens / what to expect"
+//      description, shown inline (no separate overlay/explainer step to interfere
+//      with flow).
+//   4. Navigation uses goToSection(tabId, sectionId) instead of bare setActiveTab —
+//      this switches tab AND scrolls+highlights the actual target section, so e.g.
+//      "Add your API key" lands the user directly on the API keys card, already
+//      pulsing, rather than just the top of a page they then have to hunt through.
+// Rev: 2026-06-17 — Admin-only "Preview onboarding" toggle. Uses sessionStorage
 //   (key: jt.forceOnboarding) so admin can force both cards to render regardless of
 //   actual progress, without touching Firestore or app.js state. Tab-local, resets on
 //   close. Toggle button only renders when user.email === ADMIN_EMAIL.
@@ -1936,14 +1967,27 @@ function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoring
 
 var ONBOARDING_ADMIN_EMAIL="mats@hultgrensaksi.com";
 var ONBOARDING_FORCE_KEY="jt.forceOnboarding";
+var ONBOARDING_COLLAPSE_KEY="jt.onboardingCollapsed"; // JSON: {core:bool, gabbi:bool}
 
 function getForcedOnboarding(){
   try{ return sessionStorage.getItem(ONBOARDING_FORCE_KEY)==="1"; }catch(e){ return false; }
 }
 
-function OnboardingCards({cv,profiles,jobs,anthropicKey,setActiveTab,user}){
+function getCollapsedMap(){
+  try{
+    var raw=sessionStorage.getItem(ONBOARDING_COLLAPSE_KEY);
+    return raw?JSON.parse(raw):{};
+  }catch(e){ return {}; }
+}
+
+function setCollapsedMap(map){
+  try{ sessionStorage.setItem(ONBOARDING_COLLAPSE_KEY,JSON.stringify(map)); }catch(e){}
+}
+
+function OnboardingCards({cv,profiles,jobs,anthropicKey,setActiveTab,goToSection,user}){
   var [forced,setForced]=useState(getForcedOnboarding);
   var isAdmin=!!(user&&user.email===ONBOARDING_ADMIN_EMAIL);
+  var nav=goToSection||function(tabId){ if(setActiveTab) setActiveTab(tabId); };
 
   var step1Done=forced?false:hasCv(cv);
   var step2Done=forced?false:(profiles||[]).some(function(p){return p.active;});
@@ -1966,8 +2010,8 @@ function OnboardingCards({cv,profiles,jobs,anthropicKey,setActiveTab,user}){
   }
 
   return <div style={{display:"flex",flexDirection:"column",gap:14}}>
-    {!coreDone&&<OnboardingCoreCard step1Done={step1Done} step2Done={step2Done} step3Done={step3Done} setActiveTab={setActiveTab} />}
-    {!gabbiDone&&<OnboardingGabbiCard setActiveTab={setActiveTab} />}
+    {!coreDone&&<OnboardingCoreCard step1Done={step1Done} step2Done={step2Done} step3Done={step3Done} nav={nav} />}
+    {!gabbiDone&&<OnboardingGabbiCard nav={nav} />}
     {isAdmin&&<div style={{display:"flex",justifyContent:"flex-end"}}>
       <button onClick={toggleForced} style={{fontSize:11,color:C.textHint,background:"none",border:"1px dashed "+C.border,borderRadius:8,padding:"4px 10px",cursor:"pointer",fontFamily:"inherit"}}>
         {forced?"✓ Showing forced preview — click to show real status":"👁 Force preview (admin) — ignores your real progress"}
@@ -1976,61 +2020,96 @@ function OnboardingCards({cv,profiles,jobs,anthropicKey,setActiveTab,user}){
   </div>;
 }
 
-function OnboardingStepRow({done,label,sub,actionLabel,onAction,stepNum}){
-  return <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:10,background:C.surface,border:"1px solid "+(done?C.border:C.border)}}>
+// ─── Shared collapsible card shell ────────────────────────────────────────────
+// Gives onboarding cards their distinct "go here first" identity: accent border in
+// the app's own primary colour, leading icon, inviting headline — plus a collapse
+// toggle so a user who wants to explore the app first isn't blocked by it.
+function OnboardingCardShell({storageKey,icon,title,progressPct,children}){
+  var [collapsed,setCollapsed]=useState(function(){ return !!getCollapsedMap()[storageKey]; });
+
+  function toggle(){
+    var next=!collapsed;
+    setCollapsed(next);
+    var map=getCollapsedMap();
+    map[storageKey]=next;
+    setCollapsedMap(map);
+  }
+
+  return <Card style={{border:"2px solid "+C.primary}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:collapsed?0:4}}>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <span style={{fontSize:17}}>{icon}</span>
+        <span style={{fontSize:15,fontWeight:700,color:C.textPrimary}}>{title}</span>
+      </div>
+      <button onClick={toggle} aria-label={collapsed?"Expand":"Collapse"}
+        style={{display:"flex",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",padding:4,color:C.textHint,fontFamily:"inherit"}}>
+        {progressPct!=null&&<span style={{fontSize:12,color:C.textHint}}>{progressPct}</span>}
+        <span style={{fontSize:13}}>{collapsed?"▾":"▴"}</span>
+      </button>
+    </div>
+    {!collapsed&&children}
+  </Card>;
+}
+
+function OnboardingStepRow({done,label,description,actionLabel,onAction,stepNum}){
+  return <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"9px 12px",borderRadius:10,background:C.surface,border:"1px solid "+C.border}}>
     {done
-      ?<div style={{width:18,height:18,borderRadius:"50%",background:C.success,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+      ?<div style={{width:18,height:18,borderRadius:"50%",background:C.success,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}>
         <span style={{color:"#fff",fontSize:11,fontWeight:700,lineHeight:1}}>✓</span>
       </div>
       :(stepNum!=null
-        ?<div style={{width:18,height:18,borderRadius:"50%",background:C.surfaceAlt,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:C.textHint,flexShrink:0}}>{stepNum}</div>
-        :<div style={{width:18,height:18,borderRadius:"50%",border:"1.5px solid "+C.border,flexShrink:0}} />)}
+        ?<div style={{width:18,height:18,borderRadius:"50%",background:C.surfaceAlt,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:C.textHint,flexShrink:0,marginTop:1}}>{stepNum}</div>
+        :<div style={{width:18,height:18,borderRadius:"50%",border:"1.5px solid "+C.border,flexShrink:0,marginTop:1}} />)}
     <div style={{flex:1,minWidth:0}}>
       <div style={{fontSize:13,color:done?C.textHint:C.textPrimary,textDecoration:done?"line-through":"none"}}>{label}</div>
-      {sub&&!done&&<div style={{fontSize:11,color:C.textHint,marginTop:1}}>{sub}</div>}
+      {description&&!done&&<div style={{fontSize:12,color:C.textSecondary,marginTop:3,lineHeight:1.5}}>{description}</div>}
     </div>
-    {!done&&actionLabel&&<button onClick={onAction} style={{fontSize:12,fontWeight:600,padding:"5px 10px",borderRadius:8,border:"1px solid "+C.border,background:"transparent",color:C.primary,cursor:"pointer",fontFamily:"inherit",flexShrink:0,whiteSpace:"nowrap"}}>{actionLabel}</button>}
+    {!done&&actionLabel&&<button onClick={onAction} style={{fontSize:12,fontWeight:600,padding:"5px 10px",borderRadius:8,border:"1px solid "+C.border,background:"transparent",color:C.primary,cursor:"pointer",fontFamily:"inherit",flexShrink:0,whiteSpace:"nowrap",marginTop:1}}>{actionLabel}</button>}
   </div>;
 }
 
-function OnboardingCoreCard({step1Done,step2Done,step3Done,setActiveTab}){
+function OnboardingCoreCard({step1Done,step2Done,step3Done,nav}){
   var doneCount=(step1Done?1:0)+(step2Done?1:0)+(step3Done?1:0);
-  return <Card>
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
-      <div style={{fontSize:15,fontWeight:700,color:C.textPrimary}}>Get started with Job Tracker</div>
-      <span style={{fontSize:13,color:C.textHint}}>{doneCount} of 3</span>
-    </div>
-    <div style={{fontSize:13,color:C.textSecondary,marginBottom:14}}>Finish these to start tracking matches automatically.</div>
+  return <OnboardingCardShell storageKey="core" icon="🚀" title="Start here — get your first match in 3 steps" progressPct={doneCount+" of 3"}>
+    <div style={{fontSize:13,color:C.textSecondary,margin:"4px 0 14px"}}>Finish these and Job Tracker starts working for you automatically.</div>
     <div style={{height:6,background:C.surfaceAlt,borderRadius:3,marginBottom:14,overflow:"hidden"}}>
       <div style={{height:"100%",width:(doneCount/3*100)+"%",background:C.success,borderRadius:3,transition:"width 0.3s ease"}} />
     </div>
     <div style={{display:"flex",flexDirection:"column",gap:8}}>
-      <OnboardingStepRow done={step1Done} label="Add your CV" sub="Paste or upload so Gabbi and scoring can use it" actionLabel="Go →" onAction={function(){setActiveTab("cv");}} />
-      <OnboardingStepRow done={step2Done} label="Create a search profile" sub="Tell Job Tracker what roles to look for" actionLabel="Go →" onAction={function(){setActiveTab("profiles");}} />
-      <OnboardingStepRow done={step3Done} label="Import your first jobs" sub="Run your search profile to fetch matches" actionLabel="Go →" onAction={function(){setActiveTab("profiles");}} />
+      <OnboardingStepRow done={step1Done} label="Add your CV"
+        description="Paste your CV text or upload a file in the My CV tab. This is what Gabbi and the matching score use to judge fit — nothing is sent anywhere until you do this."
+        actionLabel="Go →" onAction={function(){nav("cv");}} />
+      <OnboardingStepRow done={step2Done} label="Create a search profile"
+        description="Tells Job Tracker which roles, locations and sources to search. Takes you to Search Profiles, where you'll fill in a short form."
+        actionLabel="Go →" onAction={function(){nav("profiles");}} />
+      <OnboardingStepRow done={step3Done} label="Import your first jobs"
+        description="Run your new search profile to fetch real listings. You'll land back on Search Profiles with a 'Fetch' button ready to press."
+        actionLabel="Go →" onAction={function(){nav("profiles");}} />
     </div>
-  </Card>;
+  </OnboardingCardShell>;
 }
 
-function OnboardingGabbiCard({setActiveTab}){
+function OnboardingGabbiCard({nav}){
   var [showHelp,setShowHelp]=useState(false);
-  return <Card>
-    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-      <span style={{fontSize:16}}>🫶</span>
-      <div style={{fontSize:15,fontWeight:700,color:C.textPrimary}}>Activate Gabbi, your AI assistant</div>
-    </div>
-    <div style={{fontSize:13,color:C.textSecondary,marginBottom:14}}>Gabbi scores matches, writes cover letters, and coaches interviews — powered by your own Anthropic account.</div>
+  return <OnboardingCardShell storageKey="gabbi" icon="🫶" title="Activate Gabbi, your AI assistant">
+    <div style={{fontSize:13,color:C.textSecondary,margin:"4px 0 14px"}}>Gabbi scores matches, writes cover letters, and coaches interviews — powered by your own Anthropic account, so usage and cost stay entirely yours.</div>
     <div style={{display:"flex",flexDirection:"column",gap:8}}>
-      <OnboardingStepRow stepNum={1} done={false} label="Create a free Anthropic account" actionLabel="Open ↗" onAction={function(){window.open("https://console.anthropic.com/","_blank");}} />
+      <OnboardingStepRow stepNum={1} done={false} label="Create a free Anthropic account"
+        description="Opens console.anthropic.com in a new tab — sign up takes about a minute, no card required to get started."
+        actionLabel="Open ↗" onAction={function(){window.open("https://console.anthropic.com/","_blank");}} />
       <div>
-        <OnboardingStepRow stepNum={2} done={false} label="Generate an API key" actionLabel={showHelp?"Hide":"Show me"} onAction={function(){setShowHelp(function(v){return !v;});}} />
+        <OnboardingStepRow stepNum={2} done={false} label="Generate an API key"
+          description="A short code that lets Job Tracker talk to Claude on your behalf. Tap 'Show me' for exact steps."
+          actionLabel={showHelp?"Hide":"Show me"} onAction={function(){setShowHelp(function(v){return !v;});}} />
         {showHelp&&<div style={{marginTop:6,padding:"10px 12px",background:C.surfaceAlt,borderRadius:8,fontSize:12,color:C.textSecondary,lineHeight:1.7}}>
           In the Anthropic Console, open <b>Settings → API Keys</b> in the left sidebar, click <b>Create Key</b>, give it a name like "Job Tracker", then copy the key that starts with <code style={{fontFamily:"monospace",background:C.surface,padding:"1px 4px",borderRadius:4}}>sk-ant-</code>. You won't be able to see it again, so paste it somewhere safe.
         </div>}
       </div>
-      <OnboardingStepRow stepNum={3} done={false} label="Paste it into Job Tracker" sub="Search Profiles → API keys" actionLabel="Go →" onAction={function(){setActiveTab("profiles");}} />
+      <OnboardingStepRow stepNum={3} done={false} label="Paste it into Job Tracker"
+        description="Takes you straight to the API keys field on Search Profiles — it'll be highlighted so you know exactly where to paste."
+        actionLabel="Go →" onAction={function(){nav("profiles","section-api-keys");}} />
     </div>
-  </Card>;
+  </OnboardingCardShell>;
 }
 
 
@@ -2859,6 +2938,7 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
           })}
         </div>}
     </Card>
+    <div id="section-api-keys">
     <Card>
       <SectionTitle>API keys</SectionTitle>
       <div style={{display:"flex",flexDirection:"column",gap:16}}>
@@ -2877,6 +2957,7 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
         <Alert type="info">🔒 Keys are stored encrypted in your Firestore account and are never shared with anyone. <InfoTip>Your API keys are only used when you explicitly trigger a fetch or AI action. They are stored in your personal Firestore document, accessible only when signed in as you.</InfoTip></Alert>
       </div>
     </Card>
+    </div>
   </div>;
 }
 
@@ -5197,6 +5278,31 @@ function Reports({jobs,cv,anthropicKey}){
 // ─── AppShell ─────────────────────────────────────────────────────────────────
 function AppShell({user,onSignOut}){
   var [activeTab,setActiveTab]=useState("dashboard");
+  var [pendingScrollTarget,setPendingScrollTarget]=useState(null);
+
+  // Reusable navigation helper: switch tab and, if a target element id is given,
+  // scroll to it once the new tab's DOM has rendered, with a brief highlight pulse.
+  // Used by onboarding today; intended for any future "take me there" navigation
+  // (e.g. Gabbi referencing a specific section) — same mechanism, no special-casing.
+  function goToSection(tabId,sectionId){
+    setActiveTab(tabId);
+    if(sectionId) setPendingScrollTarget(sectionId);
+  }
+
+  useEffect(function(){
+    if(!pendingScrollTarget) return;
+    var id=pendingScrollTarget;
+    var t=setTimeout(function(){
+      var el=document.getElementById(id);
+      if(el){
+        el.scrollIntoView({behavior:"smooth",block:"start"});
+        el.classList.add("jt-highlight-pulse");
+        setTimeout(function(){ el.classList.remove("jt-highlight-pulse"); },3200);
+      }
+      setPendingScrollTarget(null);
+    },120);
+    return function(){ clearTimeout(t); };
+  },[pendingScrollTarget,activeTab]);
   var [jobs,setJobsRaw]=useState([]);
   var [profiles,setProfilesRaw]=useState([]);
   var [cv,setCvRaw]=useState({text:"",roles:"",industries:"",locations:"",salary:"",workType:"Any",tools:[],skills:[],achievements:[],recipients:[],uploaded:false,fileName:"",extractedAt:""});
@@ -5619,7 +5725,7 @@ function AppShell({user,onSignOut}){
   function renderTab(){
     var key=activeTab;
     return <TabErrorBoundary tabKey={key}>
-      {key==="dashboard"&&<Dashboard jobs={jobs} schedule={schedule} setActiveTab={setActiveTab} navigateToJobs={navigateToJobs} rescoreAll={rescoreAll} scoringStatus={scoringStatus} onRunAllProfiles={runAllProfiles} profiles={profiles} cv={cv} anthropicKey={anthropicKey} importSummary={importSummary} onDismissImportSummary={function(){setImportSummary(null);}} user={user} />}
+      {key==="dashboard"&&<Dashboard jobs={jobs} schedule={schedule} setActiveTab={setActiveTab} goToSection={goToSection} navigateToJobs={navigateToJobs} rescoreAll={rescoreAll} scoringStatus={scoringStatus} onRunAllProfiles={runAllProfiles} profiles={profiles} cv={cv} anthropicKey={anthropicKey} importSummary={importSummary} onDismissImportSummary={function(){setImportSummary(null);}} user={user} />}
       {key==="jobs"&&<Jobs jobs={jobs} setJobs={setJobs} rescoreAll={rescoreAll} rescoreJob={rescoreJob} scoringStatus={scoringStatus} scoringError={scoringError} cv={cv} sort={sort} setSort={setSort} dismissJob={dismissJob} tombstoneIds={tombstoneIds} startCoverLetter={startCoverLetter} pendingJobsView={pendingJobsView} setPendingJobsView={setPendingJobsView} />}
       {key==="profiles"&&<SearchProfiles profiles={profiles} setProfiles={setProfiles} setJobs={setJobs} afKey={afKey} setAfKey={setAfKey} jsKey={jsKey} setJsKey={setJsKey} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} pendingProfileRun={pendingProfileRun} setPendingProfileRun={setPendingProfileRun} dismissedIds={dismissedIds} />}
       {key==="assistant"&&<ProfileAssistant cv={cv} setCv={setCv} jobs={jobs} setJobs={setJobs} profiles={profiles} setProfiles={setProfiles} anthropicKey={anthropicKey} conversation={assistantConv} setConversation={setAssistantConv} setActiveTab={setActiveTab} setPendingProfileRun={setPendingProfileRun} savedPrompts={savedPrompts} setSavedPrompts={setSavedPrompts} />}
