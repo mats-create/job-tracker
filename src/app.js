@@ -230,6 +230,13 @@ function AppShell({user,onSignOut}){
     var newJobsBuffer=[];
     var profileResults=[];
     var tombstones=new Set((dismissedIds||[]).map(String));
+    // Local accumulator — source of truth for dedup during this run.
+    // Avoids reading a per-iteration countRef immediately after an async-batched
+    // setJobs call, which previously raced: React could defer running the
+    // updater until after several loop iterations had already queued, so
+    // countRef[0] was read as still [0,[]] for every profile after the first.
+    var accumulatedNew=[];
+    var existingIds=new Set(jobs.map(function(j){return j.id?j.id.toString():"";}));
     for(var i=0;i<active.length;i++){
       var p=active[i];
       var srcs=p.sources||["af"];
@@ -247,7 +254,7 @@ function AppShell({user,onSignOut}){
           if(!out.response.ok) continue;
           var data=await out.response.json();
           var ads=src==="af"?(data.hits||[]):(data.data||[]).slice(0,p.limit);
-          // Pre-filter (tombstone + location) before setJobs so count is synchronous
+          // Pre-filter (tombstone + location) before dedup so count is synchronous
           var fetchedCount=ads.length;
           var skippedCount=0;
           var preFiltered=ads.filter(function(a){
@@ -257,23 +264,27 @@ function AppShell({user,onSignOut}){
             return true;
           }).map(function(a){return src==="af"?mapAfJob(a,p.name):mapJsJob(a,p.name);});
           preFiltered=filterByLocation(preFiltered,p.locations||[]);
-          // countRef[0]=added count, countRef[1]=new jobs array (for auto-scoring)
-          var countRef=[0,[]];
-          setJobs(function(prev){
-            var ex=new Set(prev.map(function(j){return j.id?j.id.toString():""; }));
-            var truly_new=preFiltered.filter(function(j){
-              var jid=j.id?j.id.toString():"";
-              return jid&&!ex.has(jid);
-            });
-            countRef[0]=truly_new.length;
-            countRef[1]=truly_new;
-            return truly_new.concat(prev);
+          // Dedup against existingIds (loaded jobs + everything added earlier
+          // in this same run) — fully synchronous, no dependency on React's
+          // state-update timing.
+          var truly_new=preFiltered.filter(function(j){
+            var jid=j.id?j.id.toString():"";
+            if(!jid||existingIds.has(jid)) return false;
+            existingIds.add(jid);
+            return true;
           });
-          totalAdded+=countRef[0];
-          if(countRef[1].length>0) newJobsBuffer=newJobsBuffer.concat(countRef[1]);
-          profileResults.push({name:p.name,source:src,fetched:fetchedCount,added:countRef[0],skipped:skippedCount,failed:false});
+          totalAdded+=truly_new.length;
+          if(truly_new.length>0){
+            accumulatedNew=accumulatedNew.concat(truly_new);
+            newJobsBuffer=newJobsBuffer.concat(truly_new);
+          }
+          profileResults.push({name:p.name,source:src,fetched:fetchedCount,added:truly_new.length,skipped:skippedCount,failed:false});
         }catch(e){ console.error("Profile fetch error:",e); profileResults.push({name:p.name,source:srcs[si]||"af",added:0,skipped:0,failed:true}); }
       }
+    }
+    // Single state update — applies all newly fetched jobs from this run at once.
+    if(accumulatedNew.length>0){
+      setJobs(function(prev){ return accumulatedNew.concat(prev); });
     }
     addLog((trigger==="manual"?"Manual run":"Scheduled run")+": "+active.length+" profile"+(active.length!==1?"s":"")+", "+totalAdded+" new job"+(totalAdded!==1?"s":"")+" added.",trigger==="manual"?"manual":"info");
 
@@ -313,7 +324,7 @@ function AppShell({user,onSignOut}){
       scored:scoredCount,
       scoringFailed:typeof scoreResult!=="undefined"?(scoreResult.failedBatches||0):0,
     });
-  },[profiles,afKey,jsKey,dismissedIds]);
+  },[profiles,afKey,jsKey,dismissedIds,jobs]);
 
   useEffect(function(){
     if(!schedule.enabled||!schedule.days.length) return;

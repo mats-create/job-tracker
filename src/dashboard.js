@@ -9,7 +9,7 @@
 
 
 // ─── ImportSummaryOverlay ─────────────────────────────────────────────────────
-function ImportSummaryOverlay({summary,onClose,onClear}){
+function ImportSummaryOverlay({summary,onClose,onClear,setActiveTab}){
   if(!summary) return null;
   var m=mob();
 
@@ -109,6 +109,12 @@ function ImportSummaryOverlay({summary,onClose,onClear}){
         {summary.scoringFailed>0&&<span style={{fontSize:13,color:C.warning,flex:1}}>
           ⚠ {summary.scoringFailed} scoring batch{summary.scoringFailed!==1?"es":""} failed — try Rescore all.
         </span>}
+        {setActiveTab&&<button onClick={function(){onClose();setActiveTab("scheduler");}}
+          style={{fontSize:m?13:12,fontWeight:600,color:C.primary,background:"none",
+            border:"none",cursor:"pointer",fontFamily:"inherit",textDecoration:"underline",
+            padding:0,minHeight:36,display:"flex",alignItems:"center"}}>
+          View full run log →
+        </button>}
         <div style={{marginLeft:"auto",display:"flex",gap:10}}>
           <button onClick={onClear}
             style={{fontSize:m?14:13,fontWeight:600,padding:m?"10px 18px":"8px 16px",
@@ -172,7 +178,7 @@ function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoring
   var closedTotal=rejectedCount+noResponseCount+adRemovedCount+notRelevantCount;
 
   return <div style={{display:"flex",flexDirection:"column",gap:20}}>
-    {showSummaryOverlay&&<ImportSummaryOverlay summary={importSummary} onClose={function(){setShowSummaryOverlay(false);}} onClear={function(){setShowSummaryOverlay(false);if(onDismissImportSummary)onDismissImportSummary();}} />}
+    {showSummaryOverlay&&<ImportSummaryOverlay summary={importSummary} onClose={function(){setShowSummaryOverlay(false);}} onClear={function(){setShowSummaryOverlay(false);if(onDismissImportSummary)onDismissImportSummary();}} setActiveTab={setActiveTab} />}
     <div style={{background:"linear-gradient(135deg,"+C.primary+" 0%,"+C.primaryDark+" 100%)",borderRadius:20,padding:"28px",color:"#fff",boxShadow:C.shadowMd}}>
       <div style={{fontSize:22,fontWeight:700,marginBottom:6}}>Good to see you! 👋</div>
       <div style={{fontSize:14,opacity:0.85,marginBottom:20}}>Here's your job search summary for today.</div>
