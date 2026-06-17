@@ -30,7 +30,8 @@
 //                   the input without sending.
 
 // ─── Prompt library: categories + curated starters ───────────────────────────
-var PROMPT_CATEGORIES=["CV & profil","Jobbmatchning","Personligt brev","Intervjuförberedelse","Personlighetstester","Karriärstrategi"];
+var PROMPT_FOR_YOU_CATEGORY="För dig just nu";
+var PROMPT_CATEGORIES=[PROMPT_FOR_YOU_CATEGORY,"CV & profil","Jobbmatchning","Personligt brev","Intervjuförberedelse","Personlighetstester","Karriärstrategi"];
 
 var CURATED_PROMPTS=[
   {category:"CV & profil",title:"Hitta luckor mot en roll",prompt:"Jämför mitt CV mot rollen [måltitel]. Vilka kompetenser eller erfarenheter saknas, och hur skulle jag kunna formulera om befintlig erfarenhet för att bättre matcha?"},
@@ -639,10 +640,12 @@ function ProfileCard({profile,alreadySaved,justSaved,onSave,onRun}){
 
 // ─── Gabbi (ProfileAssistant) ─────────────────────────────────────────────────
 // ─── SavePromptDialog ─────────────────────────────────────────────────────────
+var SAVABLE_PROMPT_CATEGORIES=PROMPT_CATEGORIES.filter(function(c){return c!==PROMPT_FOR_YOU_CATEGORY;});
+
 function SavePromptDialog({initialText,onSave,onClose}){
   var defaultTitle=initialText.trim().split(/\s+/).slice(0,6).join(" ");
   var [title,setTitle]=useState(defaultTitle);
-  var [category,setCategory]=useState(PROMPT_CATEGORIES[0]);
+  var [category,setCategory]=useState(SAVABLE_PROMPT_CATEGORIES[0]);
   return <div style={{position:"fixed",inset:0,zIndex:650,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
     <div style={{background:C.surface,borderRadius:18,padding:22,width:"min(420px,96vw)",boxShadow:"0 8px 36px rgba(0,0,0,0.25)"}} onClick={function(e){e.stopPropagation();}}>
       <div style={{fontSize:15,fontWeight:700,color:C.textPrimary,marginBottom:4}}>🔖 Save prompt</div>
@@ -654,7 +657,7 @@ function SavePromptDialog({initialText,onSave,onClose}){
       <div style={{marginBottom:18}}>
         <Label>Category</Label>
         <Sel value={category} onChange={function(e){setCategory(e.target.value);}}>
-          {PROMPT_CATEGORIES.map(function(c){return <option key={c} value={c}>{c}</option>;})}
+          {SAVABLE_PROMPT_CATEGORIES.map(function(c){return <option key={c} value={c}>{c}</option>;})}
         </Sel>
       </div>
       <div style={{display:"flex",gap:10}}>
@@ -666,22 +669,24 @@ function SavePromptDialog({initialText,onSave,onClose}){
 }
 
 // ─── PromptLibrary ────────────────────────────────────────────────────────────
-function PromptLibrary({savedPrompts,setSavedPrompts,onUse}){
-  var [open,setOpen]=useState(false);
-  var [activeCat,setActiveCat]=useState(PROMPT_CATEGORIES[0]);
+function PromptLibrary({savedPrompts,setSavedPrompts,onUse,cv,jobs}){
+  var [open,setOpen]=useState(true);
+  var [activeCat,setActiveCat]=useState(PROMPT_FOR_YOU_CATEGORY);
 
   function removeSaved(id){
     setSavedPrompts(function(prev){return (prev||[]).filter(function(p){return p.id!==id;});});
   }
 
-  var curatedForCat=CURATED_PROMPTS.filter(function(p){return p.category===activeCat;});
-  var savedForCat=(savedPrompts||[]).filter(function(p){return p.category===activeCat;});
+  var isForYou=activeCat===PROMPT_FOR_YOU_CATEGORY;
+  var forYouPrompts=isForYou?getStarterPrompts(cv,jobs):[];
+  var curatedForCat=isForYou?[]:CURATED_PROMPTS.filter(function(p){return p.category===activeCat;});
+  var savedForCat=isForYou?[]:(savedPrompts||[]).filter(function(p){return p.category===activeCat;});
 
   return <div style={{border:"1px solid "+C.border,borderRadius:14,overflow:"hidden"}}>
     <button onClick={function(){setOpen(function(v){return !v;});}}
       style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 16px",background:C.surfaceAlt,border:"none",cursor:"pointer",fontFamily:"inherit"}}>
       <span style={{fontSize:13,fontWeight:700,color:C.textPrimary}}>💡 Prompt library</span>
-      <span style={{fontSize:12,color:C.textHint}}>{open?"Hide ▲":"Show ▼"}</span>
+      <span style={{fontSize:12,color:C.textHint,fontWeight:600}}>{open?"Hide ▲":"Show ▼"}</span>
     </button>
     {open&&<div style={{padding:14}}>
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
@@ -691,10 +696,16 @@ function PromptLibrary({savedPrompts,setSavedPrompts,onUse}){
             style={{fontSize:12,fontWeight:on?700:500,padding:"5px 11px",borderRadius:8,
               border:"1.5px solid "+(on?C.primary:C.border),
               background:on?C.primaryLight:"transparent",color:on?C.primary:C.textSecondary,
-              cursor:"pointer",fontFamily:"inherit"}}>{c}</button>;
+              cursor:"pointer",fontFamily:"inherit"}}>{c===PROMPT_FOR_YOU_CATEGORY?"✨ "+c:c}</button>;
         })}
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {forYouPrompts.map(function(text,i){
+          return <div key={"fy"+i} onClick={function(){onUse(text);}}
+            style={{padding:"9px 12px",borderRadius:10,background:C.primaryLight,border:"1px solid "+C.primary,cursor:"pointer"}}>
+            <div style={{fontSize:13,color:C.textPrimary,lineHeight:1.4}}>{text}</div>
+          </div>;
+        })}
         {curatedForCat.map(function(p,i){
           return <div key={"c"+i} onClick={function(){onUse(p.prompt);}}
             style={{padding:"9px 12px",borderRadius:10,background:C.surface,border:"1px solid "+C.border,cursor:"pointer"}}>
@@ -714,7 +725,8 @@ function PromptLibrary({savedPrompts,setSavedPrompts,onUse}){
             <button onClick={function(){removeSaved(p.id);}} title="Remove" style={{background:"none",border:"none",color:C.textHint,cursor:"pointer",fontSize:14,padding:2,flexShrink:0}}>✕</button>
           </div>;
         })}
-        {curatedForCat.length===0&&savedForCat.length===0&&<div style={{fontSize:13,color:C.textHint,textAlign:"center",padding:"10px 0"}}>No prompts in this category yet.</div>}
+        {isForYou&&forYouPrompts.length===0&&<div style={{fontSize:13,color:C.textHint,textAlign:"center",padding:"10px 0"}}>Nothing urgent right now — browse the other categories.</div>}
+        {!isForYou&&curatedForCat.length===0&&savedForCat.length===0&&<div style={{fontSize:13,color:C.textHint,textAlign:"center",padding:"10px 0"}}>No prompts in this category yet.</div>}
       </div>
     </div>}
   </div>;
@@ -733,8 +745,6 @@ function ProfileAssistant({cv,setCv,jobs,setJobs,profiles,setProfiles,anthropicK
   useEffect(function(){
     if(scrollRef.current){ scrollRef.current.scrollTop=scrollRef.current.scrollHeight; }
   },[conversation,loading]);
-
-  var starters=getStarterPrompts(cv,jobs);
 
   async function send(userText){
     var text=(userText||input).trim();
@@ -1100,24 +1110,8 @@ function ProfileAssistant({cv,setCv,jobs,setJobs,profiles,setProfiles,anthropicK
 
     <Card>
       <div ref={scrollRef} style={{maxHeight:"60vh",overflowY:"auto",display:"flex",flexDirection:"column",gap:14,paddingRight:4}}>
-        {conversation.length===0&&<div>
-          <div style={{fontSize:14,color:C.textSecondary,marginBottom:12,lineHeight:1.6}}>
-            Hi! I'm Gabbi. I can analyse your CV, suggest improvements, help you build search profiles, discuss your pipeline, or update job statuses and notes. What would you like to work on?
-          </div>
-          <div style={{fontSize:12,color:C.textHint,fontWeight:600,letterSpacing:"0.5px",marginBottom:8}}>TRY ONE OF THESE:</div>
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {starters.map(function(s,i){
-              var isSmart=s.indexOf("30+ days")>=0||s.indexOf("Review my CV")>=0||s.indexOf("highest-scoring")>=0||s.indexOf("missing")>=0;
-              return <button key={i} onClick={function(){send(s);}} disabled={loading||!anthropicKey}
-                style={{textAlign:"left",padding:"12px 14px",borderRadius:10,
-                  border:"1.5px solid "+(isSmart?C.primary:C.border),
-                  background:isSmart?C.primaryLight:C.surfaceAlt,
-                  color:C.textPrimary,fontSize:13,cursor:loading||!anthropicKey?"not-allowed":"pointer",
-                  opacity:loading||!anthropicKey?0.5:1,fontWeight:isSmart?600:400}}>
-                {isSmart?"✨":"💬"} {s}
-              </button>;
-            })}
-          </div>
+        {conversation.length===0&&<div style={{fontSize:14,color:C.textSecondary,marginBottom:14,lineHeight:1.6}}>
+          Hi! I'm Gabbi. I can analyse your CV, suggest improvements, help you build search profiles, discuss your pipeline, or update job statuses and notes. What would you like to work on?
         </div>}
 
         {conversation.map(function(msg,i){
@@ -1142,7 +1136,7 @@ function ProfileAssistant({cv,setCv,jobs,setJobs,profiles,setProfiles,anthropicK
       {error&&<Alert type="error">{error}</Alert>}
 
       <div style={{marginTop:14,marginBottom:10}}>
-        <PromptLibrary savedPrompts={savedPrompts} setSavedPrompts={setSavedPrompts} onUse={function(text){setInput(text);}} />
+        <PromptLibrary savedPrompts={savedPrompts} setSavedPrompts={setSavedPrompts} onUse={function(text){setInput(text);}} cv={cv} jobs={jobs} />
       </div>
 
       <div style={{display:"flex",gap:8}}>

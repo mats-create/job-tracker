@@ -103,9 +103,9 @@ function OnboardingCardShell({storageKey,icon,title,progressPct,children}){
         <span style={{fontSize:15,fontWeight:700,color:C.textPrimary}}>{title}</span>
       </div>
       <button onClick={toggle} aria-label={collapsed?"Expand":"Collapse"}
-        style={{display:"flex",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",padding:4,color:C.textHint,fontFamily:"inherit"}}>
+        style={{display:"flex",alignItems:"center",gap:8,background:"none",border:"none",cursor:"pointer",padding:4,color:C.textHint,fontFamily:"inherit"}}>
         {progressPct!=null&&<span style={{fontSize:12,color:C.textHint}}>{progressPct}</span>}
-        <span style={{fontSize:13}}>{collapsed?"▾":"▴"}</span>
+        <span style={{fontSize:12,color:C.textHint,fontWeight:600}}>{collapsed?"Show ▼":"Hide ▲"}</span>
       </button>
     </div>
     {!collapsed&&children}
