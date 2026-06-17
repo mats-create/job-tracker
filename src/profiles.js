@@ -217,6 +217,7 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
           })}
         </div>}
     </Card>
+    <div id="section-api-keys">
     <Card>
       <SectionTitle>API keys</SectionTitle>
       <div style={{display:"flex",flexDirection:"column",gap:16}}>
@@ -235,5 +236,6 @@ function SearchProfiles({profiles,setProfiles,setJobs,afKey,setAfKey,jsKey,setJs
         <Alert type="info">🔒 Keys are stored encrypted in your Firestore account and are never shared with anyone. <InfoTip>Your API keys are only used when you explicitly trigger a fetch or AI action. They are stored in your personal Firestore document, accessible only when signed in as you.</InfoTip></Alert>
       </div>
     </Card>
+    </div>
   </div>;
 }

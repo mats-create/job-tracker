@@ -20,6 +20,31 @@
 // ─── AppShell ─────────────────────────────────────────────────────────────────
 function AppShell({user,onSignOut}){
   var [activeTab,setActiveTab]=useState("dashboard");
+  var [pendingScrollTarget,setPendingScrollTarget]=useState(null);
+
+  // Reusable navigation helper: switch tab and, if a target element id is given,
+  // scroll to it once the new tab's DOM has rendered, with a brief highlight pulse.
+  // Used by onboarding today; intended for any future "take me there" navigation
+  // (e.g. Gabbi referencing a specific section) — same mechanism, no special-casing.
+  function goToSection(tabId,sectionId){
+    setActiveTab(tabId);
+    if(sectionId) setPendingScrollTarget(sectionId);
+  }
+
+  useEffect(function(){
+    if(!pendingScrollTarget) return;
+    var id=pendingScrollTarget;
+    var t=setTimeout(function(){
+      var el=document.getElementById(id);
+      if(el){
+        el.scrollIntoView({behavior:"smooth",block:"start"});
+        el.classList.add("jt-highlight-pulse");
+        setTimeout(function(){ el.classList.remove("jt-highlight-pulse"); },3200);
+      }
+      setPendingScrollTarget(null);
+    },120);
+    return function(){ clearTimeout(t); };
+  },[pendingScrollTarget,activeTab]);
   var [jobs,setJobsRaw]=useState([]);
   var [profiles,setProfilesRaw]=useState([]);
   var [cv,setCvRaw]=useState({text:"",roles:"",industries:"",locations:"",salary:"",workType:"Any",tools:[],skills:[],achievements:[],recipients:[],uploaded:false,fileName:"",extractedAt:""});
@@ -442,7 +467,7 @@ function AppShell({user,onSignOut}){
   function renderTab(){
     var key=activeTab;
     return <TabErrorBoundary tabKey={key}>
-      {key==="dashboard"&&<Dashboard jobs={jobs} schedule={schedule} setActiveTab={setActiveTab} navigateToJobs={navigateToJobs} rescoreAll={rescoreAll} scoringStatus={scoringStatus} onRunAllProfiles={runAllProfiles} profiles={profiles} cv={cv} anthropicKey={anthropicKey} importSummary={importSummary} onDismissImportSummary={function(){setImportSummary(null);}} user={user} />}
+      {key==="dashboard"&&<Dashboard jobs={jobs} schedule={schedule} setActiveTab={setActiveTab} goToSection={goToSection} navigateToJobs={navigateToJobs} rescoreAll={rescoreAll} scoringStatus={scoringStatus} onRunAllProfiles={runAllProfiles} profiles={profiles} cv={cv} anthropicKey={anthropicKey} importSummary={importSummary} onDismissImportSummary={function(){setImportSummary(null);}} user={user} />}
       {key==="jobs"&&<Jobs jobs={jobs} setJobs={setJobs} rescoreAll={rescoreAll} rescoreJob={rescoreJob} scoringStatus={scoringStatus} scoringError={scoringError} cv={cv} sort={sort} setSort={setSort} dismissJob={dismissJob} tombstoneIds={tombstoneIds} startCoverLetter={startCoverLetter} pendingJobsView={pendingJobsView} setPendingJobsView={setPendingJobsView} />}
       {key==="profiles"&&<SearchProfiles profiles={profiles} setProfiles={setProfiles} setJobs={setJobs} afKey={afKey} setAfKey={setAfKey} jsKey={jsKey} setJsKey={setJsKey} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} pendingProfileRun={pendingProfileRun} setPendingProfileRun={setPendingProfileRun} dismissedIds={dismissedIds} />}
       {key==="assistant"&&<ProfileAssistant cv={cv} setCv={setCv} jobs={jobs} setJobs={setJobs} profiles={profiles} setProfiles={setProfiles} anthropicKey={anthropicKey} conversation={assistantConv} setConversation={setAssistantConv} setActiveTab={setActiveTab} setPendingProfileRun={setPendingProfileRun} savedPrompts={savedPrompts} setSavedPrompts={setSavedPrompts} />}

@@ -136,7 +136,7 @@ function ImportSummaryOverlay({summary,onClose,onClear,setActiveTab}){
 
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
-function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoringStatus,onRunAllProfiles,profiles,cv,anthropicKey,importSummary,onDismissImportSummary,user}){
+function Dashboard({jobs,schedule,setActiveTab,goToSection,navigateToJobs,rescoreAll,scoringStatus,onRunAllProfiles,profiles,cv,anthropicKey,importSummary,onDismissImportSummary,user}){
   var [fetchStatus,setFetchStatus]=useState(null);
   var [fetchMsg,setFetchMsg]=useState("");
   var [showSummaryOverlay,setShowSummaryOverlay]=useState(false);
@@ -179,7 +179,7 @@ function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoring
 
   return <div style={{display:"flex",flexDirection:"column",gap:20}}>
     {showSummaryOverlay&&<ImportSummaryOverlay summary={importSummary} onClose={function(){setShowSummaryOverlay(false);}} onClear={function(){setShowSummaryOverlay(false);if(onDismissImportSummary)onDismissImportSummary();}} setActiveTab={setActiveTab} />}
-    <OnboardingCards cv={cv} profiles={profiles} jobs={jobs} anthropicKey={anthropicKey} setActiveTab={setActiveTab} user={user} />
+    <OnboardingCards cv={cv} profiles={profiles} jobs={jobs} anthropicKey={anthropicKey} setActiveTab={setActiveTab} goToSection={goToSection} user={user} />
     <div style={{background:"linear-gradient(135deg,"+C.primary+" 0%,"+C.primaryDark+" 100%)",borderRadius:20,padding:"28px",color:"#fff",boxShadow:C.shadowMd}}>
       <div style={{fontSize:22,fontWeight:700,marginBottom:6}}>Good to see you! 👋</div>
       <div style={{fontSize:14,opacity:0.85,marginBottom:20}}>Here's your job search summary for today.</div>
