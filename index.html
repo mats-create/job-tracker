@@ -3578,6 +3578,29 @@ function CoverLetters({jobs,setJobs,cv,anthropicKey,setActiveTab,pendingCoverLet
 //                   onAccept receives filtered action with only selected items.
 // Rev: 2026-06-16 — Markdown renderer: headings (##/###), numbered lists, tables,
 //                   single linebreaks; system prompt formatting instructions.
+// Rev: 2026-06-17 — Prompt library: curated starter prompts per category + user-saved
+//                   prompts (savedPrompts prop, mirrors dismissedIds pattern in app.js).
+//                   Save action lives on the user's own chat bubble (hover/tap reveals
+//                   "🔖 Save" — only after sending, never as blank-slate authoring) so
+//                   only prompts the user has actually seen work get reused. Library
+//                   panel is collapsible above the chat input; clicking an entry fills
+//                   the input without sending.
+
+// ─── Prompt library: categories + curated starters ───────────────────────────
+var PROMPT_CATEGORIES=["CV & profil","Jobbmatchning","Personligt brev","Intervjuförberedelse","Personlighetstester","Karriärstrategi"];
+
+var CURATED_PROMPTS=[
+  {category:"CV & profil",title:"Hitta luckor mot en roll",prompt:"Jämför mitt CV mot rollen [måltitel]. Vilka kompetenser eller erfarenheter saknas, och hur skulle jag kunna formulera om befintlig erfarenhet för att bättre matcha?"},
+  {category:"CV & profil",title:"Stärk en svag mening",prompt:"Titta på [sektion] i mitt CV. Finns det passiva eller vaga formuleringar som kan bli starkare, utan att du hittar på siffror eller resultat som inte finns?"},
+  {category:"Jobbmatchning",title:"Varför detta score?",prompt:"Varför fick [jobbtitel] det matchningsscore det fick? Vilka delar av min profil drog upp eller ner det?"},
+  {category:"Jobbmatchning",title:"Hjälp mig prioritera",prompt:"Av mina nuvarande New-jobb, vilka tre borde jag prioritera att granska först och varför?"},
+  {category:"Personligt brev",title:"Anpassa tonen",prompt:"Det här brevet känns för formellt/informellt för rollen. Kan du justera tonen utan att ändra innehållet?"},
+  {category:"Intervjuförberedelse",title:"Vanliga frågor för rollen",prompt:"Vilka intervjufrågor är typiska för [jobbtitel], och hur skulle jag kunna svara baserat på mitt CV?"},
+  {category:"Intervjuförberedelse",title:"Träna på STAR-svar",prompt:"Hjälp mig formulera ett STAR-svar (Situation, Task, Action, Result) för min erfarenhet av [ämne från CV], till en fråga om [kompetens]."},
+  {category:"Intervjuförberedelse",title:"Analysera feedback",prompt:"Här är feedback jag fick efter en intervju: [klistra in]. Vilka mönster ser du, och vad bör jag öva på inför nästa?"},
+  {category:"Personlighetstester",title:"Förklara ett testformat",prompt:"Jag ska göra ett [Big Five/Hogan/DISC/etc]-test för en process. Vad mäter det, och finns det något jag bör tänka på utifrån min profil?"},
+  {category:"Karriärstrategi",title:"Gap-analys vid karriärbyte",prompt:"Jag siktar på en övergång från [nuvarande roll] till [målroll]. Vilka delar av min erfarenhet överförs direkt, och vilka behöver jag bygga vidare på?"},
+];
 
 // ─── Job summary for system prompt ───────────────────────────────────────────
 function jobsSummaryText(jobs){
@@ -4172,10 +4195,94 @@ function ProfileCard({profile,alreadySaved,justSaved,onSave,onRun}){
 }
 
 // ─── Gabbi (ProfileAssistant) ─────────────────────────────────────────────────
-function ProfileAssistant({cv,setCv,jobs,setJobs,profiles,setProfiles,anthropicKey,conversation,setConversation,setActiveTab,setPendingProfileRun}){
+// ─── SavePromptDialog ─────────────────────────────────────────────────────────
+function SavePromptDialog({initialText,onSave,onClose}){
+  var defaultTitle=initialText.trim().split(/\s+/).slice(0,6).join(" ");
+  var [title,setTitle]=useState(defaultTitle);
+  var [category,setCategory]=useState(PROMPT_CATEGORIES[0]);
+  return <div style={{position:"fixed",inset:0,zIndex:650,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
+    <div style={{background:C.surface,borderRadius:18,padding:22,width:"min(420px,96vw)",boxShadow:"0 8px 36px rgba(0,0,0,0.25)"}} onClick={function(e){e.stopPropagation();}}>
+      <div style={{fontSize:15,fontWeight:700,color:C.textPrimary,marginBottom:4}}>🔖 Save prompt</div>
+      <div style={{fontSize:12,color:C.textHint,marginBottom:14,lineHeight:1.5}}>Save this question to reuse later — it'll show up in the prompt library under the category you choose.</div>
+      <div style={{marginBottom:12}}>
+        <Label>Title</Label>
+        <Inp value={title} onChange={function(e){setTitle(e.target.value);}} style={{width:"100%"}} />
+      </div>
+      <div style={{marginBottom:18}}>
+        <Label>Category</Label>
+        <Sel value={category} onChange={function(e){setCategory(e.target.value);}}>
+          {PROMPT_CATEGORIES.map(function(c){return <option key={c} value={c}>{c}</option>;})}
+        </Sel>
+      </div>
+      <div style={{display:"flex",gap:10}}>
+        <Btn variant="primary" onClick={function(){if(title.trim())onSave({title:title.trim(),category:category,prompt:initialText});}} style={{flex:1,fontSize:14,minHeight:44}} disabled={!title.trim()}>Save</Btn>
+        <Btn onClick={onClose} style={{fontSize:14,minHeight:44}}>Cancel</Btn>
+      </div>
+    </div>
+  </div>;
+}
+
+// ─── PromptLibrary ────────────────────────────────────────────────────────────
+function PromptLibrary({savedPrompts,setSavedPrompts,onUse}){
+  var [open,setOpen]=useState(false);
+  var [activeCat,setActiveCat]=useState(PROMPT_CATEGORIES[0]);
+
+  function removeSaved(id){
+    setSavedPrompts(function(prev){return (prev||[]).filter(function(p){return p.id!==id;});});
+  }
+
+  var curatedForCat=CURATED_PROMPTS.filter(function(p){return p.category===activeCat;});
+  var savedForCat=(savedPrompts||[]).filter(function(p){return p.category===activeCat;});
+
+  return <div style={{border:"1px solid "+C.border,borderRadius:14,overflow:"hidden"}}>
+    <button onClick={function(){setOpen(function(v){return !v;});}}
+      style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 16px",background:C.surfaceAlt,border:"none",cursor:"pointer",fontFamily:"inherit"}}>
+      <span style={{fontSize:13,fontWeight:700,color:C.textPrimary}}>💡 Prompt library</span>
+      <span style={{fontSize:12,color:C.textHint}}>{open?"Hide ▲":"Show ▼"}</span>
+    </button>
+    {open&&<div style={{padding:14}}>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
+        {PROMPT_CATEGORIES.map(function(c){
+          var on=activeCat===c;
+          return <button key={c} onClick={function(){setActiveCat(c);}}
+            style={{fontSize:12,fontWeight:on?700:500,padding:"5px 11px",borderRadius:8,
+              border:"1.5px solid "+(on?C.primary:C.border),
+              background:on?C.primaryLight:"transparent",color:on?C.primary:C.textSecondary,
+              cursor:"pointer",fontFamily:"inherit"}}>{c}</button>;
+        })}
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {curatedForCat.map(function(p,i){
+          return <div key={"c"+i} onClick={function(){onUse(p.prompt);}}
+            style={{padding:"9px 12px",borderRadius:10,background:C.surface,border:"1px solid "+C.border,cursor:"pointer"}}>
+            <div style={{fontSize:13,fontWeight:600,color:C.textPrimary}}>{p.title}</div>
+            <div style={{fontSize:12,color:C.textHint,marginTop:2,lineHeight:1.4}}>{p.prompt}</div>
+          </div>;
+        })}
+        {savedForCat.map(function(p){
+          return <div key={p.id} style={{padding:"9px 12px",borderRadius:10,background:C.surfaceAlt,border:"1px solid "+C.border,display:"flex",alignItems:"flex-start",gap:8}}>
+            <div onClick={function(){onUse(p.prompt);}} style={{flex:1,cursor:"pointer"}}>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <span style={{fontSize:13,fontWeight:600,color:C.textPrimary}}>{p.title}</span>
+                <span style={{fontSize:10,color:C.primary,background:C.primaryLight,padding:"1px 6px",borderRadius:6,fontWeight:600}}>Saved by you</span>
+              </div>
+              <div style={{fontSize:12,color:C.textHint,marginTop:2,lineHeight:1.4}}>{p.prompt}</div>
+            </div>
+            <button onClick={function(){removeSaved(p.id);}} title="Remove" style={{background:"none",border:"none",color:C.textHint,cursor:"pointer",fontSize:14,padding:2,flexShrink:0}}>✕</button>
+          </div>;
+        })}
+        {curatedForCat.length===0&&savedForCat.length===0&&<div style={{fontSize:13,color:C.textHint,textAlign:"center",padding:"10px 0"}}>No prompts in this category yet.</div>}
+      </div>
+    </div>}
+  </div>;
+}
+
+function ProfileAssistant({cv,setCv,jobs,setJobs,profiles,setProfiles,anthropicKey,conversation,setConversation,setActiveTab,setPendingProfileRun,savedPrompts,setSavedPrompts}){
   var [input,setInput]=useState("");
   var [loading,setLoading]=useState(false);
   var [error,setError]=useState("");
+  var [savePromptFor,setSavePromptFor]=useState(null);
+  var [hoveredMsg,setHoveredMsg]=useState(null);
   var [justSavedId,setJustSavedId]=useState(null);
   var [actionStates,setActionStates]=useState({});
   var scrollRef=useRef(null);
@@ -4572,7 +4679,14 @@ function ProfileAssistant({cv,setCv,jobs,setJobs,profiles,setProfiles,anthropicK
 
         {conversation.map(function(msg,i){
           if(msg.role==="user"){
-            return <div key={i} style={{alignSelf:"flex-end",maxWidth:"85%",background:C.primary,color:"#fff",padding:"10px 14px",borderRadius:"14px 14px 2px 14px",fontSize:14,lineHeight:1.5,whiteSpace:"pre-wrap"}}>{msg.content}</div>;
+            return <div key={i} style={{alignSelf:"flex-end",maxWidth:"85%",display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}
+              onMouseEnter={function(){setHoveredMsg(i);}} onMouseLeave={function(){setHoveredMsg(function(h){return h===i?null:h;});}}>
+              <div style={{background:C.primary,color:"#fff",padding:"10px 14px",borderRadius:"14px 14px 2px 14px",fontSize:14,lineHeight:1.5,whiteSpace:"pre-wrap"}}>{msg.content}</div>
+              {(hoveredMsg===i||mob())&&<button onClick={function(){setSavePromptFor(msg.content);}}
+                style={{fontSize:11,color:C.textHint,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",padding:"2px 4px",display:"flex",alignItems:"center",gap:3}}>
+                🔖 Save
+              </button>}
+            </div>;
           }
           return <div key={i} style={{alignSelf:"flex-start",maxWidth:"95%",width:"95%"}}>
             <div style={{fontSize:11,color:C.textHint,fontWeight:600,letterSpacing:"0.5px",marginBottom:4}}>GABBI</div>
@@ -4584,7 +4698,11 @@ function ProfileAssistant({cv,setCv,jobs,setJobs,profiles,setProfiles,anthropicK
 
       {error&&<Alert type="error">{error}</Alert>}
 
-      <div style={{display:"flex",gap:8,marginTop:14}}>
+      <div style={{marginTop:14,marginBottom:10}}>
+        <PromptLibrary savedPrompts={savedPrompts} setSavedPrompts={setSavedPrompts} onUse={function(text){setInput(text);}} />
+      </div>
+
+      <div style={{display:"flex",gap:8}}>
         <Inp value={input} onChange={function(e){setInput(e.target.value);}}
           onKeyDown={function(e){if(e.key==="Enter"&&!e.shiftKey&&input.trim()&&!loading&&anthropicKey){e.preventDefault();send();}}}
           enterKeyHint="send"
@@ -4593,6 +4711,15 @@ function ProfileAssistant({cv,setCv,jobs,setJobs,profiles,setProfiles,anthropicK
         <Btn variant="primary" onClick={function(){send();}} disabled={loading||!input.trim()||!anthropicKey} style={{padding:"10px 20px"}}>Send</Btn>
       </div>
     </Card>
+
+    {savePromptFor&&<SavePromptDialog initialText={savePromptFor}
+      onClose={function(){setSavePromptFor(null);}}
+      onSave={function(entry){
+        setSavedPrompts(function(prev){
+          return (prev||[]).concat([{id:"sp_"+Date.now(),title:entry.title,category:entry.category,prompt:entry.prompt,savedAt:new Date().toISOString()}]);
+        });
+        setSavePromptFor(null);
+      }} />}
   </div>;
 }
 
@@ -5081,6 +5208,7 @@ function AppShell({user,onSignOut}){
   var [sort,setSortRaw]=useState("added_desc");
   var [assistantConv,setAssistantConvRaw]=useState([]);
   var [dismissedIds,setDismissedIdsRaw]=useState([]);
+  var [savedPrompts,setSavedPromptsRaw]=useState([]);
   var [sidebarCollapsed,setSidebarCollapsedRaw]=useState(false);
   var [cloudReady,setCloudReady]=useState(false);
   var [cloudReadyRef]=useState({current:false});
@@ -5171,6 +5299,7 @@ function AppShell({user,onSignOut}){
   function setSort(v){ setSortRaw(v); scheduleSave({sort:v}); }
   function setAssistantConv(v){ var val=typeof v==="function"?v(assistantConv):v; setAssistantConvRaw(val); scheduleSave({assistantConv:val}); }
   function setDismissedIds(v){ var val=typeof v==="function"?v(dismissedIds):v; setDismissedIdsRaw(val); scheduleSave({dismissedIds:val}); }
+  function setSavedPrompts(v){ var val=typeof v==="function"?v(savedPrompts):v; setSavedPromptsRaw(val); scheduleSave({savedPrompts:val}); }
   function setSidebarCollapsed(v){ var val=typeof v==="function"?v(sidebarCollapsed):v; setSidebarCollapsedRaw(val); scheduleSave({sidebarCollapsed:val}); }
 
   // ── Cloud hydration ──────────────────────────────────────────────────────
@@ -5189,6 +5318,7 @@ function AppShell({user,onSignOut}){
         if(typeof data.sort==="string") setSortRaw(data.sort);
         if(Array.isArray(data.assistantConv)) setAssistantConvRaw(data.assistantConv);
         if(Array.isArray(data.dismissedIds)) setDismissedIdsRaw(data.dismissedIds);
+        if(Array.isArray(data.savedPrompts)) setSavedPromptsRaw(data.savedPrompts);
         if(typeof data.sidebarCollapsed==="boolean") setSidebarCollapsedRaw(data.sidebarCollapsed);
         if(typeof data.portrait==="string") setPortraitRaw(data.portrait);
         latestState.current=data;
@@ -5435,7 +5565,7 @@ function AppShell({user,onSignOut}){
 
   // ── data export / import / reset ──────────────────────────────────────────
   function exportData(excludeKeys){
-    var payload={jobs:jobs,profiles:profiles,cv:cv,schedule:schedule,log:log,sort:sort,assistantConv:assistantConv,dismissedIds:dismissedIds,portrait:portrait};
+    var payload={jobs:jobs,profiles:profiles,cv:cv,schedule:schedule,log:log,sort:sort,assistantConv:assistantConv,dismissedIds:dismissedIds,portrait:portrait,savedPrompts:savedPrompts};
     if(!excludeKeys){ payload.afKey=afKey; payload.jsKey=jsKey; payload.anthropicKey=anthropicKey; }
     var out={version:2,exportedAt:new Date().toISOString(),data:payload};
     var b=new Blob([JSON.stringify(out,null,2)],{type:"application/json"});
@@ -5464,6 +5594,7 @@ function AppShell({user,onSignOut}){
     if(typeof d.sort==="string") setSort(d.sort);
     if(Array.isArray(d.assistantConv)) setAssistantConv(d.assistantConv);
     if(Array.isArray(d.dismissedIds)) setDismissedIds(d.dismissedIds);
+    if(Array.isArray(d.savedPrompts)) setSavedPrompts(d.savedPrompts);
     if(typeof d.portrait==="string") setPortrait(d.portrait);
   }
 
@@ -5475,7 +5606,7 @@ function AppShell({user,onSignOut}){
     setJobsRaw([]); setProfilesRaw([]); setCvRaw({text:"",roles:"",industries:"",locations:"",salary:"",workType:"Any",tools:[],skills:[],achievements:[],recipients:[],uploaded:false,fileName:"",extractedAt:""});
     setAfKeyRaw(""); setJsKeyRaw(""); setAnthropicKeyRaw(""); setPortraitRaw("");
     setScheduleRaw(DEFAULT_SCHEDULE); setLogRaw([]); setSortRaw("added_desc");
-    setAssistantConvRaw([]); setDismissedIdsRaw([]); setSidebarCollapsedRaw(false);
+    setAssistantConvRaw([]); setDismissedIdsRaw([]); setSidebarCollapsedRaw(false); setSavedPromptsRaw([]);
     latestState.current={};
     cloudReadyRef.current=false;
     suppressWriteUntilRef.current=Date.now()+5000;
@@ -5491,7 +5622,7 @@ function AppShell({user,onSignOut}){
       {key==="dashboard"&&<Dashboard jobs={jobs} schedule={schedule} setActiveTab={setActiveTab} navigateToJobs={navigateToJobs} rescoreAll={rescoreAll} scoringStatus={scoringStatus} onRunAllProfiles={runAllProfiles} profiles={profiles} cv={cv} anthropicKey={anthropicKey} importSummary={importSummary} onDismissImportSummary={function(){setImportSummary(null);}} user={user} />}
       {key==="jobs"&&<Jobs jobs={jobs} setJobs={setJobs} rescoreAll={rescoreAll} rescoreJob={rescoreJob} scoringStatus={scoringStatus} scoringError={scoringError} cv={cv} sort={sort} setSort={setSort} dismissJob={dismissJob} tombstoneIds={tombstoneIds} startCoverLetter={startCoverLetter} pendingJobsView={pendingJobsView} setPendingJobsView={setPendingJobsView} />}
       {key==="profiles"&&<SearchProfiles profiles={profiles} setProfiles={setProfiles} setJobs={setJobs} afKey={afKey} setAfKey={setAfKey} jsKey={jsKey} setJsKey={setJsKey} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} pendingProfileRun={pendingProfileRun} setPendingProfileRun={setPendingProfileRun} dismissedIds={dismissedIds} />}
-      {key==="assistant"&&<ProfileAssistant cv={cv} setCv={setCv} jobs={jobs} setJobs={setJobs} profiles={profiles} setProfiles={setProfiles} anthropicKey={anthropicKey} conversation={assistantConv} setConversation={setAssistantConv} setActiveTab={setActiveTab} setPendingProfileRun={setPendingProfileRun} />}
+      {key==="assistant"&&<ProfileAssistant cv={cv} setCv={setCv} jobs={jobs} setJobs={setJobs} profiles={profiles} setProfiles={setProfiles} anthropicKey={anthropicKey} conversation={assistantConv} setConversation={setAssistantConv} setActiveTab={setActiveTab} setPendingProfileRun={setPendingProfileRun} savedPrompts={savedPrompts} setSavedPrompts={setSavedPrompts} />}
       {key==="cv"&&<CVProfile cv={cv} setCv={setCv} portrait={portrait} setPortrait={setPortrait} />}
       {key==="scheduler"&&<Scheduler schedule={schedule} setSchedule={setSchedule} profiles={profiles} log={log} resetAllData={resetAllData} exportData={exportData} importData={importData} validateImport={validateImport} dismissedIds={dismissedIds} clearDismissedIds={clearDismissedIds} />}
       {key==="covers"&&<CoverLetters jobs={jobs} setJobs={setJobs} cv={cv} anthropicKey={anthropicKey} setActiveTab={setActiveTab} pendingCoverLetterJob={pendingCoverLetterJob} setPendingCoverLetterJob={setPendingCoverLetterJob} portrait={portrait} />}
