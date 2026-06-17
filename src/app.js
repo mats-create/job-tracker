@@ -31,6 +31,7 @@ function AppShell({user,onSignOut}){
   var [sort,setSortRaw]=useState("added_desc");
   var [assistantConv,setAssistantConvRaw]=useState([]);
   var [dismissedIds,setDismissedIdsRaw]=useState([]);
+  var [savedPrompts,setSavedPromptsRaw]=useState([]);
   var [sidebarCollapsed,setSidebarCollapsedRaw]=useState(false);
   var [cloudReady,setCloudReady]=useState(false);
   var [cloudReadyRef]=useState({current:false});
@@ -121,6 +122,7 @@ function AppShell({user,onSignOut}){
   function setSort(v){ setSortRaw(v); scheduleSave({sort:v}); }
   function setAssistantConv(v){ var val=typeof v==="function"?v(assistantConv):v; setAssistantConvRaw(val); scheduleSave({assistantConv:val}); }
   function setDismissedIds(v){ var val=typeof v==="function"?v(dismissedIds):v; setDismissedIdsRaw(val); scheduleSave({dismissedIds:val}); }
+  function setSavedPrompts(v){ var val=typeof v==="function"?v(savedPrompts):v; setSavedPromptsRaw(val); scheduleSave({savedPrompts:val}); }
   function setSidebarCollapsed(v){ var val=typeof v==="function"?v(sidebarCollapsed):v; setSidebarCollapsedRaw(val); scheduleSave({sidebarCollapsed:val}); }
 
   // ── Cloud hydration ──────────────────────────────────────────────────────
@@ -139,6 +141,7 @@ function AppShell({user,onSignOut}){
         if(typeof data.sort==="string") setSortRaw(data.sort);
         if(Array.isArray(data.assistantConv)) setAssistantConvRaw(data.assistantConv);
         if(Array.isArray(data.dismissedIds)) setDismissedIdsRaw(data.dismissedIds);
+        if(Array.isArray(data.savedPrompts)) setSavedPromptsRaw(data.savedPrompts);
         if(typeof data.sidebarCollapsed==="boolean") setSidebarCollapsedRaw(data.sidebarCollapsed);
         if(typeof data.portrait==="string") setPortraitRaw(data.portrait);
         latestState.current=data;
@@ -385,7 +388,7 @@ function AppShell({user,onSignOut}){
 
   // ── data export / import / reset ──────────────────────────────────────────
   function exportData(excludeKeys){
-    var payload={jobs:jobs,profiles:profiles,cv:cv,schedule:schedule,log:log,sort:sort,assistantConv:assistantConv,dismissedIds:dismissedIds,portrait:portrait};
+    var payload={jobs:jobs,profiles:profiles,cv:cv,schedule:schedule,log:log,sort:sort,assistantConv:assistantConv,dismissedIds:dismissedIds,portrait:portrait,savedPrompts:savedPrompts};
     if(!excludeKeys){ payload.afKey=afKey; payload.jsKey=jsKey; payload.anthropicKey=anthropicKey; }
     var out={version:2,exportedAt:new Date().toISOString(),data:payload};
     var b=new Blob([JSON.stringify(out,null,2)],{type:"application/json"});
@@ -414,6 +417,7 @@ function AppShell({user,onSignOut}){
     if(typeof d.sort==="string") setSort(d.sort);
     if(Array.isArray(d.assistantConv)) setAssistantConv(d.assistantConv);
     if(Array.isArray(d.dismissedIds)) setDismissedIds(d.dismissedIds);
+    if(Array.isArray(d.savedPrompts)) setSavedPrompts(d.savedPrompts);
     if(typeof d.portrait==="string") setPortrait(d.portrait);
   }
 
@@ -425,7 +429,7 @@ function AppShell({user,onSignOut}){
     setJobsRaw([]); setProfilesRaw([]); setCvRaw({text:"",roles:"",industries:"",locations:"",salary:"",workType:"Any",tools:[],skills:[],achievements:[],recipients:[],uploaded:false,fileName:"",extractedAt:""});
     setAfKeyRaw(""); setJsKeyRaw(""); setAnthropicKeyRaw(""); setPortraitRaw("");
     setScheduleRaw(DEFAULT_SCHEDULE); setLogRaw([]); setSortRaw("added_desc");
-    setAssistantConvRaw([]); setDismissedIdsRaw([]); setSidebarCollapsedRaw(false);
+    setAssistantConvRaw([]); setDismissedIdsRaw([]); setSidebarCollapsedRaw(false); setSavedPromptsRaw([]);
     latestState.current={};
     cloudReadyRef.current=false;
     suppressWriteUntilRef.current=Date.now()+5000;
@@ -441,7 +445,7 @@ function AppShell({user,onSignOut}){
       {key==="dashboard"&&<Dashboard jobs={jobs} schedule={schedule} setActiveTab={setActiveTab} navigateToJobs={navigateToJobs} rescoreAll={rescoreAll} scoringStatus={scoringStatus} onRunAllProfiles={runAllProfiles} profiles={profiles} cv={cv} anthropicKey={anthropicKey} importSummary={importSummary} onDismissImportSummary={function(){setImportSummary(null);}} user={user} />}
       {key==="jobs"&&<Jobs jobs={jobs} setJobs={setJobs} rescoreAll={rescoreAll} rescoreJob={rescoreJob} scoringStatus={scoringStatus} scoringError={scoringError} cv={cv} sort={sort} setSort={setSort} dismissJob={dismissJob} tombstoneIds={tombstoneIds} startCoverLetter={startCoverLetter} pendingJobsView={pendingJobsView} setPendingJobsView={setPendingJobsView} />}
       {key==="profiles"&&<SearchProfiles profiles={profiles} setProfiles={setProfiles} setJobs={setJobs} afKey={afKey} setAfKey={setAfKey} jsKey={jsKey} setJsKey={setJsKey} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} pendingProfileRun={pendingProfileRun} setPendingProfileRun={setPendingProfileRun} dismissedIds={dismissedIds} />}
-      {key==="assistant"&&<ProfileAssistant cv={cv} setCv={setCv} jobs={jobs} setJobs={setJobs} profiles={profiles} setProfiles={setProfiles} anthropicKey={anthropicKey} conversation={assistantConv} setConversation={setAssistantConv} setActiveTab={setActiveTab} setPendingProfileRun={setPendingProfileRun} />}
+      {key==="assistant"&&<ProfileAssistant cv={cv} setCv={setCv} jobs={jobs} setJobs={setJobs} profiles={profiles} setProfiles={setProfiles} anthropicKey={anthropicKey} conversation={assistantConv} setConversation={setAssistantConv} setActiveTab={setActiveTab} setPendingProfileRun={setPendingProfileRun} savedPrompts={savedPrompts} setSavedPrompts={setSavedPrompts} />}
       {key==="cv"&&<CVProfile cv={cv} setCv={setCv} portrait={portrait} setPortrait={setPortrait} />}
       {key==="scheduler"&&<Scheduler schedule={schedule} setSchedule={setSchedule} profiles={profiles} log={log} resetAllData={resetAllData} exportData={exportData} importData={importData} validateImport={validateImport} dismissedIds={dismissedIds} clearDismissedIds={clearDismissedIds} />}
       {key==="covers"&&<CoverLetters jobs={jobs} setJobs={setJobs} cv={cv} anthropicKey={anthropicKey} setActiveTab={setActiveTab} pendingCoverLetterJob={pendingCoverLetterJob} setPendingCoverLetterJob={setPendingCoverLetterJob} portrait={portrait} />}
