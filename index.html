@@ -3672,9 +3672,9 @@ var PROMPT_FOR_YOU_CATEGORY="För dig just nu";
 var PROMPT_CATEGORIES=[PROMPT_FOR_YOU_CATEGORY,"CV & profil","Jobbmatchning","Personligt brev","Intervjuförberedelse","Personlighetstester","Karriärstrategi"];
 
 var CURATED_PROMPTS=[
-  {category:"CV & profil",title:"Hitta luckor mot en roll",prompt:"Jämför mitt CV mot rollen [måltitel]. Vilka kompetenser eller erfarenheter saknas, och hur skulle jag kunna formulera om befintlig erfarenhet för att bättre matcha?"},
+  {category:"CV & profil",title:"Hitta luckor mot en roll",prompt:"Jag funderar på rollen [måltitel] som jag inte sökt än. Baserat på en typisk sådan tjänst — vilka kompetenser eller erfarenheter saknar jag troligen, och hur skulle jag kunna formulera om befintlig erfarenhet för att bättre matcha?"},
   {category:"CV & profil",title:"Stärk en svag mening",prompt:"Titta på [sektion] i mitt CV. Finns det passiva eller vaga formuleringar som kan bli starkare, utan att du hittar på siffror eller resultat som inte finns?"},
-  {category:"Jobbmatchning",title:"Varför detta score?",prompt:"Varför fick [jobbtitel] det matchningsscore det fick? Vilka delar av min profil drog upp eller ner det?"},
+  {category:"Jobbmatchning",title:"Hur fungerar matchningsscoret?",prompt:"Förklara hur matchningsscoret räknas fram rent generellt. Vilka faktorer väger tyngst, och vad kan jag göra för att höja mitt genomsnittliga score över tid?"},
   {category:"Jobbmatchning",title:"Hjälp mig prioritera",prompt:"Av mina nuvarande New-jobb, vilka tre borde jag prioritera att granska först och varför?"},
   {category:"Personligt brev",title:"Anpassa tonen",prompt:"Det här brevet känns för formellt/informellt för rollen. Kan du justera tonen utan att ändra innehållet?"},
   {category:"Intervjuförberedelse",title:"Vanliga frågor för rollen",prompt:"Vilka intervjufrågor är typiska för [jobbtitel], och hur skulle jag kunna svara baserat på mitt CV?"},
@@ -3986,25 +3986,25 @@ function getStarterPrompts(cv,jobs){
 
   if(!hasCv(cv)){
     return [
-      "I'd like help building my first search profile.",
-      "What kinds of job searches can this app do?",
-      "How should I structure my CV to get better match scores?",
-      "What can you help me with?",
+      "Jag vill ha hjälp att bygga min första sökprofil.",
+      "Vilka typer av jobbsökningar kan appen göra?",
+      "Hur ska jag strukturera mitt CV för att få bättre matchningsscore?",
+      "Vad kan du hjälpa mig med?",
     ];
   }
   var prompts=[];
   // Context-aware: most urgent/actionable first
-  if(silentCount>0) prompts.push("I have "+silentCount+" application"+(silentCount>1?"s":"")+" with no response for 30+ days — what should I do?");
-  if(hasCv(cv)&&!hasStructured) prompts.push("Extract my tools, skills and achievements from my CV text.");
-  if(hasStructured) prompts.push("Review my CV sections and add anything important that's missing.");
-  if(scoredCount>=10) prompts.push("Suggest a new profile based on my highest-scoring jobs.");
-  if(lowestScored) prompts.push("Why is my match score low for "+lowestScored.title+" at "+lowestScored.company+"?");
-  if(interviewCount>=2) prompts.push("What do my Interview-stage jobs have in common?");
-  else if(interviewCount===1) prompts.push("What stands out about the job I reached Interview for?");
-  if(rejectedCount>=3) prompts.push("Are there patterns in the jobs I've been rejected from?");
-  if(activeJobs.length>0) prompts.push("Update a job status or add a note for me.");
-  if(hasStructured) prompts.push("What skills or tools am I missing for my target roles?");
-  prompts.push("Help me build a search profile from my CV.");
+  if(silentCount>0) prompts.push("Jag har "+silentCount+" ansökning"+(silentCount>1?"ar":"")+" utan svar i 30+ dagar — vad bör jag göra?");
+  if(hasCv(cv)&&!hasStructured) prompts.push("Extrahera mina tools, skills och achievements från min CV-text.");
+  if(hasStructured) prompts.push("Granska sektionerna i mitt CV och lägg till det som saknas och är viktigt.");
+  if(scoredCount>=10) prompts.push("Föreslå en ny sökprofil baserat på mina högst poängsatta jobb.");
+  if(lowestScored) prompts.push("Varför är mitt matchningsscore lågt för "+lowestScored.title+" hos "+lowestScored.company+"?");
+  if(interviewCount>=2) prompts.push("Vad har mina Interview-jobb gemensamt?");
+  else if(interviewCount===1) prompts.push("Vad utmärker jobbet jag nådde Interview-status för?");
+  if(rejectedCount>=3) prompts.push("Finns det mönster i de jobb jag fått avslag på?");
+  if(activeJobs.length>0) prompts.push("Uppdatera en jobbstatus eller lägg till en anteckning åt mig.");
+  if(hasStructured) prompts.push("Baserat på mina sparade jobb — vilka skills eller tools saknas oftast för de roller jag siktar på?");
+  prompts.push("Hjälp mig bygga en sökprofil utifrån mitt CV.");
   return prompts.slice(0,4);
 }
 
