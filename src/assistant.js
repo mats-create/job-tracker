@@ -107,8 +107,17 @@ function buildAssistantSystem(cv,profiles,jobs){
     "  (d) Analysing the user's job pipeline — patterns, matches, strategic advice.",
     "  (e) Analysing and improving CV sections (tools, skills, achievements, preferences).",
     "  (f) Applying edits to CV and job data when the user asks.",
+    "  (g) Interview preparation — common questions, STAR technique, mock answers grounded in the user's CV.",
+    "  (h) Personality and aptitude assessments used in recruitment (Big Five, Hogan, OPQ32, DISC, MBTI, Alva Labs, Birkman, Matrigma, Cubiks, SHL, Watson-Glaser, SJTs, video interviews). Explain what they measure, how to prepare, and what to expect. Relate advice to the user's profile when possible.",
+    "  (i) Career strategy and professional development — role transitions, skill gap analysis, networking advice, salary negotiation, personal branding.",
+    "  (j) Cover letter strategy — tone, structure, what to emphasise for specific roles.",
     "",
-    "For anything outside job search and this app, just say so briefly and offer to help with what you can.",
+    "Your scope is the full career journey: from CV and job search, through applications and assessments, to interviews and career growth.",
+    "If a question is completely unrelated to career, professional development, or this app, say so briefly and redirect.",
+    "",
+    "═══ WEB SEARCH ═══",
+    "You have access to a web search tool. Use it when you need current information that is not in the user's CV or pipeline — for example to look up details about a specific employer, a specific assessment test, industry salary data, or interview practices at a particular company.",
+    "Never tell the user to 'google it' — search for them instead.",
     "",
     "TONE: friendly, concise, practical. One clarifying question at a time max.",
     "",
@@ -733,8 +742,9 @@ function PromptLibrary({savedPrompts,setSavedPrompts,onUse,cv,jobs}){
 // Active-conversation variant: shown as a modal popup, opened from a button in
 // the input row, closes when a prompt is picked or user clicks outside.
 function PromptLibraryOverlay({savedPrompts,setSavedPrompts,onUse,onClose,cv,jobs}){
-  return <div style={{position:"fixed",inset:0,zIndex:640,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"flex-end",justifyContent:"center",padding:0}} onClick={onClose}>
-    <div style={{background:C.surface,borderRadius:"18px 18px 0 0",padding:"20px 18px 16px",width:"min(640px,100vw)",maxHeight:"80vh",overflowY:"auto",boxShadow:"0 -8px 36px rgba(0,0,0,0.25)"}} onClick={function(e){e.stopPropagation();}}>
+  var m=mob();
+  return <div style={{position:"fixed",inset:0,zIndex:640,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:m?"flex-end":"center",justifyContent:"center",padding:m?0:24}} onClick={onClose}>
+    <div style={{background:C.surface,borderRadius:m?"18px 18px 0 0":18,padding:"20px 18px 16px",width:m?"100%":"min(560px,90vw)",maxHeight:m?"80vh":"70vh",overflowY:"auto",boxShadow:m?"0 -8px 36px rgba(0,0,0,0.25)":"0 8px 36px rgba(0,0,0,0.25)"}} onClick={function(e){e.stopPropagation();}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
         <div style={{fontSize:15,fontWeight:700,color:C.textPrimary}}>💡 Prompt library</div>
         <button onClick={onClose} style={{background:"none",border:"none",color:C.textHint,cursor:"pointer",fontSize:18,padding:4,lineHeight:1}}>✕</button>
@@ -776,6 +786,7 @@ function ProfileAssistant({cv,setCv,jobs,setJobs,profiles,setProfiles,anthropicK
         system:buildAssistantSystem(cv,profiles,jobs),
         messages:newMsgs,
         maxTokens:1600,
+        tools:[{type:"web_search_20250305",name:"web_search"}],
       });
       setConversation(newMsgs.concat([{role:"assistant",content:reply}]));
     }catch(e){

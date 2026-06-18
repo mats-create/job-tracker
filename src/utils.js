@@ -534,8 +534,15 @@ async function callClaude({apiKey,prompt,maxTokens}){
   return text;
 }
 
-async function callClaudeChat({apiKey,system,messages,maxTokens}){
+async function callClaudeChat({apiKey,system,messages,maxTokens,tools}){
   if(!apiKey) throw new Error("No Anthropic API key set. Add one in Search Profiles → API keys.");
+  var body={
+    model:CLAUDE_MODEL,
+    max_tokens:maxTokens||1200,
+    system:system,
+    messages:messages,
+  };
+  if(tools&&tools.length) body.tools=tools;
   var res;
   try{
     res=await fetch("https://api.anthropic.com/v1/messages",{
@@ -546,26 +553,22 @@ async function callClaudeChat({apiKey,system,messages,maxTokens}){
         "anthropic-version":"2023-06-01",
         "anthropic-dangerous-direct-browser-access":"true",
       },
-      body:JSON.stringify({
-        model:CLAUDE_MODEL,
-        max_tokens:maxTokens||1200,
-        system:system,
-        messages:messages,
-      }),
+      body:JSON.stringify(body),
     });
   }catch(networkErr){
     throw new Error("Network error calling Claude API: "+networkErr.message);
   }
   if(!res.ok){
-    var body="";
-    try{ body=await res.text(); }catch(e){}
+    var errBody="";
+    try{ errBody=await res.text(); }catch(e){}
     if(res.status===401) throw new Error("401 Unauthorized — your Anthropic API key is missing or invalid.");
     if(res.status===403) throw new Error("403 Forbidden — check API key and billing.");
     if(res.status===429) throw new Error("429 Rate limited — try again in a moment.");
-    throw new Error("Claude API error "+res.status+(body?": "+body.slice(0,200):""));
+    throw new Error("Claude API error "+res.status+(errBody?": "+errBody.slice(0,200):""));
   }
   var data=await res.json();
-  var text=(data.content&&data.content[0]&&data.content[0].text)||"";
+  // Handle multi-block responses (web search returns multiple content blocks)
+  var text=(data.content||[]).filter(function(b){return b.type==="text";}).map(function(b){return b.text;}).join("\n");
   if(!text) throw new Error("Empty response from Claude API.");
   return text;
 }
