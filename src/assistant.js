@@ -1,28 +1,34 @@
 // assistant.js
-// Rev: 2026-06-04 — Gabbi rename; CV write-back; <<<ACTION>>> protocol; CV edit starter.
-// Rev: 2026-06-15 — Job status + notes write access (job_update action type);
-//                   interviewAt/offerAt/noResponseAt auto-set in job_update setStatus;
-//                   CV preferences write access (cv_pref action type);
-//                   Profile edit/toggle/delete (profile_update action type);
-//                   jobsSummaryText adds appliedAt/rejectedAt dates;
-// Rev: 2026-06-15 — Gabbi fully date-aware: interviewAt/offerAt/noResponseAt in pipeline
-//                   summary; setDate op for manual date correction; analysis guidance.
-//                   smarter context-aware starter prompts;
-//                   updated intro description and scope;
-//                   softer off-topic redirect tone.
-// Rev: 2026-06-15 — Tier 1+2 CV extraction: batch extraction rules in system prompt;
-//                   cv_bulk_edit action type for bulk apply; extraction starter prompt.
-// Rev: 2026-06-16 — cv_bulk_edit op:replace to replace entire section; Gabbi asks
-//                   add-vs-replace before acting on update/refresh requests.
-// Rev: 2026-06-16 — Index-based item referencing: Gabbi can use index number
-//                   to identify tools/skills/achievements instead of name matching.
-// Rev: 2026-06-16 — Option C: ActionCard for cv_bulk_edit shows expandable item list
-//                   with per-item checkboxes; replace shows before/after diff;
-//                   onAccept receives filtered action with only selected items.
-// Rev: 2026-06-16 — Markdown renderer: headings (##/###), numbered lists, tables,
-//                   single linebreaks; system prompt formatting instructions.
+// ─── Revision history (older entries compacted, full history in git) ──────────
+// Rev: 2026-06-04 to 2026-06-16 — Gabbi rename; CV write-back via <<<ACTION>>>
+//   protocol (cv_edit, cv_bulk_edit, cv_pref, job_update, profile_update);
+//   <<<PROFILE>>> suggestions; index-based item referencing; Option C ActionCard
+//   with per-item checkboxes and before/after diff; markdown renderer (headings,
+//   numbered lists, tables, linebreaks); context-aware starter prompts;
+//   assessment coaching coverage in system prompt.
+//
+// ─── This week ───────────────────────────────────────────────────────────────
 // Rev: 2026-06-17 — Prompt library: curated starter prompts per category + user-saved
 //                   prompts (savedPrompts prop, mirrors dismissedIds pattern in app.js).
+//                   Save action on user chat bubbles (hover/tap reveals "🔖 Save").
+// Rev: 2026-06-17 — Context-aware starters merged into PromptLibrary as virtual
+//                   "För dig just nu" category; old separate starter rendering removed.
+//                   All getStarterPrompts translated to Swedish for language consistency.
+//                   Two curated prompts adjusted to avoid overlap with dynamic starters.
+//                   Visual consistency: For You prompts use same card style as curated.
+// Rev: 2026-06-17 — PromptLibrary moved to overlay pattern: inline when conversation
+//                   is empty (fills chat area), popup via 💡 button in input row when
+//                   conversation is active. Bottom-sheet on mobile, centered modal on
+//                   desktop. Eliminates scrolling between answers and input.
+// Rev: 2026-06-17 — Gabbi scope expanded: system prompt now covers interview prep,
+//                   personality/aptitude assessments (Big Five, Hogan, DISC, etc.),
+//                   career strategy, cover letter advice. Old "outside scope" refusal
+//                   replaced with "full career journey" framing.
+// Rev: 2026-06-17 — Web search enabled: callClaudeChat receives web_search_20250305
+//                   tool; system prompt instructs Gabbi to search instead of saying
+//                   "google it". Response handling updated for multi-block content.
+// Rev: 2026-06-17 — Compact header: two Cards merged into one; redundant description
+//                   removed; title+Clear inline; conversation area gets ~60px more space.
 //                   Save action lives on the user's own chat bubble (hover/tap reveals
 //                   "🔖 Save" — only after sending, never as blank-slate authoring) so
 //                   only prompts the user has actually seen work get reused. Library
@@ -1125,17 +1131,14 @@ function ProfileAssistant({cv,setCv,jobs,setJobs,profiles,setProfiles,anthropicK
 
   return <div style={{display:"flex",flexDirection:"column",gap:16}}>
     <Card>
-      <SectionTitle action={conversation.length>0?<Btn onClick={clearConversation} style={{fontSize:12,padding:"6px 12px"}}>Clear</Btn>:null}>Gabbi — AI Assistant</SectionTitle>
-      <div style={{fontSize:13,color:C.textHint,marginBottom:14,lineHeight:1.6}}>
-        Gabbi can analyse your CV, discuss your pipeline, manage your search profiles, and update job statuses or notes — all after you confirm.
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+        <div style={{fontSize:15,fontWeight:700,color:C.textPrimary}}>Gabbi — AI Assistant</div>
+        {conversation.length>0&&<Btn onClick={clearConversation} style={{fontSize:12,padding:"6px 12px"}}>Clear</Btn>}
       </div>
       {!anthropicKey&&<Alert type="warning">Add your Anthropic API key in Search Profiles → API keys to use Gabbi.</Alert>}
       {!hasCv(cv)&&anthropicKey&&<Alert type="info">Tip: add your CV in My CV so Gabbi can tailor suggestions to your background.</Alert>}
       {hasCv(cv)&&!hasStructured&&anthropicKey&&<Alert type="info">Tip: populate the Tools, Skills and Achievements sections in My CV for richer analysis.</Alert>}
-    </Card>
-
-    <Card>
-      <div ref={scrollRef} style={{maxHeight:"60vh",overflowY:"auto",display:"flex",flexDirection:"column",gap:14,paddingRight:4}}>
+      <div ref={scrollRef} style={{maxHeight:"65vh",overflowY:"auto",display:"flex",flexDirection:"column",gap:14,paddingRight:4}}>
         {conversation.length===0&&<div>
           <div style={{fontSize:14,color:C.textSecondary,marginBottom:14,lineHeight:1.6}}>
             Hi! I'm Gabbi. I can analyse your CV, suggest improvements, help you build search profiles, discuss your pipeline, or update job statuses and notes. What would you like to work on?
