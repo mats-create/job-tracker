@@ -669,8 +669,10 @@ function SavePromptDialog({initialText,onSave,onClose}){
 }
 
 // ─── PromptLibrary ────────────────────────────────────────────────────────────
+// Visibility is now controlled by the parent (inline in empty state, or shown
+// inside an overlay during an active conversation). The library itself just
+// renders its content — no self-collapsing header.
 function PromptLibrary({savedPrompts,setSavedPrompts,onUse,cv,jobs}){
-  var [open,setOpen]=useState(true);
   var [activeCat,setActiveCat]=useState(PROMPT_FOR_YOU_CATEGORY);
 
   function removeSaved(id){
@@ -682,55 +684,65 @@ function PromptLibrary({savedPrompts,setSavedPrompts,onUse,cv,jobs}){
   var curatedForCat=isForYou?[]:CURATED_PROMPTS.filter(function(p){return p.category===activeCat;});
   var savedForCat=isForYou?[]:(savedPrompts||[]).filter(function(p){return p.category===activeCat;});
 
-  return <div style={{border:"1px solid "+C.border,borderRadius:14,overflow:"hidden"}}>
-    <button onClick={function(){setOpen(function(v){return !v;});}}
-      style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 16px",background:C.surfaceAlt,border:"none",cursor:"pointer",fontFamily:"inherit"}}>
-      <span style={{fontSize:13,fontWeight:700,color:C.textPrimary}}>💡 Prompt library</span>
-      <span style={{fontSize:12,color:C.textHint,fontWeight:600}}>{open?"Hide ▲":"Show ▼"}</span>
-    </button>
-    {open&&<div style={{padding:14}}>
-      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
-        {PROMPT_CATEGORIES.map(function(c){
-          var on=activeCat===c;
-          return <button key={c} onClick={function(){setActiveCat(c);}}
-            style={{fontSize:12,fontWeight:on?700:500,padding:"5px 11px",borderRadius:8,
-              border:"1.5px solid "+(on?C.primary:C.border),
-              background:on?C.primaryLight:"transparent",color:on?C.primary:C.textSecondary,
-              cursor:"pointer",fontFamily:"inherit"}}>{c}</button>;
-        })}
-      </div>
-      <div style={{display:"flex",flexDirection:"column",gap:8}}>
-        {forYouPrompts.map(function(text,i){
-          var shortTitle=text.trim().split(/\s+/).slice(0,6).join(" ");
-          return <div key={"fy"+i} onClick={function(){onUse(text);}}
-            style={{padding:"9px 12px",borderRadius:10,background:C.surface,border:"1px solid "+C.border,cursor:"pointer"}}>
-            <div style={{fontSize:13,fontWeight:600,color:C.textPrimary}}>{shortTitle}…</div>
-            <div style={{fontSize:12,color:C.textHint,marginTop:2,lineHeight:1.4}}>{text}</div>
-          </div>;
-        })}
-        {curatedForCat.map(function(p,i){
-          return <div key={"c"+i} onClick={function(){onUse(p.prompt);}}
-            style={{padding:"9px 12px",borderRadius:10,background:C.surface,border:"1px solid "+C.border,cursor:"pointer"}}>
-            <div style={{fontSize:13,fontWeight:600,color:C.textPrimary}}>{p.title}</div>
-            <div style={{fontSize:12,color:C.textHint,marginTop:2,lineHeight:1.4}}>{p.prompt}</div>
-          </div>;
-        })}
-        {savedForCat.map(function(p){
-          return <div key={p.id} style={{padding:"9px 12px",borderRadius:10,background:C.surfaceAlt,border:"1px solid "+C.border,display:"flex",alignItems:"flex-start",gap:8}}>
-            <div onClick={function(){onUse(p.prompt);}} style={{flex:1,cursor:"pointer"}}>
-              <div style={{display:"flex",alignItems:"center",gap:6}}>
-                <span style={{fontSize:13,fontWeight:600,color:C.textPrimary}}>{p.title}</span>
-                <span style={{fontSize:10,color:C.primary,background:C.primaryLight,padding:"1px 6px",borderRadius:6,fontWeight:600}}>Saved by you</span>
-              </div>
-              <div style={{fontSize:12,color:C.textHint,marginTop:2,lineHeight:1.4}}>{p.prompt}</div>
+  return <div>
+    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
+      {PROMPT_CATEGORIES.map(function(c){
+        var on=activeCat===c;
+        return <button key={c} onClick={function(){setActiveCat(c);}}
+          style={{fontSize:12,fontWeight:on?700:500,padding:"5px 11px",borderRadius:8,
+            border:"1.5px solid "+(on?C.primary:C.border),
+            background:on?C.primaryLight:"transparent",color:on?C.primary:C.textSecondary,
+            cursor:"pointer",fontFamily:"inherit"}}>{c}</button>;
+      })}
+    </div>
+    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+      {forYouPrompts.map(function(text,i){
+        var shortTitle=text.trim().split(/\s+/).slice(0,6).join(" ");
+        return <div key={"fy"+i} onClick={function(){onUse(text);}}
+          style={{padding:"9px 12px",borderRadius:10,background:C.surface,border:"1px solid "+C.border,cursor:"pointer"}}>
+          <div style={{fontSize:13,fontWeight:600,color:C.textPrimary}}>{shortTitle}…</div>
+          <div style={{fontSize:12,color:C.textHint,marginTop:2,lineHeight:1.4}}>{text}</div>
+        </div>;
+      })}
+      {curatedForCat.map(function(p,i){
+        return <div key={"c"+i} onClick={function(){onUse(p.prompt);}}
+          style={{padding:"9px 12px",borderRadius:10,background:C.surface,border:"1px solid "+C.border,cursor:"pointer"}}>
+          <div style={{fontSize:13,fontWeight:600,color:C.textPrimary}}>{p.title}</div>
+          <div style={{fontSize:12,color:C.textHint,marginTop:2,lineHeight:1.4}}>{p.prompt}</div>
+        </div>;
+      })}
+      {savedForCat.map(function(p){
+        return <div key={p.id} style={{padding:"9px 12px",borderRadius:10,background:C.surfaceAlt,border:"1px solid "+C.border,display:"flex",alignItems:"flex-start",gap:8}}>
+          <div onClick={function(){onUse(p.prompt);}} style={{flex:1,cursor:"pointer"}}>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <span style={{fontSize:13,fontWeight:600,color:C.textPrimary}}>{p.title}</span>
+              <span style={{fontSize:10,color:C.primary,background:C.primaryLight,padding:"1px 6px",borderRadius:6,fontWeight:600}}>Saved by you</span>
             </div>
-            <button onClick={function(){removeSaved(p.id);}} title="Remove" style={{background:"none",border:"none",color:C.textHint,cursor:"pointer",fontSize:14,padding:2,flexShrink:0}}>✕</button>
-          </div>;
-        })}
-        {isForYou&&forYouPrompts.length===0&&<div style={{fontSize:13,color:C.textHint,textAlign:"center",padding:"10px 0"}}>Nothing urgent right now — browse the other categories.</div>}
-        {!isForYou&&curatedForCat.length===0&&savedForCat.length===0&&<div style={{fontSize:13,color:C.textHint,textAlign:"center",padding:"10px 0"}}>No prompts in this category yet.</div>}
+            <div style={{fontSize:12,color:C.textHint,marginTop:2,lineHeight:1.4}}>{p.prompt}</div>
+          </div>
+          <button onClick={function(){removeSaved(p.id);}} title="Remove" style={{background:"none",border:"none",color:C.textHint,cursor:"pointer",fontSize:14,padding:2,flexShrink:0}}>✕</button>
+        </div>;
+      })}
+      {isForYou&&forYouPrompts.length===0&&<div style={{fontSize:13,color:C.textHint,textAlign:"center",padding:"10px 0"}}>Inget brådskande just nu — bläddra bland övriga kategorier.</div>}
+      {!isForYou&&curatedForCat.length===0&&savedForCat.length===0&&<div style={{fontSize:13,color:C.textHint,textAlign:"center",padding:"10px 0"}}>Inga prompter i denna kategori än.</div>}
+    </div>
+  </div>;
+}
+
+// ─── PromptLibraryOverlay ─────────────────────────────────────────────────────
+// Active-conversation variant: shown as a modal popup, opened from a button in
+// the input row, closes when a prompt is picked or user clicks outside.
+function PromptLibraryOverlay({savedPrompts,setSavedPrompts,onUse,onClose,cv,jobs}){
+  return <div style={{position:"fixed",inset:0,zIndex:640,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"flex-end",justifyContent:"center",padding:0}} onClick={onClose}>
+    <div style={{background:C.surface,borderRadius:"18px 18px 0 0",padding:"20px 18px 16px",width:"min(640px,100vw)",maxHeight:"80vh",overflowY:"auto",boxShadow:"0 -8px 36px rgba(0,0,0,0.25)"}} onClick={function(e){e.stopPropagation();}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+        <div style={{fontSize:15,fontWeight:700,color:C.textPrimary}}>💡 Prompt library</div>
+        <button onClick={onClose} style={{background:"none",border:"none",color:C.textHint,cursor:"pointer",fontSize:18,padding:4,lineHeight:1}}>✕</button>
       </div>
-    </div>}
+      <PromptLibrary savedPrompts={savedPrompts} setSavedPrompts={setSavedPrompts}
+        onUse={function(text){ onUse(text); onClose(); }}
+        cv={cv} jobs={jobs} />
+    </div>
   </div>;
 }
 
@@ -740,6 +752,7 @@ function ProfileAssistant({cv,setCv,jobs,setJobs,profiles,setProfiles,anthropicK
   var [error,setError]=useState("");
   var [savePromptFor,setSavePromptFor]=useState(null);
   var [hoveredMsg,setHoveredMsg]=useState(null);
+  var [libraryOpen,setLibraryOpen]=useState(false);
   var [justSavedId,setJustSavedId]=useState(null);
   var [actionStates,setActionStates]=useState({});
   var scrollRef=useRef(null);
@@ -1112,8 +1125,11 @@ function ProfileAssistant({cv,setCv,jobs,setJobs,profiles,setProfiles,anthropicK
 
     <Card>
       <div ref={scrollRef} style={{maxHeight:"60vh",overflowY:"auto",display:"flex",flexDirection:"column",gap:14,paddingRight:4}}>
-        {conversation.length===0&&<div style={{fontSize:14,color:C.textSecondary,marginBottom:14,lineHeight:1.6}}>
-          Hi! I'm Gabbi. I can analyse your CV, suggest improvements, help you build search profiles, discuss your pipeline, or update job statuses and notes. What would you like to work on?
+        {conversation.length===0&&<div>
+          <div style={{fontSize:14,color:C.textSecondary,marginBottom:14,lineHeight:1.6}}>
+            Hi! I'm Gabbi. I can analyse your CV, suggest improvements, help you build search profiles, discuss your pipeline, or update job statuses and notes. What would you like to work on?
+          </div>
+          <PromptLibrary savedPrompts={savedPrompts} setSavedPrompts={setSavedPrompts} onUse={function(text){setInput(text);}} cv={cv} jobs={jobs} />
         </div>}
 
         {conversation.map(function(msg,i){
@@ -1137,11 +1153,12 @@ function ProfileAssistant({cv,setCv,jobs,setJobs,profiles,setProfiles,anthropicK
 
       {error&&<Alert type="error">{error}</Alert>}
 
-      <div style={{marginTop:14,marginBottom:10}}>
-        <PromptLibrary savedPrompts={savedPrompts} setSavedPrompts={setSavedPrompts} onUse={function(text){setInput(text);}} cv={cv} jobs={jobs} />
-      </div>
-
-      <div style={{display:"flex",gap:8}}>
+      <div style={{display:"flex",gap:8,marginTop:14,alignItems:"stretch"}}>
+        <button onClick={function(){setLibraryOpen(true);}} title="Prompt library"
+          aria-label="Open prompt library"
+          style={{padding:"0 12px",borderRadius:10,border:"1px solid "+C.border,background:C.surface,cursor:"pointer",fontSize:18,fontFamily:"inherit",color:C.textSecondary,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          💡
+        </button>
         <Inp value={input} onChange={function(e){setInput(e.target.value);}}
           onKeyDown={function(e){if(e.key==="Enter"&&!e.shiftKey&&input.trim()&&!loading&&anthropicKey){e.preventDefault();send();}}}
           enterKeyHint="send"
@@ -1150,6 +1167,11 @@ function ProfileAssistant({cv,setCv,jobs,setJobs,profiles,setProfiles,anthropicK
         <Btn variant="primary" onClick={function(){send();}} disabled={loading||!input.trim()||!anthropicKey} style={{padding:"10px 20px"}}>Send</Btn>
       </div>
     </Card>
+
+    {libraryOpen&&<PromptLibraryOverlay savedPrompts={savedPrompts} setSavedPrompts={setSavedPrompts}
+      onUse={function(text){setInput(text);}}
+      onClose={function(){setLibraryOpen(false);}}
+      cv={cv} jobs={jobs} />}
 
     {savePromptFor&&<SavePromptDialog initialText={savePromptFor}
       onClose={function(){setSavePromptFor(null);}}
