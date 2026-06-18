@@ -696,14 +696,16 @@ function PromptLibrary({savedPrompts,setSavedPrompts,onUse,cv,jobs}){
             style={{fontSize:12,fontWeight:on?700:500,padding:"5px 11px",borderRadius:8,
               border:"1.5px solid "+(on?C.primary:C.border),
               background:on?C.primaryLight:"transparent",color:on?C.primary:C.textSecondary,
-              cursor:"pointer",fontFamily:"inherit"}}>{c===PROMPT_FOR_YOU_CATEGORY?"✨ "+c:c}</button>;
+              cursor:"pointer",fontFamily:"inherit"}}>{c}</button>;
         })}
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:8}}>
         {forYouPrompts.map(function(text,i){
+          var shortTitle=text.trim().split(/\s+/).slice(0,6).join(" ");
           return <div key={"fy"+i} onClick={function(){onUse(text);}}
-            style={{padding:"9px 12px",borderRadius:10,background:C.primaryLight,border:"1px solid "+C.primary,cursor:"pointer"}}>
-            <div style={{fontSize:13,color:C.textPrimary,lineHeight:1.4}}>{text}</div>
+            style={{padding:"9px 12px",borderRadius:10,background:C.surface,border:"1px solid "+C.border,cursor:"pointer"}}>
+            <div style={{fontSize:13,fontWeight:600,color:C.textPrimary}}>{shortTitle}…</div>
+            <div style={{fontSize:12,color:C.textHint,marginTop:2,lineHeight:1.4}}>{text}</div>
           </div>;
         })}
         {curatedForCat.map(function(p,i){
