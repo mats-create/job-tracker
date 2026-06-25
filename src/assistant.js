@@ -8,6 +8,17 @@
 //   assessment coaching coverage in system prompt.
 //
 // ─── This week ───────────────────────────────────────────────────────────────
+// Rev: 2026-06-17 — SV/EN toggle restyled: moved to its own dedicated thin row
+//                   above the category chips (was sharing a row with chips via
+//                   justify-content:space-between, which made it fall onto an
+//                   orphaned second line whenever chips wrapped). Restyled from
+//                   boxed buttons to a quiet text-link toggle with a 🌐 icon, so
+//                   it reads as a setting rather than a stray extra chip.
+// Rev: 2026-06-17 — Bug fix: getStarterPrompts() was never updated when the SV/EN
+//                   toggle was added, so the "For you right now" category stayed
+//                   Swedish-only regardless of selected language while its own chip
+//                   label translated correctly — an inconsistency, not by design.
+//                   Function now takes a lang parameter with full English branch.
 // Rev: 2026-06-17 — Categories converted from hardcoded Swedish strings to
 //                   language-neutral ids (cv/matching/cover/interview/assessment/
 //                   strategy/forYou) with bilingual label map. Category chips,
@@ -394,7 +405,8 @@ function parseReplySegments(reply){
 }
 
 // ─── Starter prompts ──────────────────────────────────────────────────────────
-function getStarterPrompts(cv,jobs){
+function getStarterPrompts(cv,jobs,lang){
+  var L=lang==="en"?"en":"sv";
   var activeJobs=(jobs||[]).filter(function(j){return !j.archived;});
   var scoredCount=activeJobs.filter(function(j){return j.scored!==false&&typeof j.score==="number";}).length;
   var interviewCount=activeJobs.filter(function(j){return j.status==="Interview"||j.status==="Offer";}).length;
@@ -409,7 +421,12 @@ function getStarterPrompts(cv,jobs){
   var hasStructured=!!(cv&&((cv.tools&&cv.tools.length)||(cv.skills&&cv.skills.length)||(cv.achievements&&cv.achievements.length)));
 
   if(!hasCv(cv)){
-    return [
+    return L==="en"?[
+      "I'd like help building my first search profile.",
+      "What kinds of job searches can this app do?",
+      "How should I structure my CV to get a better match score?",
+      "What can you help me with?",
+    ]:[
       "Jag vill ha hjälp att bygga min första sökprofil.",
       "Vilka typer av jobbsökningar kan appen göra?",
       "Hur ska jag strukturera mitt CV för att få bättre matchningsscore?",
@@ -418,17 +435,31 @@ function getStarterPrompts(cv,jobs){
   }
   var prompts=[];
   // Context-aware: most urgent/actionable first
-  if(silentCount>0) prompts.push("Jag har "+silentCount+" ansökning"+(silentCount>1?"ar":"")+" utan svar i 30+ dagar — vad bör jag göra?");
-  if(hasCv(cv)&&!hasStructured) prompts.push("Extrahera mina tools, skills och achievements från min CV-text.");
-  if(hasStructured) prompts.push("Granska sektionerna i mitt CV och lägg till det som saknas och är viktigt.");
-  if(scoredCount>=10) prompts.push("Föreslå en ny sökprofil baserat på mina högst poängsatta jobb.");
-  if(lowestScored) prompts.push("Varför är mitt matchningsscore lågt för "+lowestScored.title+" hos "+lowestScored.company+"?");
-  if(interviewCount>=2) prompts.push("Vad har mina Interview-jobb gemensamt?");
-  else if(interviewCount===1) prompts.push("Vad utmärker jobbet jag nådde Interview-status för?");
-  if(rejectedCount>=3) prompts.push("Finns det mönster i de jobb jag fått avslag på?");
-  if(activeJobs.length>0) prompts.push("Uppdatera en jobbstatus eller lägg till en anteckning åt mig.");
-  if(hasStructured) prompts.push("Baserat på mina sparade jobb — vilka skills eller tools saknas oftast för de roller jag siktar på?");
-  prompts.push("Hjälp mig bygga en sökprofil utifrån mitt CV.");
+  if(L==="en"){
+    if(silentCount>0) prompts.push("I have "+silentCount+" application"+(silentCount>1?"s":"")+" with no response for 30+ days — what should I do?");
+    if(hasCv(cv)&&!hasStructured) prompts.push("Extract my tools, skills and achievements from my CV text.");
+    if(hasStructured) prompts.push("Review my CV sections and add anything important that's missing.");
+    if(scoredCount>=10) prompts.push("Suggest a new search profile based on my highest-scoring jobs.");
+    if(lowestScored) prompts.push("Why is my match score low for "+lowestScored.title+" at "+lowestScored.company+"?");
+    if(interviewCount>=2) prompts.push("What do my Interview-stage jobs have in common?");
+    else if(interviewCount===1) prompts.push("What stands out about the job I reached Interview status for?");
+    if(rejectedCount>=3) prompts.push("Are there patterns in the jobs I've been rejected from?");
+    if(activeJobs.length>0) prompts.push("Update a job status or add a note for me.");
+    if(hasStructured) prompts.push("Based on my saved jobs — which skills or tools am I most often missing for the roles I'm targeting?");
+    prompts.push("Help me build a search profile from my CV.");
+  } else {
+    if(silentCount>0) prompts.push("Jag har "+silentCount+" ansökning"+(silentCount>1?"ar":"")+" utan svar i 30+ dagar — vad bör jag göra?");
+    if(hasCv(cv)&&!hasStructured) prompts.push("Extrahera mina tools, skills och achievements från min CV-text.");
+    if(hasStructured) prompts.push("Granska sektionerna i mitt CV och lägg till det som saknas och är viktigt.");
+    if(scoredCount>=10) prompts.push("Föreslå en ny sökprofil baserat på mina högst poängsatta jobb.");
+    if(lowestScored) prompts.push("Varför är mitt matchningsscore lågt för "+lowestScored.title+" hos "+lowestScored.company+"?");
+    if(interviewCount>=2) prompts.push("Vad har mina Interview-jobb gemensamt?");
+    else if(interviewCount===1) prompts.push("Vad utmärker jobbet jag nådde Interview-status för?");
+    if(rejectedCount>=3) prompts.push("Finns det mönster i de jobb jag fått avslag på?");
+    if(activeJobs.length>0) prompts.push("Uppdatera en jobbstatus eller lägg till en anteckning åt mig.");
+    if(hasStructured) prompts.push("Baserat på mina sparade jobb — vilka skills eller tools saknas oftast för de roller jag siktar på?");
+    prompts.push("Hjälp mig bygga en sökprofil utifrån mitt CV.");
+  }
   return prompts.slice(0,4);
 }
 
@@ -754,32 +785,32 @@ function PromptLibrary({savedPrompts,setSavedPrompts,onUse,cv,jobs}){
   }
 
   var isForYou=activeCat===PROMPT_FOR_YOU_ID;
-  var forYouPrompts=isForYou?getStarterPrompts(cv,jobs):[];
+  var forYouPrompts=isForYou?getStarterPrompts(cv,jobs,lang):[];
   var curatedForCat=isForYou?[]:CURATED_PROMPTS.filter(function(p){return p.categoryId===activeCat&&p.lang===lang;});
   var savedForCat=isForYou?[]:(savedPrompts||[]).filter(function(p){return resolveCategoryId(p.category)===activeCat;});
 
   return <div>
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,gap:8,flexWrap:"wrap"}}>
-      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-        {PROMPT_CATEGORY_IDS.map(function(id){
-          var on=activeCat===id;
-          return <button key={id} onClick={function(){setActiveCat(id);}}
-            style={{fontSize:12,fontWeight:on?700:500,padding:"5px 11px",borderRadius:8,
-              border:"1.5px solid "+(on?C.primary:C.border),
-              background:on?C.primaryLight:"transparent",color:on?C.primary:C.textSecondary,
-              cursor:"pointer",fontFamily:"inherit"}}>{categoryLabel(id,lang)}</button>;
-        })}
-      </div>
-      <div style={{display:"flex",borderRadius:8,overflow:"hidden",border:"1px solid "+C.border,flexShrink:0}}>
-        <button onClick={function(){setLangAndPersist("sv");}}
-          style={{fontSize:11,fontWeight:lang==="sv"?700:500,padding:"4px 9px",border:"none",
-            background:lang==="sv"?C.primaryLight:"transparent",color:lang==="sv"?C.primary:C.textHint,
-            cursor:"pointer",fontFamily:"inherit"}}>SV</button>
-        <button onClick={function(){setLangAndPersist("en");}}
-          style={{fontSize:11,fontWeight:lang==="en"?700:500,padding:"4px 9px",border:"none",
-            background:lang==="en"?C.primaryLight:"transparent",color:lang==="en"?C.primary:C.textHint,
-            cursor:"pointer",fontFamily:"inherit"}}>EN</button>
-      </div>
+    <div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",gap:5,marginBottom:8}}>
+      <span style={{fontSize:12,opacity:0.7}}>🌐</span>
+      <button onClick={function(){setLangAndPersist("sv");}}
+        style={{fontSize:11,fontWeight:lang==="sv"?700:500,padding:0,border:"none",
+          background:"none",color:lang==="sv"?C.primary:C.textHint,
+          cursor:"pointer",fontFamily:"inherit",textDecoration:lang==="sv"?"none":"underline",textDecorationColor:C.border}}>SV</button>
+      <span style={{fontSize:11,color:C.textHint}}>·</span>
+      <button onClick={function(){setLangAndPersist("en");}}
+        style={{fontSize:11,fontWeight:lang==="en"?700:500,padding:0,border:"none",
+          background:"none",color:lang==="en"?C.primary:C.textHint,
+          cursor:"pointer",fontFamily:"inherit",textDecoration:lang==="en"?"none":"underline",textDecorationColor:C.border}}>EN</button>
+    </div>
+    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
+      {PROMPT_CATEGORY_IDS.map(function(id){
+        var on=activeCat===id;
+        return <button key={id} onClick={function(){setActiveCat(id);}}
+          style={{fontSize:12,fontWeight:on?700:500,padding:"5px 11px",borderRadius:8,
+            border:"1.5px solid "+(on?C.primary:C.border),
+            background:on?C.primaryLight:"transparent",color:on?C.primary:C.textSecondary,
+            cursor:"pointer",fontFamily:"inherit"}}>{categoryLabel(id,lang)}</button>;
+      })}
     </div>
     <div style={{display:"flex",flexDirection:"column",gap:8}}>
       {forYouPrompts.map(function(text,i){
