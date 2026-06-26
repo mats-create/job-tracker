@@ -100,12 +100,8 @@ function render(){
     return;
   }
 
-  // Build user lookup by email
-  const metaByEmail = {};
-  Object.values(userMeta).forEach(m => { if(m.email) metaByEmail[m.email] = m; });
-
   const rows = allowlist.map(entry => {
-    const meta = metaByEmail[entry.email] || {};
+    const meta = userMeta[entry.email.toLowerCase()] || {};
     const hasC = meta.hasAnthropicKey ? '<span class="badge badge-yes">✓ Claude</span>' : '<span class="badge badge-no">✗ Claude</span>';
     const hasJ = meta.hasJsKey ? '<span class="badge badge-yes">✓ JSearch</span>' : '<span class="badge badge-no">✗ JSearch</span>';
     const first = meta.firstSeen ? fmtDate(meta.firstSeen) : '<span style="color:#ccc">—</span>';
@@ -190,17 +186,42 @@ async function loadData(){
   snap.forEach(d => allowlist.push({email: d.id, ...d.data()}));
   allowlist.sort((a,b) => (b.addedAt||"").localeCompare(a.addedAt||""));
 
-  // Load user meta (all users — admin Security Rule allows this)
+  // Load API-key flags from users (admin Security Rule allows reading all).
+  // NOTE: users/{uid} is keyed by Firebase Auth uid, not email — if a single
+  // person ends up with more than one uid over time (e.g. account recreated),
+  // multiple docs can share the same email field here too. Last one processed
+  // wins for the API-key badges below. This is a pre-existing, low-stakes risk
+  // (only affects the ✓/✗ Claude/JSearch badges) — not fixed in this pass.
   const userSnap = await getDocs(collection(db,"users"));
-  userMeta = {};
+  const apiKeysByEmail = {};
   userSnap.forEach(d => {
     const data = d.data();
-    userMeta[d.id] = {
-      firstSeen: data.firstSeen || null,
-      lastSeen:  data.lastSeen  || null,
+    if(!data.email) return;
+    apiKeysByEmail[data.email.toLowerCase()] = {
       hasAnthropicKey: !!(data.anthropicKey && data.anthropicKey.trim()),
       hasJsKey:        !!(data.jsKey && data.jsKey.trim()),
-      email: data.email || null,
+    };
+  });
+
+  // Load first/last login from loginMeta — doc ID IS the email, so there is
+  // exactly one possible doc per email. No collision, no last-write-wins risk.
+  const loginSnap = await getDocs(collection(db,"loginMeta"));
+  const loginMetaByEmail = {};
+  loginSnap.forEach(d => {
+    loginMetaByEmail[d.id] = d.data(); // d.id is already the lowercased email
+  });
+
+  userMeta = {};
+  allowlist.forEach(entry => {
+    const emailKey = entry.email.toLowerCase();
+    const apiKeys = apiKeysByEmail[emailKey] || {};
+    const login = loginMetaByEmail[emailKey] || {};
+    userMeta[emailKey] = {
+      firstSeen: login.firstSeen || null,
+      lastSeen:  login.lastSeen  || null,
+      hasAnthropicKey: !!apiKeys.hasAnthropicKey,
+      hasJsKey:        !!apiKeys.hasJsKey,
+      email: entry.email,
     };
   });
 }
