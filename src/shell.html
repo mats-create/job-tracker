@@ -26,7 +26,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
   import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
     from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
-  import { getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot }
+  import { getFirestore, doc, getDoc, setDoc, deleteDoc, deleteField, onSnapshot }
     from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -45,7 +45,7 @@
   window.firebaseSdk = {
     auth, db, GoogleAuthProvider,
     signInWithPopup, signOut, onAuthStateChanged,
-    doc, getDoc, setDoc, deleteDoc, onSnapshot,
+    doc, getDoc, setDoc, deleteDoc, deleteField, onSnapshot,
   };
   window.__firebaseReady = true;
   window.dispatchEvent(new Event("firebase-ready"));
