@@ -26,7 +26,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
   import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
     from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
-  import { getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot }
+  import { getFirestore, doc, getDoc, setDoc, deleteDoc, deleteField, onSnapshot }
     from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -45,7 +45,7 @@
   window.firebaseSdk = {
     auth, db, GoogleAuthProvider,
     signInWithPopup, signOut, onAuthStateChanged,
-    doc, getDoc, setDoc, deleteDoc, onSnapshot,
+    doc, getDoc, setDoc, deleteDoc, deleteField, onSnapshot,
   };
   window.__firebaseReady = true;
   window.dispatchEvent(new Event("firebase-ready"));
@@ -6012,6 +6012,7 @@ function App(){
     if(user.email==="mats@hultgrensaksi.com"){
       setAccessGranted(true); setAccessChecked(true);
       writeUserMeta(sdk, user);
+      cleanupLegacyUserMeta(sdk, user);
       return;
     }
     // Check allowlist
@@ -6020,7 +6021,7 @@ function App(){
       var granted=snap.exists();
       setAccessGranted(granted);
       setAccessChecked(true);
-      if(granted) writeUserMeta(sdk, user);
+      if(granted){ writeUserMeta(sdk, user); cleanupLegacyUserMeta(sdk, user); }
     }).catch(function(err){
       // Log error for debugging — deny access on failure
       console.error("Allowlist check failed:", err && err.message);
@@ -6042,6 +6043,32 @@ function App(){
       var meta={lastSeen:now};
       if(!existing.firstSeen) meta.firstSeen=now;
       sdk.setDoc(metaRef,meta,{merge:true}).catch(function(){});
+    }).catch(function(){});
+  }
+
+  // ─── TEMPORARY — remove when condition below is met ──────────────────────
+  // Rev: 2026-06-17 — One-time cleanup: firstSeen/lastSeen used to live on
+  //   users/{uid} (see writeUserMeta history). That broke admin reporting when
+  //   one email mapped to >1 uid, so login tracking moved to loginMeta/{email}
+  //   instead. This function deletes the now-unused fields from the CURRENT
+  //   user's own users/{uid} doc on login, so old data doesn't linger and
+  //   confuse anyone reading Firestore directly. It writes nothing if the
+  //   fields are already gone, so it becomes a harmless no-op on its own.
+  //
+  //   REMOVE THIS FUNCTION AND BOTH CALL SITES ABOVE once every known user
+  //   (check admin.html — currently 4 allowlist entries) has logged in at
+  //   least once after this date. At that point every users/{uid} doc will
+  //   already be clean and this code has nothing left to do.
+  function cleanupLegacyUserMeta(sdk, user){
+    var metaRef=sdk.doc(sdk.db,"users",user.uid);
+    sdk.getDoc(metaRef).then(function(snap){
+      if(!snap.exists()) return;
+      var data=snap.data();
+      if(!("firstSeen" in data) && !("lastSeen" in data)) return; // already clean — no-op
+      var updates={};
+      if("firstSeen" in data) updates.firstSeen=sdk.deleteField();
+      if("lastSeen" in data) updates.lastSeen=sdk.deleteField();
+      sdk.setDoc(metaRef,updates,{merge:true}).catch(function(){});
     }).catch(function(){});
   }
 
