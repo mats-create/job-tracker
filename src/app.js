@@ -649,6 +649,15 @@ function App(){
       if(!existing.firstSeen) meta.firstSeen=now;
       sdk.setDoc(metaRef,meta,{merge:true}).catch(function(){});
     }).catch(function(){});
+    // Also keep `email` on the user's own users/{uid} doc. admin.html has no
+    // other way to correlate an allowlist entry (keyed by email) to this
+    // user's anthropicKey/jsKey fields (users/{uid} is keyed by uid, not
+    // email) — without this, the API-key ✓/✗ badges in admin.html silently
+    // show "no key" for everyone, even users who genuinely have one set.
+    // Rev: 2026-06-17 — restored after being dropped when writeUserMeta was
+    // narrowed to only write loginMeta; that broke admin.html's API-key join.
+    var userRef=sdk.doc(sdk.db,"users",user.uid);
+    sdk.setDoc(userRef,{email:user.email},{merge:true}).catch(function(){});
   }
 
   // ─── TEMPORARY — remove when condition below is met ──────────────────────
