@@ -635,11 +635,16 @@ function App(){
   },[user]);
 
   function writeUserMeta(sdk, user){
-    var metaRef=sdk.doc(sdk.db,"users",user.uid);
+    // Keyed by lowercased email, NOT uid — see firestore.rules comment for why
+    // (a single email can end up with more than one Auth uid over time, which
+    // broke first/last-login reporting in admin.html via last-write-wins).
+    var emailKey=(user.email||"").toLowerCase();
+    if(!emailKey) return;
+    var metaRef=sdk.doc(sdk.db,"loginMeta",emailKey);
     sdk.getDoc(metaRef).then(function(snap){
       var now=new Date().toISOString();
       var existing=snap.exists()?snap.data():{};
-      var meta={lastSeen:now,email:user.email};
+      var meta={lastSeen:now};
       if(!existing.firstSeen) meta.firstSeen=now;
       sdk.setDoc(metaRef,meta,{merge:true}).catch(function(){});
     }).catch(function(){});
