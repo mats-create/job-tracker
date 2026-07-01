@@ -9,7 +9,7 @@
 
 
 // ─── ImportSummaryOverlay ─────────────────────────────────────────────────────
-function ImportSummaryOverlay({summary,onClose,onClear,setActiveTab}){
+function ImportSummaryOverlay({summary,onClose,onClear}){
   if(!summary) return null;
   var m=mob();
 
@@ -109,12 +109,6 @@ function ImportSummaryOverlay({summary,onClose,onClear,setActiveTab}){
         {summary.scoringFailed>0&&<span style={{fontSize:13,color:C.warning,flex:1}}>
           ⚠ {summary.scoringFailed} scoring batch{summary.scoringFailed!==1?"es":""} failed — try Rescore all.
         </span>}
-        {setActiveTab&&<button onClick={function(){onClose();setActiveTab("scheduler");}}
-          style={{fontSize:m?13:12,fontWeight:600,color:C.primary,background:"none",
-            border:"none",cursor:"pointer",fontFamily:"inherit",textDecoration:"underline",
-            padding:0,minHeight:36,display:"flex",alignItems:"center"}}>
-          View full run log →
-        </button>}
         <div style={{marginLeft:"auto",display:"flex",gap:10}}>
           <button onClick={onClear}
             style={{fontSize:m?14:13,fontWeight:600,padding:m?"10px 18px":"8px 16px",
@@ -136,7 +130,7 @@ function ImportSummaryOverlay({summary,onClose,onClear,setActiveTab}){
 
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
-function Dashboard({jobs,schedule,setActiveTab,goToSection,navigateToJobs,rescoreAll,scoringStatus,onRunAllProfiles,profiles,cv,anthropicKey,importSummary,onDismissImportSummary,user}){
+function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoringStatus,onRunAllProfiles,profiles,cv,anthropicKey,importSummary,onDismissImportSummary}){
   var [fetchStatus,setFetchStatus]=useState(null);
   var [fetchMsg,setFetchMsg]=useState("");
   var [showSummaryOverlay,setShowSummaryOverlay]=useState(false);
@@ -168,7 +162,8 @@ function Dashboard({jobs,schedule,setActiveTab,goToSection,navigateToJobs,rescor
   var avgScore=total?Math.round(active.reduce(function(a,j){return a+j.score;},0)/total):0;
   // Count only genuinely in-progress applications (exclude Rejected, No response)
   var IN_PROGRESS_STATUSES=["Applied","Interview","Offer"];
-  var applied=active.filter(function(j){return IN_PROGRESS_STATUSES.includes(j.status);}).length;
+  var SENT_STATUSES=["Applied","Interview","Offer","Rejected"];
+  var applied=active.filter(function(j){return SENT_STATUSES.includes(j.status);}).length;
   var topMatch=active.reduce(function(a,j){return j.score>(a?a.score:0)?j:a;},null);
   var newCount=active.filter(function(j){return j.status==="New";}).length;
   var rejectedCount=active.filter(function(j){return j.status==="Rejected";}).length;
@@ -178,8 +173,7 @@ function Dashboard({jobs,schedule,setActiveTab,goToSection,navigateToJobs,rescor
   var closedTotal=rejectedCount+noResponseCount+adRemovedCount+notRelevantCount;
 
   return <div style={{display:"flex",flexDirection:"column",gap:20}}>
-    {showSummaryOverlay&&<ImportSummaryOverlay summary={importSummary} onClose={function(){setShowSummaryOverlay(false);}} onClear={function(){setShowSummaryOverlay(false);if(onDismissImportSummary)onDismissImportSummary();}} setActiveTab={setActiveTab} />}
-    <OnboardingCards cv={cv} profiles={profiles} jobs={jobs} anthropicKey={anthropicKey} setActiveTab={setActiveTab} goToSection={goToSection} user={user} />
+    {showSummaryOverlay&&<ImportSummaryOverlay summary={importSummary} onClose={function(){setShowSummaryOverlay(false);}} onClear={function(){setShowSummaryOverlay(false);if(onDismissImportSummary)onDismissImportSummary();}} />}
     <div style={{background:"linear-gradient(135deg,"+C.primary+" 0%,"+C.primaryDark+" 100%)",borderRadius:20,padding:"28px",color:"#fff",boxShadow:C.shadowMd}}>
       <div style={{fontSize:22,fontWeight:700,marginBottom:6}}>Good to see you! 👋</div>
       <div style={{fontSize:14,opacity:0.85,marginBottom:20}}>Here's your job search summary for today.</div>
@@ -187,7 +181,7 @@ function Dashboard({jobs,schedule,setActiveTab,goToSection,navigateToJobs,rescor
         {[
           {label:"Jobs tracked",value:total,sub:"all statuses, excl. archived",nav:total>0?{}:null},
           {label:"New to review",value:newCount,sub:"waiting for you",nav:newCount>0?{status:"New"}:null},
-          {label:"Applications sent",value:applied,sub:"Applied · Interview · Offer",nav:applied>0?{statusGroup:"inProgress"}:null},
+          {label:"Applications sent",value:applied,sub:"Applied · Interview · Offer · Rejected",nav:applied>0?{statusGroup:"inProgress"}:null},
           {label:"Best match",value:topMatch?topMatch.score+"%":"—",sub:topMatch?topMatch.company:"no jobs yet",nav:topMatch?{expandId:topMatch.id}:null},
         ].map(function(s){
           var clickable=!!(s.nav&&navigateToJobs);
