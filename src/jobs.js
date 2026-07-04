@@ -127,7 +127,6 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
 
       {/* Details strip */}
       <div style={{padding:"12px 14px 0",fontSize:mob()?15:13,color:C.textHint,display:"flex",flexWrap:"wrap",gap:"4px 14px"}}>
-        <span>Added {j.date}</span>
         {j.employmentType&&<span>{j.employmentType}</span>}
         {j.remote===true&&<span>🌐 Remote</span>}
         {j.salary&&<span>💰 {j.salary}</span>}
