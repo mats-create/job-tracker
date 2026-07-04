@@ -2274,7 +2274,7 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
             {dateFields.map(function(f){
               var raw=f.key==="date"?j.date:(j[f.key]?j[f.key].slice(0,10):"");
               return <div key={f.key}>
-                <div style={{fontSize:11,color:C.textHint,fontWeight:600,marginBottom:3,letterSpacing:"0.4px"}}>{f.label.toUpperCase()}</div>
+                <div style={{fontSize:11,color:C.textHint,fontWeight:600,marginBottom:3}}>{f.label}</div>
                 {f.readOnly
                   ?<div style={{fontSize:13,color:C.textPrimary,padding:"6px 0"}}>{raw||"—"}</div>
                   :<div style={{position:"relative"}}>
