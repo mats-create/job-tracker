@@ -1,4 +1,8 @@
 // jobs.js
+// Rev: 2026-07-04 — KEY DATES: replaced <input type="date"> (iOS white bubble) with
+//                   styled text overlay + hidden date input. All date cells now look
+//                   identical; native picker still works on tap. Fixed grid to 2-col,
+//                   consistent short Swedish date format (29 jun 2026) across all fields.
 // Rev: 2026-06-11 — Silent jobs: auto-filter, badge, clearable filter.
 // Rev: 2026-06-11 — Individual re-score button in JobRow expanded view.
 // Rev: 2026-06-15 — Added inProgress statusGroup filter (Applied+Interview+Offer only).
@@ -141,26 +145,38 @@ function JobRow({job:j,expanded,selected,onSelectToggle,onToggle,onStatusChange,
           {key:"noResponseAt",label:"No response",readOnly:false,show:!!(j.noResponseAt||j.status==="No response")},
         ].filter(function(f){return f.show;});
         if(dateFields.length===0) return null;
+        function fmtShort(iso){
+          if(!iso) return "—";
+          try{
+            return new Date(iso).toLocaleDateString("sv-SE",{day:"numeric",month:"short",year:"numeric"});
+          }catch(e){ return iso.slice(0,10); }
+        }
         return <div style={{padding:"10px 14px 0"}}>
           <div style={{fontSize:mob()?13:12,fontWeight:600,color:C.textHint,letterSpacing:"0.5px",marginBottom:8}}>KEY DATES</div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:8}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 12px"}}>
             {dateFields.map(function(f){
               var raw=f.key==="date"?j.date:(j[f.key]?j[f.key].slice(0,10):"");
               return <div key={f.key}>
-                <div style={{fontSize:11,color:C.textHint,fontWeight:600,marginBottom:3}}>{f.label.toUpperCase()}</div>
+                <div style={{fontSize:11,color:C.textHint,fontWeight:600,marginBottom:3,letterSpacing:"0.4px"}}>{f.label.toUpperCase()}</div>
                 {f.readOnly
                   ?<div style={{fontSize:13,color:C.textPrimary,padding:"6px 0"}}>{raw||"—"}</div>
-                  :<input type="date" value={raw} max={new Date().toISOString().slice(0,10)}
-                    onChange={function(e){
-                      var iso=e.target.value?new Date(e.target.value+"T12:00:00").toISOString():"";
-                      if(onDateChange) onDateChange(f.key,iso);
-                    }}
-                    style={{fontSize:13,padding:"6px 8px",borderRadius:8,
+                  :<div style={{position:"relative"}}>
+                    <div style={{fontSize:13,padding:"6px 8px",borderRadius:8,
                       border:"1.5px solid "+C.border,background:C.surface,
-                      color:raw?C.textPrimary:C.textHint,
-                      fontFamily:"inherit",width:"100%",boxSizing:"border-box",
-                      colorScheme:"light dark"}}
-                  />}
+                      color:raw?C.textPrimary:C.textHint,lineHeight:1.4,
+                      display:"flex",alignItems:"center",justifyContent:"space-between",gap:4}}>
+                      <span>{raw?fmtShort(raw):"Tap to set"}</span>
+                      <span style={{fontSize:11,opacity:0.5}}>✎</span>
+                    </div>
+                    <input type="date" value={raw} max={new Date().toISOString().slice(0,10)}
+                      onChange={function(e){
+                        var iso=e.target.value?new Date(e.target.value+"T12:00:00").toISOString():"";
+                        if(onDateChange) onDateChange(f.key,iso);
+                      }}
+                      style={{position:"absolute",inset:0,opacity:0,cursor:"pointer",
+                        width:"100%",height:"100%",zIndex:1}}
+                    />
+                  </div>}
               </div>;
             })}
           </div>

@@ -1,4 +1,8 @@
 // dashboard.js
+// Rev: 2026-07-04 — Scheduler compacted to a single subtle status row (dot + text +
+//                   text-link). Last import button unified with Run/Rescore to same
+//                   Btn style. All three action buttons on one consistent row above
+//                   the scheduler line.
 // Rev: 2026-06-10 — BUG4: 'Applications sent' tile counts only active in-progress.
 // Rev: 2026-06-11 — Silent jobs link now navigates with filter:"silent" for auto-filter.
 // Rev: 2026-06-12 — Import summary card: persistent dismissable card after each run.
@@ -198,15 +202,7 @@ function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoring
       </div>
     </div>
     <Card style={{display:"flex",flexDirection:"column",gap:12,padding:"16px 20px"}}>
-      <div style={{display:"flex",alignItems:"center",gap:14}}>
-        <div style={{width:12,height:12,borderRadius:"50%",background:schedule.enabled?"#4CAF50":C.border,flexShrink:0,boxShadow:schedule.enabled?"0 0 0 3px rgba(76,175,80,0.2)":"none"}} />
-        <div style={{flex:1}}>
-          <div style={{fontSize:14,fontWeight:600,color:C.textPrimary}}>{schedule.enabled?"Auto-fetch is running":"Auto-fetch is off"}</div>
-          <div style={{fontSize:12,color:C.textHint,marginTop:2}}>{schedule.enabled?"Fetching on "+schedule.days.join(", ")+" · "+schedule.startTime+"–"+schedule.stopTime+" · every "+schedule.intervalMinutes+" min":"Turn on the Scheduler to automatically fetch new jobs throughout the day."}</div>
-        </div>
-        <Btn onClick={function(){setActiveTab("scheduler");}} style={{fontSize:13,padding:"8px 16px",whiteSpace:"nowrap"}}>{schedule.enabled?"View schedule":"Set up schedule"}</Btn>
-      </div>
-      <div style={{borderTop:"1px solid "+C.border,paddingTop:12,display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+      <div style={{borderBottom:"1px solid "+C.border,paddingBottom:12,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
         <Btn
           onClick={handleRunAll}
           disabled={!canFetch||fetchStatus==="running"}
@@ -225,16 +221,13 @@ function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoring
             ?<React.Fragment><span style={{display:"inline-block",width:12,height:12,border:"2px solid currentColor",borderTopColor:"transparent",borderRadius:"50%",animation:"spin 0.7s linear infinite",flexShrink:0}} />Scoring {scoringStatus.done}/{scoringStatus.total}…</React.Fragment>
             :"⟳ Rescore all"}
         </Btn>
-        {importSummary&&<button onClick={function(){setShowSummaryOverlay(true);}}
-          style={{fontSize:13,fontWeight:600,padding:"8px 14px",borderRadius:10,
-            border:"1.5px solid "+C.primary,background:C.primaryLight,
-            color:C.primary,cursor:"pointer",fontFamily:"inherit",
-            display:"inline-flex",alignItems:"center",gap:6,minHeight:36}}>
+        {importSummary&&<Btn onClick={function(){setShowSummaryOverlay(true);}}
+          style={{fontSize:13,padding:"8px 14px",display:"inline-flex",alignItems:"center",gap:6}}>
           📋 Last import
           {importSummary.totalAdded>0&&<span style={{fontSize:11,fontWeight:700,
             background:C.primary,color:"#fff",borderRadius:10,
             padding:"1px 6px",lineHeight:1.6}}>{importSummary.totalAdded}</span>}
-        </button>}
+        </Btn>}
         {!canFetch&&<span style={{fontSize:12,color:C.textHint}}>No active search profiles.</span>}
         {!canRescore&&!scoringStatus.active&&!hasCv(cv)&&<span style={{fontSize:12,color:C.textHint}}>Add your CV to enable rescoring.</span>}
       </div>
@@ -244,6 +237,19 @@ function Dashboard({jobs,schedule,setActiveTab,navigateToJobs,rescoreAll,scoring
           {scoringStatus.active&&<Alert type="info">Rescoring started — scoring {scoringStatus.done} of {scoringStatus.total} jobs…</Alert>}
           {!scoringStatus.active&&scoringStatus.total>0&&<Alert type="success">Rescoring complete — {scoringStatus.total} jobs updated.</Alert>}
         </div>}
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <div style={{width:8,height:8,borderRadius:"50%",background:schedule.enabled?"#4CAF50":C.border,flexShrink:0,boxShadow:schedule.enabled?"0 0 0 3px rgba(76,175,80,0.15)":"none"}} />
+        <span style={{fontSize:12,color:C.textHint,flex:1}}>
+          {schedule.enabled
+            ?"Auto-fetch on · "+schedule.startTime+"–"+schedule.stopTime
+            :"Auto-fetch is off"}
+        </span>
+        <button onClick={function(){setActiveTab("scheduler");}}
+          style={{fontSize:12,color:C.primary,background:"none",border:"none",
+            cursor:"pointer",fontFamily:"inherit",padding:0,fontWeight:600}}>
+          {schedule.enabled?"Edit schedule":"Set up →"}
+        </button>
+      </div>
     </Card>
     <Card>
       <SectionTitle>Application pipeline</SectionTitle>
