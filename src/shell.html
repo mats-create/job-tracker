@@ -26,6 +26,8 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
   import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
     from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
+  // Rev: 2026-10-06 — Added collection, addDoc, getDocs, query, orderBy, limit,
+  //   writeBatch for assistantConv subcollection (users/{uid}/conversations).
   import { getFirestore, doc, getDoc, setDoc, deleteDoc, deleteField, onSnapshot,
            collection, addDoc, getDocs, query, orderBy, limit, writeBatch }
     from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";

@@ -52,6 +52,11 @@
 //                   "google it". Response handling updated for multi-block content.
 // Rev: 2026-06-17 — Compact header: two Cards merged into one; redundant description
 //                   removed; title+Clear inline; conversation area gets ~60px more space.
+// Rev: 2026-10-06 — Integrated with conversation subcollection: ProfileAssistant now
+//                   accepts appendConvMessage and deleteConversation props. send() calls
+//                   appendConvMessage for both user and assistant messages (fire-and-
+//                   forget, does not block UI). clearConversation() calls
+//                   deleteConversation() to batch-delete the subcollection.
 //                   Save action lives on the user's own chat bubble (hover/tap reveals
 //                   "🔖 Save" — only after sending, never as blank-slate authoring) so
 //                   only prompts the user has actually seen work get reused. Library

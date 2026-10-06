@@ -1,4 +1,17 @@
 // app.js
+// Rev: 2026-10-06 — Bug fix: appendConvMessage/deleteConversation prop wrappers caused
+//                   ReferenceError (recursive self-reference). Fixed by introducing a
+//                   local `var uid=user.uid` to break the name collision — same pattern
+//                   as the earlier writeUserMeta fix (KNOWN_PITFALLS.md #28).
+// Rev: 2026-10-06 — assistantConv moved from users/{uid} main doc to
+//                   users/{uid}/conversations subcollection. Each message is its own
+//                   Firestore document — removes ~144 messages from the 1 MB doc budget.
+//                   Migration runs once on login: existing assistantConv in main doc is
+//                   written to subcollection then deleted. loadConversation() fetches
+//                   last 60 messages at login. appendConvMessage() writes each new
+//                   message. deleteConversation() batch-deletes the subcollection.
+//                   assistantConv removed from scheduleSave, cloudSubscribe, exportData,
+//                   importData and resetAllData (resetAllData calls deleteConversation).
 // Rev: 2026-06-16 — portrait state added; hydrated from Firestore; passed to SearchProfiles + CoverLetters.
 // Rev: 2026-06-15 — Pass setJobs to ProfileAssistant for Gabbi job write access.
 // Rev: 2026-06-04 — Pass setCv to ProfileAssistant (Gabbi CV write-back).
