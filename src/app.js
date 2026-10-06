@@ -129,15 +129,23 @@ function AppShell({user,onSignOut}){
   useEffect(function(){ anthropicKeyRef.current=anthropicKey; },[anthropicKey]);
 
   // Sync assistantConv changes to Firestore subcollection via useEffect.
-  // This avoids passing functions as props (which caused Babel closure scoping
-  // issues). assistant.js just calls setConversation as before — this effect
-  // detects new messages and writes them, or deletes all when conv is cleared.
+  // All Firebase calls are inline — no external function references — to avoid
+  // Babel-standalone closure scoping issues that caused ReferenceError when
+  // helper functions defined elsewhere in the component were called from here.
   var prevConvLenRef=useRef(0);
   useEffect(function(){
     if(!user) return;
+    var sdk=window.firebaseSdk;
+    if(!sdk||!sdk.collection) return;
+    var colRef=sdk.collection(sdk.db,"users",user.uid,"conversations");
     if(assistantConv.length===0&&prevConvLenRef.current>0){
-      // Conversation was cleared
-      convDeleteAll(user.uid);
+      // Conversation was cleared — batch delete subcollection
+      sdk.getDocs(colRef).then(function(snap){
+        if(snap.empty) return;
+        var batch=sdk.writeBatch(sdk.db);
+        snap.forEach(function(d){ batch.delete(d.ref); });
+        batch.commit().catch(function(e){ console.warn("conv clear error:",e); });
+      }).catch(function(e){ console.warn("conv clear getDocs error:",e); });
       prevConvLenRef.current=0;
       return;
     }
@@ -145,10 +153,13 @@ function AppShell({user,onSignOut}){
       prevConvLenRef.current=assistantConv.length;
       return;
     }
-    // Write only the new messages added since last sync
+    // Append only new messages since last sync
     var newMsgs=assistantConv.slice(prevConvLenRef.current);
     var baseIdx=prevConvLenRef.current;
-    newMsgs.forEach(function(msg,i){ convAppendMessage(user.uid,msg,baseIdx+i); });
+    newMsgs.forEach(function(msg,i){
+      sdk.addDoc(colRef,{role:msg.role,content:msg.content,idx:baseIdx+i,ts:Date.now()})
+        .catch(function(e){ console.warn("conv append error:",e); });
+    });
     prevConvLenRef.current=assistantConv.length;
   },[assistantConv,user]);
 
@@ -492,7 +503,18 @@ function AppShell({user,onSignOut}){
     setAfKeyRaw(""); setJsKeyRaw(""); setAnthropicKeyRaw(""); setPortraitRaw("");
     setScheduleRaw(DEFAULT_SCHEDULE); setLogRaw([]); setSortRaw("added_desc");
     setAssistantConvRaw([]); setDismissedIdsRaw([]); setSidebarCollapsedRaw(false); setSavedPromptsRaw([]);
-    if(user){ convDeleteAll(user.uid); }
+    if(user){
+      var sdk=window.firebaseSdk;
+      if(sdk&&sdk.collection){
+        var cref=sdk.collection(sdk.db,"users",user.uid,"conversations");
+        sdk.getDocs(cref).then(function(snap){
+          if(snap.empty) return;
+          var batch=sdk.writeBatch(sdk.db);
+          snap.forEach(function(d){ batch.delete(d.ref); });
+          batch.commit().catch(function(){});
+        }).catch(function(){});
+      }
+    }
     latestState.current={};
     cloudReadyRef.current=false;
     suppressWriteUntilRef.current=Date.now()+5000;
