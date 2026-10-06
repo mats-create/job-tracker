@@ -145,7 +145,7 @@ function AppShell({user,onSignOut}){
   function setSchedule(v){ var val=typeof v==="function"?v(schedule):v; setScheduleRaw(val); scheduleSave({schedule:val}); }
   function setLog(v){ var val=typeof v==="function"?v(log):v; setLogRaw(val); scheduleSave({log:val}); }
   function setSort(v){ setSortRaw(v); scheduleSave({sort:v}); }
-  function setAssistantConv(v){ var val=typeof v==="function"?v(assistantConv):v; setAssistantConvRaw(val); scheduleSave({assistantConv:val}); }
+  function setAssistantConv(v){ var val=typeof v==="function"?v(assistantConv):v; setAssistantConvRaw(val); }
   function setDismissedIds(v){ var val=typeof v==="function"?v(dismissedIds):v; setDismissedIdsRaw(val); scheduleSave({dismissedIds:val}); }
   function setSavedPrompts(v){ var val=typeof v==="function"?v(savedPrompts):v; setSavedPromptsRaw(val); scheduleSave({savedPrompts:val}); }
   function setSidebarCollapsed(v){ var val=typeof v==="function"?v(sidebarCollapsed):v; setSidebarCollapsedRaw(val); scheduleSave({sidebarCollapsed:val}); }
@@ -164,7 +164,7 @@ function AppShell({user,onSignOut}){
         if(data.schedule&&typeof data.schedule==="object") setScheduleRaw(data.schedule);
         if(Array.isArray(data.log)) setLogRaw(data.log);
         if(typeof data.sort==="string") setSortRaw(data.sort);
-        if(Array.isArray(data.assistantConv)) setAssistantConvRaw(data.assistantConv);
+        // assistantConv lives in users/{uid}/conversations subcollection — loaded separately
         if(Array.isArray(data.dismissedIds)) setDismissedIdsRaw(data.dismissedIds);
         if(Array.isArray(data.savedPrompts)) setSavedPromptsRaw(data.savedPrompts);
         if(typeof data.sidebarCollapsed==="boolean") setSidebarCollapsedRaw(data.sidebarCollapsed);
@@ -413,7 +413,7 @@ function AppShell({user,onSignOut}){
 
   // ── data export / import / reset ──────────────────────────────────────────
   function exportData(excludeKeys){
-    var payload={jobs:jobs,profiles:profiles,cv:cv,schedule:schedule,log:log,sort:sort,assistantConv:assistantConv,dismissedIds:dismissedIds,portrait:portrait,savedPrompts:savedPrompts};
+    var payload={jobs:jobs,profiles:profiles,cv:cv,schedule:schedule,log:log,sort:sort,dismissedIds:dismissedIds,portrait:portrait,savedPrompts:savedPrompts};
     if(!excludeKeys){ payload.afKey=afKey; payload.jsKey=jsKey; payload.anthropicKey=anthropicKey; }
     var out={version:2,exportedAt:new Date().toISOString(),data:payload};
     var b=new Blob([JSON.stringify(out,null,2)],{type:"application/json"});
@@ -440,7 +440,7 @@ function AppShell({user,onSignOut}){
     if(d.schedule&&typeof d.schedule==="object") setSchedule(d.schedule);
     if(Array.isArray(d.log)) setLog(d.log);
     if(typeof d.sort==="string") setSort(d.sort);
-    if(Array.isArray(d.assistantConv)) setAssistantConv(d.assistantConv);
+    // assistantConv not included in export/import — lives in subcollection
     if(Array.isArray(d.dismissedIds)) setDismissedIds(d.dismissedIds);
     if(Array.isArray(d.savedPrompts)) setSavedPrompts(d.savedPrompts);
     if(typeof d.portrait==="string") setPortrait(d.portrait);
@@ -455,6 +455,7 @@ function AppShell({user,onSignOut}){
     setAfKeyRaw(""); setJsKeyRaw(""); setAnthropicKeyRaw(""); setPortraitRaw("");
     setScheduleRaw(DEFAULT_SCHEDULE); setLogRaw([]); setSortRaw("added_desc");
     setAssistantConvRaw([]); setDismissedIdsRaw([]); setSidebarCollapsedRaw(false); setSavedPromptsRaw([]);
+    if(user){ deleteConversation(user.uid); }
     latestState.current={};
     cloudReadyRef.current=false;
     suppressWriteUntilRef.current=Date.now()+5000;
@@ -470,7 +471,7 @@ function AppShell({user,onSignOut}){
       {key==="dashboard"&&<Dashboard jobs={jobs} schedule={schedule} setActiveTab={setActiveTab} goToSection={goToSection} navigateToJobs={navigateToJobs} rescoreAll={rescoreAll} scoringStatus={scoringStatus} onRunAllProfiles={runAllProfiles} profiles={profiles} cv={cv} anthropicKey={anthropicKey} importSummary={importSummary} onDismissImportSummary={function(){setImportSummary(null);}} user={user} />}
       {key==="jobs"&&<Jobs jobs={jobs} setJobs={setJobs} rescoreAll={rescoreAll} rescoreJob={rescoreJob} scoringStatus={scoringStatus} scoringError={scoringError} cv={cv} sort={sort} setSort={setSort} dismissJob={dismissJob} tombstoneIds={tombstoneIds} startCoverLetter={startCoverLetter} pendingJobsView={pendingJobsView} setPendingJobsView={setPendingJobsView} />}
       {key==="profiles"&&<SearchProfiles profiles={profiles} setProfiles={setProfiles} setJobs={setJobs} afKey={afKey} setAfKey={setAfKey} jsKey={jsKey} setJsKey={setJsKey} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} pendingProfileRun={pendingProfileRun} setPendingProfileRun={setPendingProfileRun} dismissedIds={dismissedIds} />}
-      {key==="assistant"&&<ProfileAssistant cv={cv} setCv={setCv} jobs={jobs} setJobs={setJobs} profiles={profiles} setProfiles={setProfiles} anthropicKey={anthropicKey} conversation={assistantConv} setConversation={setAssistantConv} setActiveTab={setActiveTab} setPendingProfileRun={setPendingProfileRun} savedPrompts={savedPrompts} setSavedPrompts={setSavedPrompts} />}
+      {key==="assistant"&&<ProfileAssistant cv={cv} setCv={setCv} jobs={jobs} setJobs={setJobs} profiles={profiles} setProfiles={setProfiles} anthropicKey={anthropicKey} conversation={assistantConv} setConversation={setAssistantConv} setActiveTab={setActiveTab} setPendingProfileRun={setPendingProfileRun} savedPrompts={savedPrompts} setSavedPrompts={setSavedPrompts} appendConvMessage={function(msg,idx){if(user)appendConvMessage(user.uid,msg,idx);}} deleteConversation={function(){if(user)deleteConversation(user.uid);}} />}
       {key==="cv"&&<CVProfile cv={cv} setCv={setCv} portrait={portrait} setPortrait={setPortrait} />}
       {key==="scheduler"&&<Scheduler schedule={schedule} setSchedule={setSchedule} profiles={profiles} log={log} resetAllData={resetAllData} exportData={exportData} importData={importData} validateImport={validateImport} dismissedIds={dismissedIds} clearDismissedIds={clearDismissedIds} />}
       {key==="covers"&&<CoverLetters jobs={jobs} setJobs={setJobs} cv={cv} anthropicKey={anthropicKey} setActiveTab={setActiveTab} pendingCoverLetterJob={pendingCoverLetterJob} setPendingCoverLetterJob={setPendingCoverLetterJob} portrait={portrait} />}
@@ -618,6 +619,7 @@ function App(){
       setAccessGranted(true); setAccessChecked(true);
       writeUserMeta(sdk, user);
       cleanupLegacyUserMeta(sdk, user);
+      loadConversation(user.uid);
       return;
     }
     // Check allowlist
@@ -626,7 +628,7 @@ function App(){
       var granted=snap.exists();
       setAccessGranted(granted);
       setAccessChecked(true);
-      if(granted){ writeUserMeta(sdk, user); cleanupLegacyUserMeta(sdk, user); }
+      if(granted){ writeUserMeta(sdk, user); cleanupLegacyUserMeta(sdk, user); loadConversation(user.uid); }
     }).catch(function(err){
       // Log error for debugging — deny access on failure
       console.error("Allowlist check failed:", err && err.message);
@@ -684,6 +686,67 @@ function App(){
       if("lastSeen" in data) updates.lastSeen=sdk.deleteField();
       sdk.setDoc(metaRef,updates,{merge:true}).catch(function(){});
     }).catch(function(){});
+  }
+
+  // ─── Conversation subcollection ──────────────────────────────────────────
+  // Rev: 2026-10-06 — assistantConv moved from users/{uid} main doc to
+  //   users/{uid}/conversations subcollection. Each message is its own Firestore
+  //   document, so the conversation can grow without affecting the 1 MB doc limit.
+  //   Migration: on login, any existing assistantConv in the main doc is written
+  //   to the subcollection and then deleted from the main doc.
+
+  async function loadConversation(uid){
+    var sdk=window.firebaseSdk;
+    if(!sdk) return;
+    try{
+      // Load last 60 messages ordered by idx
+      var colRef=sdk.collection(sdk.db,"users",uid,"conversations");
+      var q=sdk.query(colRef,sdk.orderBy("idx","asc"),sdk.limit(60));
+      var snap=await sdk.getDocs(q);
+      var msgs=[];
+      snap.forEach(function(d){ msgs.push(d.data()); });
+      // Migration: if main doc still has assistantConv, move it to subcollection
+      var mainRef=sdk.doc(sdk.db,"users",uid);
+      var mainSnap=await sdk.getDoc(mainRef);
+      if(mainSnap.exists()){
+        var mainData=mainSnap.data();
+        var legacy=(mainData.data&&mainData.data.assistantConv)||mainData.assistantConv;
+        if(Array.isArray(legacy)&&legacy.length>0&&msgs.length===0){
+          // Write legacy messages to subcollection
+          for(var i=0;i<legacy.length;i++){
+            await sdk.addDoc(colRef,{role:legacy[i].role,content:legacy[i].content,idx:i,ts:Date.now()+i});
+          }
+          msgs=legacy;
+          // Remove from main doc
+          var patch={};
+          if(mainData.data&&mainData.data.assistantConv) patch["data.assistantConv"]=sdk.deleteField();
+          else patch.assistantConv=sdk.deleteField();
+          sdk.setDoc(mainRef,patch,{merge:true}).catch(function(){});
+        }
+      }
+      if(msgs.length>0) setAssistantConvRaw(msgs);
+    }catch(e){ console.warn("loadConversation error:",e); }
+  }
+
+  function appendConvMessage(uid,message,idx){
+    var sdk=window.firebaseSdk;
+    if(!sdk||!uid) return;
+    var colRef=sdk.collection(sdk.db,"users",uid,"conversations");
+    sdk.addDoc(colRef,{role:message.role,content:message.content,idx:idx,ts:Date.now()})
+      .catch(function(e){ console.warn("appendConvMessage error:",e); });
+  }
+
+  async function deleteConversation(uid){
+    var sdk=window.firebaseSdk;
+    if(!sdk||!uid) return;
+    try{
+      var colRef=sdk.collection(sdk.db,"users",uid,"conversations");
+      var snap=await sdk.getDocs(colRef);
+      if(snap.empty) return;
+      var batch=sdk.writeBatch(sdk.db);
+      snap.forEach(function(d){ batch.delete(d.ref); });
+      await batch.commit();
+    }catch(e){ console.warn("deleteConversation error:",e); }
   }
 
   async function signIn(){
