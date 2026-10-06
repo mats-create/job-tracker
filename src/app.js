@@ -128,6 +128,30 @@ function AppShell({user,onSignOut}){
   useEffect(function(){ cvRef.current=cv; },[cv]);
   useEffect(function(){ anthropicKeyRef.current=anthropicKey; },[anthropicKey]);
 
+  // Sync assistantConv changes to Firestore subcollection via useEffect.
+  // This avoids passing functions as props (which caused Babel closure scoping
+  // issues). assistant.js just calls setConversation as before — this effect
+  // detects new messages and writes them, or deletes all when conv is cleared.
+  var prevConvLenRef=useRef(0);
+  useEffect(function(){
+    if(!user) return;
+    if(assistantConv.length===0&&prevConvLenRef.current>0){
+      // Conversation was cleared
+      convDeleteAll(user.uid);
+      prevConvLenRef.current=0;
+      return;
+    }
+    if(assistantConv.length<=prevConvLenRef.current){
+      prevConvLenRef.current=assistantConv.length;
+      return;
+    }
+    // Write only the new messages added since last sync
+    var newMsgs=assistantConv.slice(prevConvLenRef.current);
+    var baseIdx=prevConvLenRef.current;
+    newMsgs.forEach(function(msg,i){ convAppendMessage(user.uid,msg,baseIdx+i); });
+    prevConvLenRef.current=assistantConv.length;
+  },[assistantConv,user]);
+
   function setJobs(v){
     if(typeof v==="function"){
       // Pass updater directly to setJobsRaw — React will call it with real current
@@ -468,7 +492,7 @@ function AppShell({user,onSignOut}){
     setAfKeyRaw(""); setJsKeyRaw(""); setAnthropicKeyRaw(""); setPortraitRaw("");
     setScheduleRaw(DEFAULT_SCHEDULE); setLogRaw([]); setSortRaw("added_desc");
     setAssistantConvRaw([]); setDismissedIdsRaw([]); setSidebarCollapsedRaw(false); setSavedPromptsRaw([]);
-    if(user){ deleteConversation(user.uid); }
+    if(user){ convDeleteAll(user.uid); }
     latestState.current={};
     cloudReadyRef.current=false;
     suppressWriteUntilRef.current=Date.now()+5000;
@@ -484,7 +508,7 @@ function AppShell({user,onSignOut}){
       {key==="dashboard"&&<Dashboard jobs={jobs} schedule={schedule} setActiveTab={setActiveTab} goToSection={goToSection} navigateToJobs={navigateToJobs} rescoreAll={rescoreAll} scoringStatus={scoringStatus} onRunAllProfiles={runAllProfiles} profiles={profiles} cv={cv} anthropicKey={anthropicKey} importSummary={importSummary} onDismissImportSummary={function(){setImportSummary(null);}} user={user} />}
       {key==="jobs"&&<Jobs jobs={jobs} setJobs={setJobs} rescoreAll={rescoreAll} rescoreJob={rescoreJob} scoringStatus={scoringStatus} scoringError={scoringError} cv={cv} sort={sort} setSort={setSort} dismissJob={dismissJob} tombstoneIds={tombstoneIds} startCoverLetter={startCoverLetter} pendingJobsView={pendingJobsView} setPendingJobsView={setPendingJobsView} />}
       {key==="profiles"&&<SearchProfiles profiles={profiles} setProfiles={setProfiles} setJobs={setJobs} afKey={afKey} setAfKey={setAfKey} jsKey={jsKey} setJsKey={setJsKey} anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey} pendingProfileRun={pendingProfileRun} setPendingProfileRun={setPendingProfileRun} dismissedIds={dismissedIds} />}
-      {key==="assistant"&&<ProfileAssistant cv={cv} setCv={setCv} jobs={jobs} setJobs={setJobs} profiles={profiles} setProfiles={setProfiles} anthropicKey={anthropicKey} conversation={assistantConv} setConversation={setAssistantConv} setActiveTab={setActiveTab} setPendingProfileRun={setPendingProfileRun} savedPrompts={savedPrompts} setSavedPrompts={setSavedPrompts} appendConvMessage={function(msg,idx){if(user){var uid=user.uid;appendConvMessage(uid,msg,idx);}}} deleteConversation={function(){if(user){var uid=user.uid;deleteConversation(uid);}}} />}
+      {key==="assistant"&&<ProfileAssistant cv={cv} setCv={setCv} jobs={jobs} setJobs={setJobs} profiles={profiles} setProfiles={setProfiles} anthropicKey={anthropicKey} conversation={assistantConv} setConversation={setAssistantConv} setActiveTab={setActiveTab} setPendingProfileRun={setPendingProfileRun} savedPrompts={savedPrompts} setSavedPrompts={setSavedPrompts} />}
       {key==="cv"&&<CVProfile cv={cv} setCv={setCv} portrait={portrait} setPortrait={setPortrait} />}
       {key==="scheduler"&&<Scheduler schedule={schedule} setSchedule={setSchedule} profiles={profiles} log={log} resetAllData={resetAllData} exportData={exportData} importData={importData} validateImport={validateImport} dismissedIds={dismissedIds} clearDismissedIds={clearDismissedIds} />}
       {key==="covers"&&<CoverLetters jobs={jobs} setJobs={setJobs} cv={cv} anthropicKey={anthropicKey} setActiveTab={setActiveTab} pendingCoverLetterJob={pendingCoverLetterJob} setPendingCoverLetterJob={setPendingCoverLetterJob} portrait={portrait} />}
@@ -741,15 +765,15 @@ function App(){
     }catch(e){ console.warn("loadConversation error:",e); }
   }
 
-  function appendConvMessage(uid,message,idx){
+  function convAppendMessage(uid,message,idx){
     var sdk=window.firebaseSdk;
     if(!sdk||!uid) return;
     var colRef=sdk.collection(sdk.db,"users",uid,"conversations");
     sdk.addDoc(colRef,{role:message.role,content:message.content,idx:idx,ts:Date.now()})
-      .catch(function(e){ console.warn("appendConvMessage error:",e); });
+      .catch(function(e){ console.warn("convAppendMessage error:",e); });
   }
 
-  async function deleteConversation(uid){
+  async function convDeleteAll(uid){
     var sdk=window.firebaseSdk;
     if(!sdk||!uid) return;
     try{

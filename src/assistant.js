@@ -869,7 +869,7 @@ function PromptLibraryOverlay({savedPrompts,setSavedPrompts,onUse,onClose,cv,job
   </div>;
 }
 
-function ProfileAssistant({cv,setCv,jobs,setJobs,profiles,setProfiles,anthropicKey,conversation,setConversation,setActiveTab,setPendingProfileRun,savedPrompts,setSavedPrompts,appendConvMessage,deleteConversation}){
+function ProfileAssistant({cv,setCv,jobs,setJobs,profiles,setProfiles,anthropicKey,conversation,setConversation,setActiveTab,setPendingProfileRun,savedPrompts,setSavedPrompts}){
   var [input,setInput]=useState("");
   var [loading,setLoading]=useState(false);
   var [error,setError]=useState("");
@@ -890,10 +890,8 @@ function ProfileAssistant({cv,setCv,jobs,setJobs,profiles,setProfiles,anthropicK
     if(!anthropicKey){ setError("Add your Anthropic API key in Search Profiles → API keys first."); return; }
     setError("");
     setInput("");
-    var userMsg={role:"user",content:text};
-    var newMsgs=conversation.concat([userMsg]);
+    var newMsgs=conversation.concat([{role:"user",content:text}]);
     setConversation(newMsgs);
-    if(appendConvMessage) appendConvMessage(userMsg, newMsgs.length-1);
     setLoading(true);
     try{
       var reply=await callClaudeChat({
@@ -903,10 +901,7 @@ function ProfileAssistant({cv,setCv,jobs,setJobs,profiles,setProfiles,anthropicK
         maxTokens:1600,
         tools:[{type:"web_search_20250305",name:"web_search"}],
       });
-      var assistantMsg={role:"assistant",content:reply};
-      var finalMsgs=newMsgs.concat([assistantMsg]);
-      setConversation(finalMsgs);
-      if(appendConvMessage) appendConvMessage(assistantMsg, finalMsgs.length-1);
+      setConversation(newMsgs.concat([{role:"assistant",content:reply}]));
     }catch(e){
       setError(e.message||"Failed to reach Claude.");
       setConversation(conversation);
@@ -921,7 +916,6 @@ function ProfileAssistant({cv,setCv,jobs,setJobs,profiles,setProfiles,anthropicK
     setError("");
     setInput("");
     setActionStates({});
-    if(deleteConversation) deleteConversation();
   }
 
   // ── Profile save/run ─────────────────────────────────────────────────────
