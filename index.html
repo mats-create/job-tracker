@@ -26,6 +26,8 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
   import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
     from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
+  // Rev: 2026-10-06 — Added collection, addDoc, getDocs, query, orderBy, limit,
+  //   writeBatch for assistantConv subcollection (users/{uid}/conversations).
   import { getFirestore, doc, getDoc, setDoc, deleteDoc, deleteField, onSnapshot,
            collection, addDoc, getDocs, query, orderBy, limit, writeBatch }
     from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
@@ -3710,6 +3712,11 @@ function CoverLetters({jobs,setJobs,cv,anthropicKey,setActiveTab,pendingCoverLet
 //                   "google it". Response handling updated for multi-block content.
 // Rev: 2026-06-17 — Compact header: two Cards merged into one; redundant description
 //                   removed; title+Clear inline; conversation area gets ~60px more space.
+// Rev: 2026-10-06 — Integrated with conversation subcollection: ProfileAssistant now
+//                   accepts appendConvMessage and deleteConversation props. send() calls
+//                   appendConvMessage for both user and assistant messages (fire-and-
+//                   forget, does not block UI). clearConversation() calls
+//                   deleteConversation() to batch-delete the subcollection.
 //                   Save action lives on the user's own chat bubble (hover/tap reveals
 //                   "🔖 Save" — only after sending, never as blank-slate authoring) so
 //                   only prompts the user has actually seen work get reused. Library
@@ -5417,6 +5424,19 @@ function Reports({jobs,cv,anthropicKey}){
 
 
 // app.js
+// Rev: 2026-10-06 — Bug fix: appendConvMessage/deleteConversation prop wrappers caused
+//                   ReferenceError (recursive self-reference). Fixed by introducing a
+//                   local `var uid=user.uid` to break the name collision — same pattern
+//                   as the earlier writeUserMeta fix (KNOWN_PITFALLS.md #28).
+// Rev: 2026-10-06 — assistantConv moved from users/{uid} main doc to
+//                   users/{uid}/conversations subcollection. Each message is its own
+//                   Firestore document — removes ~144 messages from the 1 MB doc budget.
+//                   Migration runs once on login: existing assistantConv in main doc is
+//                   written to subcollection then deleted. loadConversation() fetches
+//                   last 60 messages at login. appendConvMessage() writes each new
+//                   message. deleteConversation() batch-deletes the subcollection.
+//                   assistantConv removed from scheduleSave, cloudSubscribe, exportData,
+//                   importData and resetAllData (resetAllData calls deleteConversation).
 // Rev: 2026-06-16 — portrait state added; hydrated from Firestore; passed to SearchProfiles + CoverLetters.
 // Rev: 2026-06-15 — Pass setJobs to ProfileAssistant for Gabbi job write access.
 // Rev: 2026-06-04 — Pass setCv to ProfileAssistant (Gabbi CV write-back).
