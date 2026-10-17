@@ -1,7 +1,18 @@
 // utils.js
-// Rev: 2026-06-16 — Cover letter template system: COVER_TEMPLATES, COVER_FONTS, COVER_COLORS,
-//                   buildLetterHtml(), exportLetterPdf() updated to accept portrait + settings.
-// Rev: 2026-06-16 — cvSummaryText: numbered lists for tools, skills, achievements
+// ─── Revision history (older entries compacted, full history in git) ──────────
+// Rev: 2026-06-16 and earlier — cover letter template system (COVER_TEMPLATES, COVER_FONTS,
+//   COVER_COLORS, buildLetterHtml, exportLetterPdf with portrait + settings);
+//   cvSummaryText numbered lists for tools, skills, achievements.
+//
+// ─── This week ───────────────────────────────────────────────────────────────
+// Rev: 2026-10-17 — cloudSave: users/{uid} was at 98.6% of Firestore's 1 MB limit
+//                   (jobs[] = 94.5% of it, mostly `description` text on 101 archived jobs),
+//                   so every import that added ~6 jobs failed to save and was rolled back
+//                   by onSnapshot. New trimArchivedForCloud() caps `description` on
+//                   archived jobs at 1500 chars in the payload written to Firestore.
+//                   1500 = what scoreJobBatch reads (Gabbi reads 300), so scoring and
+//                   Gabbi get identical input. Only the written copy is trimmed; the
+//                   caller's data object is never mutated. Signature of cloudSave unchanged.
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
 const STORAGE_KEY = "jobTracker.v1";
@@ -35,6 +46,27 @@ function clearState(){
 // ─── Cloud sync (Firestore) ───────────────────────────────────────────────────
 function fbReady(){ return !!(window.firebaseSdk&&window.__firebaseReady); }
 
+// Max characters of `description` kept on ARCHIVED jobs in the Firestore document.
+// Matches the 1500-char slice in scoreJobBatch; Gabbi's job summary reads only 300.
+var ARCHIVED_DESC_MAX=1500;
+
+// Returns data with archived jobs' description capped at ARCHIVED_DESC_MAX chars.
+// Never mutates its input: untouched jobs keep their identity, trimmed jobs are
+// shallow copies, and if nothing needs trimming the same `data` object is returned.
+function trimArchivedForCloud(data){
+  if(!data||!Array.isArray(data.jobs)) return data;
+  var changed=false;
+  var jobs=data.jobs.map(function(j){
+    if(!j||!j.archived||typeof j.description!=="string"||j.description.length<=ARCHIVED_DESC_MAX) return j;
+    var d=j.description.slice(0,ARCHIVED_DESC_MAX);
+    var last=d.charCodeAt(d.length-1);
+    if(last>=0xD800&&last<=0xDBFF) d=d.slice(0,-1); // don't leave half an emoji at the cut
+    changed=true;
+    return Object.assign({},j,{description:d});
+  });
+  return changed?Object.assign({},data,{jobs:jobs}):data;
+}
+
 var _cloudSaveTimer=null;
 var _cloudSavePending=null;
 function cloudSave(uid,data,opts){
@@ -45,8 +77,8 @@ function cloudSave(uid,data,opts){
   _cloudSaveTimer=setTimeout(function(){
     var sdk=window.firebaseSdk;
     var ref=sdk.doc(sdk.db,"users",uid);
-    var payload={data:_cloudSavePending,updatedAt:Date.now(),schemaVersion:STORAGE_VERSION};
-    var dataToWrite=_cloudSavePending;
+    var dataToWrite=trimArchivedForCloud(_cloudSavePending);
+    var payload={data:dataToWrite,updatedAt:Date.now(),schemaVersion:STORAGE_VERSION};
     _cloudSaveTimer=null;
     _cloudSavePending=null;
     function attempt(retriesLeft){
