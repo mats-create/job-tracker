@@ -5,6 +5,12 @@
 //   cvSummaryText numbered lists for tools, skills, achievements.
 //
 // ─── This week ───────────────────────────────────────────────────────────────
+// Rev: 2026-10-17b — cloudSave now REPORTS its outcome instead of only console.warn:
+//                   cloudSyncSubscribe(fn) delivers {state:"ok"|"nearLimit"|"error", bytes,
+//                   reason}. "error" is emitted only after the last retry fails; "nearLimit"
+//                   when the written payload is >= 900 000 bytes (limit 1 048 576). Results of
+//                   superseded saves are ignored (sequence number) so an old failure cannot
+//                   overwrite a newer success. cloudSave signature and write behaviour unchanged.
 // Rev: 2026-10-17 — cloudSave: users/{uid} was at 98.6% of Firestore's 1 MB limit
 //                   (jobs[] = 94.5% of it, mostly `description` text on 101 archived jobs),
 //                   so every import that added ~6 jobs failed to save and was rolled back
@@ -67,6 +73,49 @@ function trimArchivedForCloud(data){
   return changed?Object.assign({},data,{jobs:jobs}):data;
 }
 
+// ── Sync status channel ──────────────────────────────────────────────────────
+// Firestore rejects a users/{uid} document over 1 048 576 bytes. When that (or any other
+// error) happens the write fails silently and onSnapshot rolls the UI back to the old
+// data, so the app reports the outcome through this channel and AppShell shows a banner.
+var CLOUD_DOC_LIMIT_BYTES=1048576;
+var CLOUD_NEAR_LIMIT_BYTES=900000;
+var _cloudSyncStatus={state:"ok",bytes:0,reason:""};
+var _cloudSyncListeners=[];
+var _cloudSaveSeq=0;
+
+function _setCloudSyncStatus(st){
+  _cloudSyncStatus=st;
+  _cloudSyncListeners.slice().forEach(function(fn){
+    try{ fn(st); }catch(e){ console.warn("cloudSync listener error:",e); }
+  });
+}
+
+// Calls fn(status) immediately and on every change. Returns an unsubscribe function.
+function cloudSyncSubscribe(fn){
+  _cloudSyncListeners.push(fn);
+  try{ fn(_cloudSyncStatus); }catch(e){}
+  return function(){ _cloudSyncListeners=_cloudSyncListeners.filter(function(f){return f!==fn;}); };
+}
+
+// Approximate size of what is written: UTF-8 bytes of the JSON. 0 if it cannot be measured.
+function approxDocBytes(payload){
+  try{
+    var json=JSON.stringify(payload);
+    if(typeof TextEncoder!=="undefined") return new TextEncoder().encode(json).length;
+    return json.length;
+  }catch(e){ return 0; }
+}
+
+function describeCloudSaveError(err){
+  var code=(err&&err.code)||"";
+  var msg=(err&&err.message)||String(err||"");
+  if(code==="invalid-argument"||/exceeds the maximum|too large|size/i.test(msg)) return "the document is too large for Firestore (1 MB limit)";
+  if(code==="permission-denied") return "permission denied by Firestore rules";
+  if(code==="unauthenticated") return "you are signed out";
+  if(code==="resource-exhausted") return "Firestore quota exceeded";
+  return code||msg||"unknown error";
+}
+
 var _cloudSaveTimer=null;
 var _cloudSavePending=null;
 function cloudSave(uid,data,opts){
@@ -81,13 +130,20 @@ function cloudSave(uid,data,opts){
     var payload={data:dataToWrite,updatedAt:Date.now(),schemaVersion:STORAGE_VERSION};
     _cloudSaveTimer=null;
     _cloudSavePending=null;
+    var seq=++_cloudSaveSeq;
+    var bytes=approxDocBytes(payload);
     function attempt(retriesLeft){
       sdk.setDoc(ref,payload).then(function(){
-        console.log("[CloudSync] Write confirmed. cv.tools:", dataToWrite.cv&&dataToWrite.cv.tools&&dataToWrite.cv.tools.length);
+        console.log("[CloudSync] Write confirmed. cv.tools:", dataToWrite.cv&&dataToWrite.cv.tools&&dataToWrite.cv.tools.length, "bytes:", bytes);
+        // Only the newest save may set the status (an older save finishing late must not win)
+        if(seq===_cloudSaveSeq) _setCloudSyncStatus({state:bytes>=CLOUD_NEAR_LIMIT_BYTES?"nearLimit":"ok",bytes:bytes,reason:""});
       }).catch(function(err){
         console.warn("Cloud save failed (retries left: "+retriesLeft+"):",err.message||err.code);
-        if(retriesLeft>0){
+        if(retriesLeft>0&&seq===_cloudSaveSeq){
+          // (a newer save carries the full latest state, so a stale retry must not run after it)
           setTimeout(function(){ attempt(retriesLeft-1); }, 1500);
+        } else if(retriesLeft===0&&seq===_cloudSaveSeq){
+          _setCloudSyncStatus({state:"error",bytes:bytes,reason:describeCloudSaveError(err)});
         }
       });
     }

@@ -1,4 +1,8 @@
 // app.js
+// Rev: 2026-10-17b — Visible save errors. AppShell subscribes to cloudSyncSubscribe()
+//                   (utils.js) and shows SyncBanner: red when the last cloud save failed
+//                   after all retries (with reason), amber when the document is within
+//                   ~86% of Firestore's 1 MB limit. Button opens Scheduler (Export backup).
 // Rev: 2026-10-17 — Gabbi conversation history FIX. Loading moved from App() into an
 //                   inline useEffect in AppShell (loadConversation lived in App but called
 //                   AppShell's setAssistantConvRaw -> ReferenceError, history never loaded).
@@ -66,6 +70,8 @@ function AppShell({user,onSignOut}){
   var [scoringStatus,setScoringStatus]=useState({active:false,done:0,total:0});
   var [scoringError,setScoringError]=useState("");
   var [dismissToast,setDismissToast]=useState(null);
+  var [syncStatus,setSyncStatus]=useState({state:"ok",bytes:0,reason:""});
+  var [syncDismissed,setSyncDismissed]=useState("");
   var [dismissUndoTimer,setDismissUndoTimer]=useState(null);
   var [pendingJobsView,setPendingJobsView]=useState(null);
   var [importSummary,setImportSummary]=useState(null);
@@ -242,6 +248,14 @@ function AppShell({user,onSignOut}){
     });
     return function(){ if(unsub) unsub(); };
   },[user]);
+
+  // ── Cloud save status (banner) ───────────────────────────────────────────
+  useEffect(function(){
+    return cloudSyncSubscribe(function(st){
+      setSyncStatus(st);
+      if(st.state==="ok") setSyncDismissed(""); // healthy again: next problem shows again
+    });
+  },[]);
 
   // ── Scoring ──────────────────────────────────────────────────────────────
   function addLog(msg,type){
@@ -585,6 +599,7 @@ function AppShell({user,onSignOut}){
           <h1 style={{margin:0,fontSize:22,fontWeight:800,color:C.textPrimary}}>{currentTab.label}</h1>
           {currentTab.desc&&<div style={{fontSize:14,color:C.textHint,marginTop:4}}>{currentTab.desc}</div>}
         </div>}
+        {syncStatus.state!=="ok"&&syncDismissed!==syncStatus.state&&<SyncBanner status={syncStatus} onOpenBackup={function(){ setActiveTab("scheduler"); }} onDismiss={function(){ setSyncDismissed(syncStatus.state); }} />}
         {renderTab()}
       </main>
     </div>
@@ -592,6 +607,27 @@ function AppShell({user,onSignOut}){
     {isMobile&&<MobileBottomNav activeTab={activeTab} setActiveTab={setActiveTab} user={user} onSignOut={onSignOut} theme={theme} setTheme={setTheme} portrait={portrait} />}
 
     {dismissToast&&<DismissToast job={dismissToast.job} onUndo={undoDismiss} />}
+  </div>;
+}
+
+// ─── SyncBanner ───────────────────────────────────────────────────────────────
+// Shown when the last cloud save failed (red) or the document is close to
+// Firestore's 1 MB limit (amber). Status comes from cloudSyncSubscribe() in utils.js.
+function SyncBanner({status,onOpenBackup,onDismiss}){
+  var isError=status.state==="error";
+  var kb=Math.round((status.bytes||0)/1024);
+  var limitKb=Math.round(CLOUD_DOC_LIMIT_BYTES/1024);
+  var bg=isError?C.errorBg:C.warningBg;
+  var fg=isError?C.error:C.warning;
+  var text=isError
+    ? "Your latest changes could not be saved to the cloud: "+status.reason+". They may already have been reverted. Export a backup before you reload or sign out."
+    : "Cloud storage is at "+kb+" of "+limitKb+" KB. Archive or dismiss old jobs before importing more, or saving will start to fail.";
+  return <div role="alert" style={{display:"flex",alignItems:"flex-start",gap:12,flexWrap:"wrap",background:bg,color:fg,border:"1.5px solid "+fg,borderRadius:12,padding:"12px 16px",marginBottom:16,fontSize:14,lineHeight:1.45}}>
+    <span style={{flex:"1 1 260px",minWidth:0}}><b>{isError?"⚠ Not saved. ":"⚠ Storage almost full. "}</b>{text}</span>
+    <span style={{display:"flex",gap:8,flexShrink:0}}>
+      <button onClick={onOpenBackup} style={{background:"none",border:"1.5px solid "+fg,borderRadius:8,padding:"5px 12px",color:"inherit",cursor:"pointer",fontSize:13,fontWeight:700,fontFamily:"inherit",whiteSpace:"nowrap"}}>Open backup</button>
+      <button onClick={onDismiss} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"inherit",textDecoration:"underline"}}>Dismiss</button>
+    </span>
   </div>;
 }
 
