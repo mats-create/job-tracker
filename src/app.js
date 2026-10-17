@@ -1,34 +1,22 @@
 // app.js
-// Rev: 2026-10-06 — Bug fix: appendConvMessage/deleteConversation prop wrappers caused
-//                   ReferenceError (recursive self-reference). Fixed by introducing a
-//                   local `var uid=user.uid` to break the name collision — same pattern
-//                   as the earlier writeUserMeta fix (KNOWN_PITFALLS.md #28).
-// Rev: 2026-10-06 — assistantConv moved from users/{uid} main doc to
-//                   users/{uid}/conversations subcollection. Each message is its own
-//                   Firestore document — removes ~144 messages from the 1 MB doc budget.
-//                   Migration runs once on login: existing assistantConv in main doc is
-//                   written to subcollection then deleted. loadConversation() fetches
-//                   last 60 messages at login. appendConvMessage() writes each new
-//                   message. deleteConversation() batch-deletes the subcollection.
-//                   assistantConv removed from scheduleSave, cloudSubscribe, exportData,
-//                   importData and resetAllData (resetAllData calls deleteConversation).
-// Rev: 2026-06-16 — portrait state added; hydrated from Firestore; passed to SearchProfiles + CoverLetters.
-// Rev: 2026-06-15 — Pass setJobs to ProfileAssistant for Gabbi job write access.
-// Rev: 2026-06-04 — Pass setCv to ProfileAssistant (Gabbi CV write-back).
-// Rev: 2026-06-10 — BUG2: fix added counter in runAllProfiles (pre-filter before setJobs);
-//                   BUG8: applyScores uses String() comparison for id matching.
-// Rev: 2026-06-10b — BUG9: setJobs passes updater to setJobsRaw for correct state.
-// Rev: 2026-06-11 — BUG10: setJobs updater must be pure; side effects moved outside.
-// Rev: 2026-06-11 — BUG11: totalAdded now uses truly_new.length (post-dedup).
-// Rev: 2026-06-11 — FIX: auto-score newly imported jobs via cvRef/keyRef;
-//                   rescoreJob(jobId) for individual re-score;
-//                   C.background→C.bg; rescoreAll surfaces partial failures.
-// Rev: 2026-06-11 — FIX: rescoreJob uses synchronous ref guard to prevent
-//                   concurrent calls; reads job from jobs closure (not no-op updater).
-// Rev: 2026-06-13 — Added extractedAt field to CV initial state and resetAllData.
-// Rev: 2026-06-15 — importSummary per-profile now includes fetched+skipped counts.
-// Rev: 2026-06-12 — importSummary: persistent dismissable card on Dashboard
-//                   showing per-profile results after each run.
+// Rev: 2026-10-17 — Gabbi conversation history FIX. Loading moved from App() into an
+//                   inline useEffect in AppShell (loadConversation lived in App but called
+//                   AppShell's setAssistantConvRaw -> ReferenceError, history never loaded).
+//                   Now loads the 60 NEWEST messages (orderBy ts desc, then reversed);
+//                   the old query returned the OLDEST 60. prevConvLenRef is set BEFORE the
+//                   state update so the sync effect does not re-write loaded messages.
+//                   Sync effect writes ts:Date.now()+i so messages added in one batch keep
+//                   their order. Removed: loadConversation (+ legacy main-doc migration,
+//                   which had nothing left to migrate), convAppendMessage, convDeleteAll
+//                   (dead code) and both loadConversation call sites in App().
+// Older history (before 2026-10-17, summarised; full detail in git):
+//   - 2026-10-06: assistantConv moved from users/{uid} to the users/{uid}/conversations
+//     subcollection (one doc per message); removed from scheduleSave/cloudSubscribe/
+//     export/import; resetAllData batch-deletes the subcollection.
+//   - 2026-06: portrait state; setJobs/setCv passed to ProfileAssistant (Gabbi write
+//     access); runAllProfiles fixes (added counter, post-dedup totals, pure updaters);
+//     auto-score of newly imported jobs via cvRef/keyRef; rescoreJob with ref guard;
+//     importSummary card on Dashboard; extractedAt on CV.
 
 // ─── AppShell ─────────────────────────────────────────────────────────────────
 function AppShell({user,onSignOut}){
@@ -157,11 +145,40 @@ function AppShell({user,onSignOut}){
     var newMsgs=assistantConv.slice(prevConvLenRef.current);
     var baseIdx=prevConvLenRef.current;
     newMsgs.forEach(function(msg,i){
-      sdk.addDoc(colRef,{role:msg.role,content:msg.content,idx:baseIdx+i,ts:Date.now()})
+      // ts+i keeps messages added in the same millisecond in order (load sorts by ts)
+      sdk.addDoc(colRef,{role:msg.role,content:msg.content,idx:baseIdx+i,ts:Date.now()+i})
         .catch(function(e){ console.warn("conv append error:",e); });
     });
     prevConvLenRef.current=assistantConv.length;
   },[assistantConv,user]);
+
+  // Load the 60 newest Gabbi messages once per login. Lives here (not in App()) so
+  // setAssistantConvRaw is in scope. All Firebase calls inline, same as the sync effect.
+  useEffect(function(){
+    if(!user) return;
+    var sdk=window.firebaseSdk;
+    if(!sdk||!sdk.collection||!sdk.query) return;
+    var cancelled=false;
+    var colRef=sdk.collection(sdk.db,"users",user.uid,"conversations");
+    var q=sdk.query(colRef,sdk.orderBy("ts","desc"),sdk.limit(60));
+    sdk.getDocs(q).then(function(snap){
+      if(cancelled) return;
+      // User already started a new conversation while we were loading: keep theirs.
+      if(prevConvLenRef.current>0) return;
+      var msgs=[];
+      snap.forEach(function(d){
+        var m=d.data();
+        if(m&&(m.role==="user"||m.role==="assistant")&&typeof m.content==="string") msgs.push({role:m.role,content:m.content});
+      });
+      if(msgs.length===0) return;
+      msgs.reverse(); // query is newest-first; chat needs oldest-first
+      // Set the ref BEFORE the state, so the sync effect sees "nothing new" and
+      // does not write the loaded messages back to Firestore as duplicates.
+      prevConvLenRef.current=msgs.length;
+      setAssistantConvRaw(msgs);
+    }).catch(function(e){ console.warn("conv load error:",e); });
+    return function(){ cancelled=true; };
+  },[user&&user.uid]);
 
   function setJobs(v){
     if(typeof v==="function"){
@@ -678,7 +695,6 @@ function App(){
       setAccessGranted(true); setAccessChecked(true);
       writeUserMeta(sdk, user);
       cleanupLegacyUserMeta(sdk, user);
-      loadConversation(user.uid);
       return;
     }
     // Check allowlist
@@ -687,7 +703,7 @@ function App(){
       var granted=snap.exists();
       setAccessGranted(granted);
       setAccessChecked(true);
-      if(granted){ writeUserMeta(sdk, user); cleanupLegacyUserMeta(sdk, user); loadConversation(user.uid); }
+      if(granted){ writeUserMeta(sdk, user); cleanupLegacyUserMeta(sdk, user); }
     }).catch(function(err){
       // Log error for debugging — deny access on failure
       console.error("Allowlist check failed:", err && err.message);
@@ -745,67 +761,6 @@ function App(){
       if("lastSeen" in data) updates.lastSeen=sdk.deleteField();
       sdk.setDoc(metaRef,updates,{merge:true}).catch(function(){});
     }).catch(function(){});
-  }
-
-  // ─── Conversation subcollection ──────────────────────────────────────────
-  // Rev: 2026-10-06 — assistantConv moved from users/{uid} main doc to
-  //   users/{uid}/conversations subcollection. Each message is its own Firestore
-  //   document, so the conversation can grow without affecting the 1 MB doc limit.
-  //   Migration: on login, any existing assistantConv in the main doc is written
-  //   to the subcollection and then deleted from the main doc.
-
-  async function loadConversation(uid){
-    var sdk=window.firebaseSdk;
-    if(!sdk) return;
-    try{
-      // Load last 60 messages ordered by idx
-      var colRef=sdk.collection(sdk.db,"users",uid,"conversations");
-      var q=sdk.query(colRef,sdk.orderBy("idx","asc"),sdk.limit(60));
-      var snap=await sdk.getDocs(q);
-      var msgs=[];
-      snap.forEach(function(d){ msgs.push(d.data()); });
-      // Migration: if main doc still has assistantConv, move it to subcollection
-      var mainRef=sdk.doc(sdk.db,"users",uid);
-      var mainSnap=await sdk.getDoc(mainRef);
-      if(mainSnap.exists()){
-        var mainData=mainSnap.data();
-        var legacy=(mainData.data&&mainData.data.assistantConv)||mainData.assistantConv;
-        if(Array.isArray(legacy)&&legacy.length>0&&msgs.length===0){
-          // Write legacy messages to subcollection
-          for(var i=0;i<legacy.length;i++){
-            await sdk.addDoc(colRef,{role:legacy[i].role,content:legacy[i].content,idx:i,ts:Date.now()+i});
-          }
-          msgs=legacy;
-          // Remove from main doc
-          var patch={};
-          if(mainData.data&&mainData.data.assistantConv) patch["data.assistantConv"]=sdk.deleteField();
-          else patch.assistantConv=sdk.deleteField();
-          sdk.setDoc(mainRef,patch,{merge:true}).catch(function(){});
-        }
-      }
-      if(msgs.length>0) setAssistantConvRaw(msgs);
-    }catch(e){ console.warn("loadConversation error:",e); }
-  }
-
-  function convAppendMessage(uid,message,idx){
-    var sdk=window.firebaseSdk;
-    if(!sdk||!uid) return;
-    var colRef=sdk.collection(sdk.db,"users",uid,"conversations");
-    sdk.addDoc(colRef,{role:message.role,content:message.content,idx:idx,ts:Date.now()})
-      .catch(function(e){ console.warn("convAppendMessage error:",e); });
-  }
-
-  async function convDeleteAll(uid){
-    var sdk=window.firebaseSdk;
-    if(!sdk||!uid) return;
-    try{
-      var colRef=sdk.collection(sdk.db,"users",uid,"conversations");
-      var snap=await sdk.getDocs(colRef);
-      if(snap.empty) return;
-      var batch=sdk.writeBatch(sdk.db);
-      snap.forEach(function(d){ batch.delete(d.ref); });
-      await batch.commit();
-    }catch(e){ console.warn("deleteConversation error:",e); }
   }
 
   async function signIn(){
